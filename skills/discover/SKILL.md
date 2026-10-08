@@ -154,7 +154,7 @@ next:
 ```
 
 Use `risk` only when something could touch real people, data or money today. Link to a
-section from a step with its heading as an anchor, e.g. `[Read the plan](#safe-testing-env)`.
+section from a step with its heading as an anchor, e.g. `[Read the plan](#safe-testing-environment)`.
 
 **The markdown.** The first line is the title: what the agent is, in plain words, with its code
 name in brackets, e.g. `# Meeting scheduler (cal-bot)`. Not "<name>: discovery report"; the page
@@ -174,10 +174,10 @@ four pillars and puts the last two after the next steps):
    disagree; memory between runs; guard rails and what enforces each; dated history; stability.
    Then `### What's around the agent`: tools and side effects (what testing needs for each:
    exists or to build); records of past runs; gaps that affect testing.
-3. **Safe testing env.** The test space (what exists, what ran, gaps to close in order); private
+3. **Safe testing environment.** The test space (what exists, what ran, gaps to close in order); private
    data found (counts only); the cleaning tool and what it misses; a proposed privacy plan that
    needs a yes.
-4. **Golden use cases.** Each job as a table: what starts it, a good result, its limits, recent
+4. **Golden test cases.** Each job as a table: what starts it, a good result, its limits, recent
    runs, in scope or not; then where the instructions and the traffic disagree. The task types
    (aim for 7) with share, risk and how each is checked (code first; an AI grader only for
    judgement calls); the checks that run on every test. Where examples come from per task type;

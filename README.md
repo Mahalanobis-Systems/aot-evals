@@ -7,7 +7,7 @@ cost, quality, and speed of your agent.
 
 <p align="center">
   <img src="docs/images/discovery-overview.png" width="800"
-       alt="A discovery report for an example enterprise data pipeline agent: the bottom line, three key numbers, and the four pillars (business context, agent architecture, safe testing env, golden use cases), each with what discovery found and its status. Illustrative example.">
+       alt="A discovery report for an example enterprise data pipeline agent: the bottom line, three key numbers, and the four pillars (business context, agent architecture, safe testing environment, golden test cases), each with what discovery found and its status. Illustrative example.">
 </p>
 
 A Claude Code plugin from Mahal Systems, part of **AOT, the Agent Optimization Toolkit**. It works
@@ -67,8 +67,8 @@ fix next. They rest on four things, and AOT Evals checks each one for your agent
 |---|---|---|
 | **Business context** | Why the agent exists, who relies on it, and what it costs when it answers wrong. | Goals · stakes · intent |
 | **Agent architecture** | Its code, prompts, models and tools, its production setup, and the traces of real runs. When the setup and the traces disagree, we trust the traces. | Code · setup · traces |
-| **Safe testing env** | Runs that can't touch real people, data or money, and are fast and cheap to repeat. | Safe · secure · efficient |
-| **Golden use cases** | Examples drawn from real runs, grouped into the handful of task types the agent actually handles. | Use cases · task types |
+| **Safe testing environment** | Runs that can't touch real people, data or money, and are fast and cheap to repeat. | Safe · secure · efficient |
+| **Golden test cases** | Examples drawn from real runs, grouped into the handful of task types the agent actually handles. | Test cases · task types |
 
 ## How it works
 
