@@ -54,13 +54,16 @@ PILLARS = [  # (key in the report's front matter, headline, what it means, tag l
     ("agent_architecture", "Agent architecture",
      "Its code, prompts, models and tools, its production setup, and the traces of real runs.",
      "Code · setup · traces"),
-    ("safe_testing_env", "Safe testing env",
+    ("safe_testing_env", "Safe testing environment",
      "Runs that can't touch real people, data or money, and are fast and cheap to repeat.",
      "Safe · secure · efficient"),
-    ("golden_use_cases", "Golden use cases",
+    ("golden_use_cases", "Golden test cases",
      "Examples drawn from real runs, grouped into the task types the agent actually handles.",
-     "Use cases · task types"),
+     "Test cases · task types"),
 ]
+
+# Pillar headings in reports written before 0.1.1, still placed and numbered as their pillar.
+OLD_HEADS = {"Safe testing env": "Safe testing environment", "Golden use cases": "Golden test cases"}
 
 STATES = {"done": "✓", "partial": "◐", "risk": "!", "todo": "○"}
 
@@ -160,10 +163,11 @@ def discovery_body(fm: dict, text: str, agent: str) -> str:
     names = [p[1] for p in PILLARS]
     before, after = [], []
     rank = {n: k for k, n in enumerate(names)}  # the four pillars in their order, then the rest as written
-    secs = sorted(secs, key=lambda hb: rank.get(hb[0], len(names)))
+    secs = sorted(secs, key=lambda hb: rank.get(OLD_HEADS.get(hb[0], hb[0]), len(names)))
     for head, body in secs:
-        if head in names:
-            num = f'<span class="num">{names.index(head) + 1:02d}</span> '
+        pillar = OLD_HEADS.get(head, head)
+        if pillar in names:
+            num = f'<span class="num">{names.index(pillar) + 1:02d}</span> '
             before.append(f'<section class="detail-group" id="{slug(head)}"><h2>{num}{markdown.inline(head)}</h2>'
                           f"{markdown.render(body)}</section>")
         else:

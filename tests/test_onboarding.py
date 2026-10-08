@@ -55,7 +55,7 @@ next:
   path: Make it safe first
   why: A fair test.
   steps:
-    - {who: you, title: Approve the plan, detail: "[Read it](#safe-testing-env)", when: 5 minutes}
+    - {who: you, title: Approve the plan, detail: "[Read it](#safe-testing-environment)", when: 5 minutes}
     - {who: us, title: Block outside tools, detail: Email and web.}
   other_paths:
     - {name: Baseline now, why: Quick but weak.}
@@ -66,7 +66,7 @@ next:
 
 Fast.
 
-## Golden use cases
+## Golden test cases
 
 Orders.
 
@@ -88,12 +88,25 @@ def test_discovery_page_puts_the_overview_first_and_the_next_steps_last(tmp_path
     assert "&lt;b&gt;mostly&lt;/b&gt;" in html  # values are escaped
     order = [html.index(s) for s in (
         "Congrats!", "AOT Evals make agent evals simple", ">Overview<", "Business context</h3>",
-        "Golden use cases</h3>", 'id="business-context"', 'id="golden-use-cases"', 'id="next"',
+        "Golden test cases</h3>", 'id="business-context"', 'id="golden-test-cases"', 'id="next"',
         'id="how-this-run-went"')]
     assert order == sorted(order)
     assert 'chip risk' in html and "Not safe yet" in html
     assert "Not looked at yet." in html  # a pillar the report left out still shows
     assert 'class="you"' in html and "/aot-evals:start" in html and "Baseline now" in html
+
+
+def test_discovery_page_still_places_pillar_headings_from_0_1_0(tmp_path):
+    from aot_evals.start import write_discovery_page
+
+    src = tmp_path / "evals/agents/pizza-bot/discovery.md"
+    src.parent.mkdir(parents=True)
+    src.write_text(REPORT.replace("## Golden test cases", "## Golden use cases")
+                   + "\n## Safe testing env\n\nFakes.\n")
+    html = write_discovery_page(src, "pizza-bot", src.parent).read_text()
+    assert 'id="safe-testing-env"><h2><span class="num">03</span> Safe testing env</h2>' in html
+    assert 'id="golden-use-cases"><h2><span class="num">04</span> Golden use cases</h2>' in html
+    assert html.index('id="safe-testing-env"') < html.index('id="golden-use-cases"') < html.index('id="next"')
 
 
 def test_discovery_page_without_front_matter_renders_the_markdown_as_written(tmp_path):

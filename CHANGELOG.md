@@ -6,6 +6,10 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+- The discovery report's pillars read "Safe testing environment" and "Golden test cases"
+  (were "Safe testing env" and "Golden use cases"). Reports written with 0.1.0 still render
+  as before.
+
 ## 0.1.0 — 2026-10-08
 
 The first public release.
