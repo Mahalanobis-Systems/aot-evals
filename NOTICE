@@ -1,0 +1,13 @@
+aot-evals
+Copyright 2026 Mahal Systems
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Bundled third-party fonts, each under the SIL Open Font License, Version 1.1:
+  - Montserrat, Copyright 2011 The Montserrat Project Authors (brand/fonts/Montserrat-OFL.txt)
+  - Roboto, Copyright 2011 The Roboto Project Authors (brand/fonts/Roboto-LICENSE.txt)
+
+"Mahal Systems", "AOT" and the AOT logo (brand/*.png) are trademarks of Mahal Systems. As
+section 6 of the Apache License states, the license grants no permission to use them, except
+as needed to describe where the software comes from. A fork that changes the reports should
+replace the logo.

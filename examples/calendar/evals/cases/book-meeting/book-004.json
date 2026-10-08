@@ -1,0 +1,55 @@
+{
+  "id": "book-004",
+  "category": "book-meeting",
+  "set": "error_finding",
+  "failure_modes": [
+    "meeting-not-booked"
+  ],
+  "taxonomy_entries": [
+    "schedule-meeting"
+  ],
+  "provenance": {
+    "source": "export:traces",
+    "export": "traces",
+    "trace_ref": "trace-book-004",
+    "synthetic": false
+  },
+  "trigger": {
+    "type": "message",
+    "text": "Book 'Budget call' on 2026-10-08 at 11:00"
+  },
+  "inputs": {
+    "event": {
+      "title": "Budget call",
+      "date": "2026-10-08",
+      "time": "11:00"
+    }
+  },
+  "start_state": {
+    "events": [
+      {
+        "title": "Standup",
+        "date": "2026-10-05",
+        "time": "09:30"
+      }
+    ]
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "events": [
+        {
+          "title": "Standup",
+          "date": "2026-10-05",
+          "time": "09:30"
+        },
+        {
+          "title": "Budget call",
+          "date": "2026-10-08",
+          "time": "11:00"
+        }
+      ]
+    },
+    "output": null
+  }
+}

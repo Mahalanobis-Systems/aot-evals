@@ -1,0 +1,11 @@
+# Plane B budgets (docs/method.md §2.1): counters, not judgements. `default` applies to every category;
+# per-category entries override it. Any key may be omitted.
+#   cost_per_success_usd, cost_per_run_usd, latency_p50_ms, latency_p90_ms,
+#   error_rate (share of attempts with a non-ok outcome), tokens_per_run, cache_hit_rate_min
+# Scheduled agents optimise cost; agents someone waits on optimise latency.
+
+default:
+  cost_per_success_usd:
+  latency_p90_ms:
+  error_rate:
+categories: {}

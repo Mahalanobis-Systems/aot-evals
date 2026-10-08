@@ -1,0 +1,5 @@
+default:
+  cost_per_success_usd: 0.004
+  latency_p90_ms: 10000
+  error_rate: 0.5
+categories: {}

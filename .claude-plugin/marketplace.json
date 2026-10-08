@@ -1,0 +1,21 @@
+{
+  "name": "aot-evals",
+  "description": "Marketplace for the aot-evals Claude Code plugin.",
+  "owner": {
+    "name": "Mahal Systems",
+    "email": "ops@mahalsystems.ai"
+  },
+  "plugins": [
+    {
+      "name": "aot-evals",
+      "source": {
+        "source": "github",
+        "repo": "Mahalanobis-Systems/aot-evals",
+        "ref": "aot-evals--v0.1.0"
+      },
+      "displayName": "AOT Evals",
+      "description": "Design, build, measure and iterate the evals for a production agent.",
+      "version": "0.1.0"
+    }
+  ]
+}

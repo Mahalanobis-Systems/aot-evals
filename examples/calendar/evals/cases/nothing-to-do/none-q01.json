@@ -1,0 +1,44 @@
+{
+  "id": "none-q01",
+  "category": "nothing-to-do",
+  "set": "quality_estimate",
+  "failure_modes": [
+    "out-of-scope-change"
+  ],
+  "taxonomy_entries": [
+    "leave-alone"
+  ],
+  "provenance": {
+    "source": "export:traces",
+    "export": "traces",
+    "trace_ref": "trace-none-q01",
+    "synthetic": false
+  },
+  "trigger": {
+    "type": "message",
+    "text": "Lunch was great"
+  },
+  "inputs": {},
+  "start_state": {
+    "events": [
+      {
+        "title": "Standup",
+        "date": "2026-10-05",
+        "time": "09:30"
+      }
+    ]
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "events": [
+        {
+          "title": "Standup",
+          "date": "2026-10-05",
+          "time": "09:30"
+        }
+      ]
+    },
+    "output": null
+  }
+}

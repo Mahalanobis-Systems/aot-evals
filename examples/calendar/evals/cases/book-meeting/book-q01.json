@@ -1,0 +1,55 @@
+{
+  "id": "book-q01",
+  "category": "book-meeting",
+  "set": "quality_estimate",
+  "failure_modes": [
+    "meeting-not-booked"
+  ],
+  "taxonomy_entries": [
+    "schedule-meeting"
+  ],
+  "provenance": {
+    "source": "export:traces",
+    "export": "traces",
+    "trace_ref": "trace-book-q01",
+    "synthetic": false
+  },
+  "trigger": {
+    "type": "message",
+    "text": "Book 'Vendor demo' on 2026-10-09 at 13:00"
+  },
+  "inputs": {
+    "event": {
+      "title": "Vendor demo",
+      "date": "2026-10-09",
+      "time": "13:00"
+    }
+  },
+  "start_state": {
+    "events": [
+      {
+        "title": "Standup",
+        "date": "2026-10-05",
+        "time": "09:30"
+      }
+    ]
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "events": [
+        {
+          "title": "Standup",
+          "date": "2026-10-05",
+          "time": "09:30"
+        },
+        {
+          "title": "Vendor demo",
+          "date": "2026-10-09",
+          "time": "13:00"
+        }
+      ]
+    },
+    "output": null
+  }
+}

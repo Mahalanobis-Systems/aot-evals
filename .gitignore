@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.venv/
+uv.lock
+dist/
+
+# written by Claude Code when it loads the plugin mod (hooks/)
+.claude-plugin/types/
+tsconfig.json

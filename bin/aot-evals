@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# aot-evals CLI. Runs from the plugin's own source in an ephemeral uv environment, so nothing
+# is installed into the team's project. The agent under test still runs in the
+# team's environment: the original PATH / VIRTUAL_ENV / PYTHONPATH are saved here and restored
+# for the agent's subprocess (src/aot_evals/executor.py).
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export AOT_EVALS_ORIG_PATH="${PATH}"
+export AOT_EVALS_ORIG_VIRTUAL_ENV="${VIRTUAL_ENV:-}"
+export AOT_EVALS_ORIG_PYTHONPATH="${PYTHONPATH:-}"
+export PYTHONPATH="${ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}"
+if command -v uv >/dev/null 2>&1; then
+  exec uv run --quiet --no-project --python '>=3.11' --with 'pyyaml>=6' --with 'anthropic>=1' python -m aot_evals "$@"
+fi
+for py in python3.13 python3.12 python3.11 python3; do
+  if command -v "$py" >/dev/null 2>&1 && "$py" -c 'import sys, yaml; sys.exit(sys.version_info < (3, 11))' 2>/dev/null; then
+    exec "$py" -m aot_evals "$@"
+  fi
+done
+echo "aot-evals needs uv (https://docs.astral.sh/uv/), or Python >= 3.11 with PyYAML" >&2
+exit 127

@@ -1,0 +1,14 @@
+failure_modes:
+  - id: meeting-not-booked
+    description: The requested meeting is missing, duplicated, or at the wrong time
+    categories: [book-meeting]
+    check_type: code
+    checks: [requested-event-exists]
+    cost_cell: incorrect
+  - id: out-of-scope-change
+    description: An event changed that the request did not ask for
+    categories: ["*"]
+    side_effect: true
+    check_type: code
+    checks: [no-out-of-scope-changes]
+    cost_cell: incorrect

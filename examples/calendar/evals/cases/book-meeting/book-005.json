@@ -1,0 +1,55 @@
+{
+  "id": "book-005",
+  "category": "book-meeting",
+  "set": "error_finding",
+  "failure_modes": [
+    "meeting-not-booked"
+  ],
+  "taxonomy_entries": [
+    "schedule-meeting"
+  ],
+  "provenance": {
+    "source": "export:traces",
+    "export": "traces",
+    "trace_ref": "trace-book-005",
+    "synthetic": false
+  },
+  "trigger": {
+    "type": "message",
+    "text": "Book 'Planning' on 2026-10-12 at 10:30"
+  },
+  "inputs": {
+    "event": {
+      "title": "Planning",
+      "date": "2026-10-12",
+      "time": "10:30"
+    }
+  },
+  "start_state": {
+    "events": [
+      {
+        "title": "Standup",
+        "date": "2026-10-05",
+        "time": "09:30"
+      }
+    ]
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "events": [
+        {
+          "title": "Standup",
+          "date": "2026-10-05",
+          "time": "09:30"
+        },
+        {
+          "title": "Planning",
+          "date": "2026-10-12",
+          "time": "10:30"
+        }
+      ]
+    },
+    "output": null
+  }
+}

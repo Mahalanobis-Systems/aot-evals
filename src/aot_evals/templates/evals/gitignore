@@ -1,0 +1,9 @@
+# aot-evals: raw traces, exports and pulled transcripts never enter git (docs/method.md §1, principle 5).
+# The export manifest and the reviewed, scrubbed cases are committed.
+data/*
+!data/export.manifest.json
+runs/*/raw/
+checks/judge/*.queue.csv
+pulled/
+*.trace.json
+__pycache__/

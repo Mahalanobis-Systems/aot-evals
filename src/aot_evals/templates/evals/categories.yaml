@@ -1,0 +1,18 @@
+# C3 categorize: the distinct kinds of job the agent does. Every trace gets exactly one category.
+# Shares are counted from an imported export (share_source = its id in data/export.manifest.json).
+
+categories: []
+  # - id: confirm-and-book
+  #   definition: A time was agreed; confirm it and create the invite
+  #   example: <trace id from the export>
+  #   worth: high              # low | medium | high: how much it matters when this goes wrong
+  #   simple: false            # true when a heuristic can check the right behaviour on every run
+  #   heuristic:               # required when simple: the rule, based on the input, that identifies it
+  #   cost:                    # cost matrix row: price of each kind of failure (none|low|medium|high)
+  #     incorrect: high
+  #     unexecuted_claim: high
+  #     no_response: medium
+  #     partial: medium
+  #     slow: low
+  #   observed_share: 0.12
+  #   share_source: 2026-10-02-traces

@@ -1,0 +1,32 @@
+[project]
+name = "aot-evals"
+version = "0.1.0"
+description = "CLI behind the aot-evals Claude Code plugin: design, build, measure and iterate an agent's evals"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+readme = "README.md"
+dependencies = ["pyyaml>=6", "anthropic>=1"]
+
+[project.scripts]
+aot-evals = "aot_evals.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aot_evals"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,17 @@
+# C2 taxonomy: the coverage list (docs/method.md §2.4). It must come from a document written for another
+# purpose (product spec, API/tool surface, help-centre topics, job-task taxonomy, a regulator's
+# duties), never from evals/cases/. Commit it before the first case (G5).
+
+name:
+source:
+  document:             # title of the source document
+  kind:                 # product-spec | api-surface | help-centre | job-taxonomy | regulation | other
+  url:                  # or path:
+read_on:                # date the source was read
+template:               # templates/taxonomies/<vertical>.yaml if one was used, else null
+entries: []
+  # - id: billing.refund
+  #   title: Issue a refund
+  #   description: ...
+  #   not_applicable:          # E8 triage: failure modes that cannot occur for this entry
+  #     invite-wrong-time: refunds never create invites

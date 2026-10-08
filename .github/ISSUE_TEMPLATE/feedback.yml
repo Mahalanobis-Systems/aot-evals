@@ -1,0 +1,18 @@
+name: Feedback from using aot-evals
+description: What worked, what got in the way, what you wish it did
+labels: [feedback]
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Your agent and how far you got
+      description: A sentence on the kind of agent (no names needed) and which commands or skills you ran.
+    validations:
+      required: true
+  - type: textarea
+    id: feedback
+    attributes:
+      label: Feedback
+      description: What worked, what was confusing or slow, and what you would change.
+    validations:
+      required: true

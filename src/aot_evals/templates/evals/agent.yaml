@@ -1,0 +1,41 @@
+# C1 inventory: the agent under test. Fill every field; `aot-evals status` names what is missing.
+# Record each claim as confirmed or inferred, with its source. When config and runtime disagree,
+# trust the traces.
+
+id:                     # short stable id, e.g. support-triage
+description:            # one sentence: what the agent does for its users
+surface:                # where it lives: API endpoint, chat channel, UI feature, scheduled job
+triggers: []            # what starts a run: [user message, schedule (cron), webhook, other agent]
+instructions: []        # prompt / skill files, or "stored at runtime in <system>" when there is no file
+tools: []               # - {name: create_ticket, kind: write, credentials: [TICKETS_API_KEY]}  (names only)
+harness:                # {name: <framework or runtime>, version: <version>}
+models: {}              # model actually used per call site, e.g. {main: claude-sonnet-5-5, router: claude-haiku-4-5}
+models_evidence:        # how `models` was observed (trace field, log line), not just what config says
+model_family:           # family of the main model, e.g. anthropic; judges must differ (G4)
+version_history: []     # - {date: 2026-08-01, change: "prompt: added refund policy", kind: prompt, source: <commit|ticket>}
+stable_window:
+  since:                # date of the last behaviour-changing edit
+  evidence:             # how that was established (commit log, runtime records, owner confirmed on <date>)
+validity:               # optional (M25): stated validity of each stage, 0-1, if known
+  task:
+  simulator:
+  judge:
+simulator:              # id of the simulated user, if any (G9); null when users are scripted
+
+# How to invoke it: the agent contract (references/agent-contract.md in the plugin).
+invoke:
+  command: []           # argv, e.g. [python, -m, my_agent.eval_entry]; runs in `cwd` with the case JSON on stdin
+  cwd: .                # relative to the repository root (the folder that holds evals/)
+  isolate: false        # true: run the agent and hooks from a per-run copy of the repository without
+                        # evals/ (this suite's env/ is kept). Set it for any agent that can read files:
+                        # a coding harness will find and read the cases if they are there.
+  timeout: 120          # seconds per attempt; a timeout is outcome `timeout`, never a correctness failure
+  max_attempts: 2       # retries of retryable outcomes; every attempt is recorded
+  setup:                # shell command run once before the first case
+  seed:                 # shell command run before every attempt with the case JSON on stdin; sets the start state
+  observe:              # shell command that prints the world as JSON; checks grade this, not the agent's reply.
+                        # For side effects on files, cover the whole working tree, not only the agent's
+                        # folders: `aot-evals snapshot --exclude 'out/*'` prints a hash per file
+  reset:                # shell command run after each case (reset_scope: case) or once after the run
+  reset_scope: case
+  env: {}               # extra environment variables for the agent

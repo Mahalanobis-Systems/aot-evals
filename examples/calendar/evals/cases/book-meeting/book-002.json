@@ -1,0 +1,55 @@
+{
+  "id": "book-002",
+  "category": "book-meeting",
+  "set": "error_finding",
+  "failure_modes": [
+    "meeting-not-booked"
+  ],
+  "taxonomy_entries": [
+    "schedule-meeting"
+  ],
+  "provenance": {
+    "source": "export:traces",
+    "export": "traces",
+    "trace_ref": "trace-book-002",
+    "synthetic": false
+  },
+  "trigger": {
+    "type": "message",
+    "text": "Book 'Design review' on 2026-10-06 at 10:00"
+  },
+  "inputs": {
+    "event": {
+      "title": "Design review",
+      "date": "2026-10-06",
+      "time": "10:00"
+    }
+  },
+  "start_state": {
+    "events": [
+      {
+        "title": "Standup",
+        "date": "2026-10-05",
+        "time": "09:30"
+      }
+    ]
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "events": [
+        {
+          "title": "Standup",
+          "date": "2026-10-05",
+          "time": "09:30"
+        },
+        {
+          "title": "Design review",
+          "date": "2026-10-06",
+          "time": "10:00"
+        }
+      ]
+    },
+    "output": null
+  }
+}

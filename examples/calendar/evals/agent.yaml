@@ -1,0 +1,25 @@
+id: toy-calendar
+description: Books meetings on a calendar when asked
+surface: CLI
+triggers: [user message]
+instructions: [agent/agent.py]
+tools:
+  - {name: calendar, kind: write, credentials: []}
+harness: {name: toy, version: "1"}
+models: {main: toy-model-1}
+models_evidence: model_ids field in every agent result
+model_family: toy
+version_history:
+  - {date: 2026-09-01, change: initial version, kind: prompt, source: fixture}
+stable_window:
+  since: 2026-09-01
+  evidence: fixture; no changes since
+invoke:
+  command: ["{PYTHON}", agent/agent.py]
+  cwd: .
+  timeout: 3
+  max_attempts: 2
+  seed: "{PYTHON} agent/seed.py"
+  observe: "{PYTHON} agent/observe.py"
+  reset_scope: case
+  env: {AGENT_VARIANT: "{VARIANT}", WORLD_FILE: world.json}

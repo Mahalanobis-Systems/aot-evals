@@ -1,0 +1,29 @@
+name: Bug report
+description: Something in aot-evals did not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Leave out traces, case contents and anything from your agent's users.
+  - type: textarea
+    id: doctor
+    attributes:
+      label: aot-evals doctor
+      description: Paste the output of `aot-evals doctor` (it prints versions and paths, no secrets).
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The command you ran or the skill you used, and what it printed or did.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true

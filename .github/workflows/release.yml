@@ -1,0 +1,49 @@
+name: Release
+
+# When a version bump (scripts/release.py) lands on main, tag that commit
+# aot-evals--v<version> and publish a GitHub release with its changelog section. The
+# marketplace entry installs the plugin from that tag, so users get the release only once the
+# tag exists. Nothing happens when the tag already exists, or while the repository is private
+# (so the pre-launch history never gets a release tag).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Read the version
+        id: version
+        run: |
+          version="$(python3 scripts/release.py --check)"
+          tag="aot-evals--v${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Tag and publish
+        if: steps.version.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "aot-evals ${VERSION}"
+          git push origin "${TAG}"
+          python3 scripts/release.py --notes "${VERSION}" > notes.md
+          gh release create "${TAG}" --title "aot-evals ${VERSION}" --notes-file notes.md

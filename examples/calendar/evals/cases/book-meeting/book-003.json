@@ -1,0 +1,55 @@
+{
+  "id": "book-003",
+  "category": "book-meeting",
+  "set": "error_finding",
+  "failure_modes": [
+    "meeting-not-booked"
+  ],
+  "taxonomy_entries": [
+    "schedule-meeting"
+  ],
+  "provenance": {
+    "source": "export:traces",
+    "export": "traces",
+    "trace_ref": "trace-book-003",
+    "synthetic": false
+  },
+  "trigger": {
+    "type": "message",
+    "text": "Book '1:1 Sam' on 2026-10-07 at 16:30"
+  },
+  "inputs": {
+    "event": {
+      "title": "1:1 Sam",
+      "date": "2026-10-07",
+      "time": "16:30"
+    }
+  },
+  "start_state": {
+    "events": [
+      {
+        "title": "Standup",
+        "date": "2026-10-05",
+        "time": "09:30"
+      }
+    ]
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "events": [
+        {
+          "title": "Standup",
+          "date": "2026-10-05",
+          "time": "09:30"
+        },
+        {
+          "title": "1:1 Sam",
+          "date": "2026-10-07",
+          "time": "16:30"
+        }
+      ]
+    },
+    "output": null
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "id": "confirm-001",
+  "category": "confirm-and-book",
+  "set": "error_finding",
+  "failure_modes": ["invite-wrong-time"],
+  "taxonomy_entries": ["calendar.create-event"],
+  "provenance": {
+    "source": "export:2026-10-02-traces",
+    "export": "2026-10-02-traces",
+    "trace_ref": "<trace id in the export>",
+    "synthetic": false,
+    "agent_version": "<commit or date of the version that produced the trace>",
+    "reviewed_by": "<who confirmed the expected end state>",
+    "notes": "scrubbed: names replaced, emails moved to example.com"
+  },
+  "trigger": {"type": "message", "text": "Can we do Thursday 3pm instead? Please send the invite."},
+  "inputs": {"thread": [], "expected_event": {"title": "Sync", "start": "2026-10-08T15:00:00-04:00"}},
+  "start_state": {"events": []},
+  "followups": [],
+  "expected_end_state": {
+    "world": {"events": [{"title": "Sync", "start": "2026-10-08T15:00:00-04:00"}]},
+    "output": null
+  }
+}

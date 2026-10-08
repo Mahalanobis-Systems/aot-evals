@@ -1,0 +1,11 @@
+name: Toy calendar assistant jobs
+source:
+  document: Toy calendar assistant product spec
+  kind: product-spec
+  path: docs/product-spec.md
+read_on: 2026-10-02
+template: null
+entries:
+  - {id: schedule-meeting, title: Schedule a meeting}
+  - {id: leave-alone, title: Leave the calendar alone}
+  - {id: reschedule-meeting, title: Move an existing meeting}

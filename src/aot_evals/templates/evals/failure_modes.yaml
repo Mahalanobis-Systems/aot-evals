@@ -1,0 +1,21 @@
+# C4 decompose: feature -> scenario -> failure mode, per category. Each failure mode gets at
+# least one binary check (C8) and a cell of its category's cost matrix.
+
+failure_modes: []
+  # - id: invite-wrong-time
+  #   description: The invite is created at a time other than the one agreed
+  #   categories: [confirm-and-book]
+  #   feature: scheduling
+  #   scenario: agreed time in a different timezone
+  #   check_type: code          # code | judge | monitor
+  #   checks: [invite-time-matches]
+  #   cost_cell: incorrect
+  #
+  # Every agent needs at least one side-effect mode that runs on every case:
+  # - id: out-of-scope-change
+  #   description: Something changed that the request did not ask for
+  #   categories: ["*"]
+  #   side_effect: true
+  #   check_type: code
+  #   checks: [no-out-of-scope-changes]
+  #   cost_cell: incorrect
