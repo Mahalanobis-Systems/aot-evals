@@ -1,6 +1,6 @@
 [project]
 name = "aot-evals"
-version = "0.1.0"
+version = "0.1.1"
 description = "CLI behind the aot-evals Claude Code plugin: design, build, measure and iterate an agent's evals"
 requires-python = ">=3.11"
 license = "Apache-2.0"

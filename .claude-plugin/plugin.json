@@ -1,7 +1,7 @@
 {
   "name": "aot-evals",
   "displayName": "AOT Evals",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Part of AOT, the Agent Optimization Toolkit, a Mahal Systems offering. Design, build, measure and iterate the evals for a production agent: a repository contract (evals/), skills that walk commands C0-C18 with exit gates, a stdlib CLI that runs the agent k times and records every attempt, and a fixed report.json schema that Claude renders into a local HTML diagnostic.",
   "author": {
     "name": "Mahal Systems",
