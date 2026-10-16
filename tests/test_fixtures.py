@@ -9,6 +9,7 @@ redundant case set in test_suite.py.
 from __future__ import annotations
 
 import json
+import math
 import shutil
 from pathlib import Path
 
@@ -306,7 +307,7 @@ def test_a_stopped_run_resumes_in_place_and_counts_as_a_complete_baseline(make_r
     # totals come from every record, both processes
     assert sum(m["counts"].values()) == len(after)
     assert m["counts"]["timeout"] == sum(a["outcome"] == "timeout" for a in after)
-    assert m["cost_usd"] == sum(a["cost_usd"] for a in after if a["cost_usd"] is not None)
+    assert m["cost_usd"] == math.fsum(a["cost_usd"] for a in after if a["cost_usd"] is not None)
     assert m["agent"]["model_ids_observed"] == {"main": ["toy-model-1"]}
 
     # the gate takes a resumed run as it is

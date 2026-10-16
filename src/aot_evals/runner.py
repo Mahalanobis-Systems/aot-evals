@@ -20,6 +20,7 @@ stdout/stderr per attempt; it is git-ignored, and `trace_ref` points into it.
 from __future__ import annotations
 
 import json
+import math
 import platform
 import time
 from pathlib import Path
@@ -375,7 +376,7 @@ def load_records_for_resume(path: Path, log=print) -> list[dict]:
 def run_totals(records: list[dict]) -> tuple[dict[str, int], float | None, dict[str, list[str]]]:
     """Counts per outcome, total cost and observed models, from every attempt record."""
     counts: dict[str, int] = {}
-    cost, any_cost = 0.0, False
+    costs: list[float] = []
     observed: dict[str, set] = {}
     for r in records:
         if r.get("kind") != "attempt":
@@ -383,11 +384,11 @@ def run_totals(records: list[dict]) -> tuple[dict[str, int], float | None, dict[
         key = r.get("outcome") or "instrument_error"
         counts[key] = counts.get(key, 0) + 1
         if r.get("cost_usd") is not None:
-            cost += r["cost_usd"]
-            any_cost = True
+            costs.append(r["cost_usd"])
         for site, model in (r.get("model_ids") or {}).items():
             observed.setdefault(site, set()).add(model)
-    return counts, (cost if any_cost else None), {s: sorted(m) for s, m in observed.items()}
+    # fsum: correctly rounded, so the total is the same whatever the order or Python version
+    return counts, (math.fsum(costs) if costs else None), {s: sorted(m) for s, m in observed.items()}
 
 
 def _execute(ev: Evals, executor: Executor, manifest: dict, plan: list[tuple[int, dict, int]],
