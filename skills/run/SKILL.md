@@ -63,7 +63,10 @@ aot-evals report                            # recompute report.json from the run
 - A run stops after 5 cases in a row end in an operational failure (`--stop-after N`, 0 never
   stops): a provider that has gone silent would otherwise turn every remaining case into a
   timeout, which can cost hours. A stopped run is never `finished`; find out why with the
-  user, then run again. If the agent's own runtime is rate-limited (a free model tier), pace the
+  user, then carry it on with `aot-evals run --resume <run_id>` rather than starting over. The
+  same applies to a run whose process died. Resume is refused if the agent, the suite, the env or
+  the judges changed since the run started; then start a new run. Pairs that ended in an
+  operational failure before the stop are kept as recorded, not run again. If the agent's own runtime is rate-limited (a free model tier), pace the
   run with `--pause-every N --pause-seconds S` rather than splitting it into several runs.
 - Judge checks run with their primary backend on every applicable attempt. Calls cost money, so
   tell the user first. Use `--no-judges` for a code-only run, and `aot-evals judge apply` later.

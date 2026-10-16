@@ -58,7 +58,9 @@ When the process exits non-zero and prints no JSON, the attempt is recorded as `
 When it prints no JSON and exits 0, the attempt is `no_output` (empty stdout) or `unparseable`. A
 timeout is `timeout`, and the attempt counts as killed. Retryable outcomes (`timeout`,
 `rate_limited`, `provider_error`, `no_output`, `unparseable`) are retried up to
-`invoke.max_attempts`. Every attempt is recorded either way.
+`invoke.max_attempts`. Every attempt is recorded either way. `attempt` counts from 0; when a
+resumed run (`aot-evals run --resume`) redoes a case interrupted mid-retry, it continues from the
+next unused number, so it can reach `max_attempts` or more.
 
 ## Hooks: making the world checkable
 

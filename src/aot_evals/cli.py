@@ -190,6 +190,22 @@ def compare_variables() -> list[str]:
 
 def cmd_run(args) -> int:
     ev = _evals(args)
+    if args.resume:
+        given = [flag for flag, v in (("--purpose", args.purpose), ("--k", args.k),
+                                      ("--case", args.case), ("--category", args.category),
+                                      ("--question", args.question), ("--variable", args.variable),
+                                      ("--label", args.label), ("--force", args.force)) if v not in (None, False)]
+        if given:
+            sys.exit(f"refused: --resume carries on the run as its manifest recorded it; drop "
+                     f"{', '.join(given)}")
+        purpose = (ev.run_manifest(args.resume) or {}).get("purpose")
+        m = runner_mod.resume(ev, args.resume, log=_progress(ev, journal.command_gate("run", purpose)),
+                              judges=not args.no_judges, pause_every=args.pause_every,
+                              pause_seconds=args.pause_seconds, stop_after=args.stop_after)
+        return _run_summary(ev, m)
+    if not args.purpose:
+        sys.exit("aot-evals run: --purpose is required (or --resume RUN_ID)")
+    args.k = 1 if args.k is None else args.k
     upto = "C1" if args.purpose == "smoke" else "C12"
     forced = _refuse_unless(ev, upto, args.force)
     if args.purpose == "candidate" and not args.variable and not args.force:
@@ -204,10 +220,15 @@ def cmd_run(args) -> int:
                        log=_progress(ev, journal.command_gate("run", args.purpose)), forced=forced,
                        judges=not args.no_judges, pause_every=args.pause_every,
                        pause_seconds=args.pause_seconds, stop_after=args.stop_after)
+    return _run_summary(ev, m)
+
+
+def _run_summary(ev: Evals, m: dict) -> int:
     print(f"run {m['run_id']}: {m['counts']}  cost ${m['cost_usd'] or 0:.4f}")
     print(f"  {ev.p('runs', m['run_id'])}")
     if m.get("stopped"):
         print(f"  STOPPED, not finished: {m['stopped']['reason']}")
+        print(f"  carry on with: aot-evals run --resume {m['run_id']}")
         return 1
     return 0
 
@@ -614,8 +635,11 @@ def main(argv: list[str] | None = None) -> int:
     s.set_defaults(fn=cmd_screen)
 
     s = sub.add_parser("run", help="run the agent over the cases, k trials each")
-    s.add_argument("--purpose", choices=["smoke", "baseline", "candidate", "drift"], required=True)
-    s.add_argument("--k", type=int, default=1)
+    s.add_argument("--purpose", choices=["smoke", "baseline", "candidate", "drift"])
+    s.add_argument("--k", type=int, help="trials per case (default 1)")
+    s.add_argument("--resume", metavar="RUN_ID",
+                   help="carry on a stopped or interrupted run in place: skip every (case, trial) "
+                   "with a final attempt and run the rest; refused if the build changed")
     s.add_argument("--case", action="append")
     s.add_argument("--category", action="append")
     s.add_argument("--question", help="smoke only: run one ad-hoc trigger before any case exists")
