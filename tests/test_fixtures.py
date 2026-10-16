@@ -358,6 +358,45 @@ def test_resume_refused_when_env_or_cases_changed(make_repo, monkeypatch):
         assert "env sha" in str(e) and "case set changed (edited: book-001)" in str(e)
 
 
+def _repo_with_env(make_repo):
+    """A repo whose env/ holds a committed fake and a git-ignored observe dump, as an agent
+    that writes its last observation under env/ on every attempt would leave it."""
+    repo = make_repo()
+    (repo.evals / "env").mkdir()
+    (repo.evals / "env" / "fake_crm.py").write_text("RECORDS = 3\n")
+    with (repo.evals / ".gitignore").open("a") as f:
+        f.write("env/observe/\n")
+    (repo.evals / "env" / "observe").mkdir()
+    (repo.evals / "env" / "observe" / "last.json").write_text('{"attempt": 1}\n')
+    repo.commit("env fakes")
+    return repo
+
+
+def test_resume_ignores_git_ignored_files_under_env(make_repo, monkeypatch):
+    repo = _repo_with_env(make_repo)
+    ev = Evals(repo.evals)
+    run_id = _stopped_baseline(repo, monkeypatch, ok_cases=2)
+    # the agent rewrote its observe dump after the run started: not a change to the build
+    (repo.evals / "env" / "observe" / "last.json").write_text('{"attempt": 7}\n')
+    assert repo.cli("run", "--resume", run_id) == 0
+    m = ev.run_manifest(run_id)
+    assert m["finished"] and gates.trial_completeness(ev, m) == []
+
+
+def test_resume_refused_when_a_tracked_env_file_has_uncommitted_edits(make_repo, monkeypatch):
+    from aot_evals import runner
+
+    repo = _repo_with_env(make_repo)
+    ev = Evals(repo.evals)
+    run_id = _stopped_baseline(repo, monkeypatch, ok_cases=2)
+    (repo.evals / "env" / "fake_crm.py").write_text("RECORDS = 4\n")
+    try:
+        runner.resume(ev, run_id, log=lambda *_: None)
+        raise AssertionError("resumed with an edited fake")
+    except ValueError as e:
+        assert "env/ fakes changed" in str(e)
+
+
 def test_resume_drops_a_truncated_last_line(make_repo, monkeypatch):
     repo = make_repo()
     ev = Evals(repo.evals)

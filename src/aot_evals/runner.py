@@ -337,9 +337,19 @@ def resume_problems(ev: Evals, then: dict, now: dict) -> list[str]:
         out.append("case set changed" + (f" (edited: {', '.join(edited[:5])})" if edited else ""))
     if now.get("checks") != then.get("checks"):
         out.append("code checks changed")
-    if now.get("fakes_sha256") != then.get("fakes_sha256"):
+    if now.get("fakes_sha256") != then.get("fakes_sha256") and _env_edited(ev):
         out.append("env/ fakes changed")
     return out
+
+
+def _env_edited(ev: Evals) -> bool:
+    """Whether env/ holds edits git has not committed. The fakes hash covers every file under
+    env/, including git-ignored ones an agent rewrites on each attempt (an observe dump), so it
+    differs between any two runs; committed changes to env/ are already caught by evals_commit."""
+    from .util import git
+
+    status = git(["status", "--porcelain", "--", "env"], ev.root)
+    return status is None or bool(status.strip())
 
 
 def _only_runs_changed(ev: Evals, old: str | None, new: str | None) -> bool:
