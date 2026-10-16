@@ -124,7 +124,8 @@ def test_an_isolated_run_cannot_see_the_cases(make_repo):
     assert m["eval_exposure"] == {"isolated": True, "changed": [], "mentioned": []}
     assert m["counts"].get("ok") and not gates.manifest_problems(m)
     assert m["agent_commit"]  # from the repository, not the copy (which has no .git)
-    first = json.loads((repo.evals / "runs" / m["run_id"] / "outcomes.jsonl").read_text().splitlines()[0])
+    lines = (repo.evals / "runs" / m["run_id"] / "outcomes.jsonl").read_text().splitlines()
+    first = next(r for r in map(json.loads, lines) if r["kind"] == "attempt")
     assert first["outcome"] == "ok"
 
 

@@ -161,12 +161,14 @@ Rules:
 - **`outcomes.jsonl` is never aggregated at write time.** It has two kinds of line: `kind:
   attempt`, one per (case, trial, attempt), with the outcome code and plane-B counters; and `kind:
   check`, one per (case, check, trial, attempt), with the verdict. Every attempt is written,
-  including retries and operational failures. `pass^k`, flakiness, discrimination and paired tests
-  are computed from these lines.
+  including retries and operational failures. An attempt's check lines are written before its
+  attempt line, so a final attempt line on disk means the attempt is complete. `pass^k`,
+  flakiness, discrimination and paired tests are computed from these lines.
 - **`manifest.json` is the condition record**: the agent's commit (computed with `evals/`
   excluded, so committing a run or a label is never an agent change) and this suite's commit, every
   model id, harness, fakes, k, total cost, and whether the run was isolated or saw the eval files
-  (§4, C12). Two runs whose manifests differ on any field other than the declared independent
+  (§4, C12). Counts, cost and observed models are recomputed from `outcomes.jsonl` when the run
+  ends. A resumed run lists each resume under `resumed` (`at`, `pairs_done_before`). Two runs whose manifests differ on any field other than the declared independent
   variable are not compared (G7).
 - **Every case has a `set`**: `error_finding` or `quality_estimate`. There is no default.
 - **`taxonomy.yaml` names the document it came from**, and is committed before the first case. A
@@ -217,6 +219,16 @@ mix re-opens C3 and C5.
   `ok` is scored; retryable codes are retried up to `max_attempts`.
 - A run stops after `--stop-after` (default 5) cases in a row end in an operational failure; a
   stopped run is never finished. `--pause-every N --pause-seconds S` paces a rate-limited runtime.
+- `aot-evals run --resume RUN_ID` carries on a stopped or interrupted run in the same directory. It
+  skips every (case, trial) with a final attempt, including one that ended in an operational
+  failure, and runs the rest, appending to the same `outcomes.jsonl`. A pair whose last attempt
+  isn't final is run again, with attempt numbers after the ones already used, so a crashed
+  attempt's lines never join a new one's. A truncated last line is dropped first, and the `setup`
+  and `reset` hooks run before anything else. Resume is refused when the run is finished, or when
+  the agent commit, the suite's commit (changes under `runs/` aside), `invoke.env`, a judge's sha,
+  the case set, the code checks or the fakes differ from the manifest, or when the agent has
+  uncommitted changes: one run never mixes two versions. The run keeps the `purpose`, `k`, case
+  set and judges setting it started with. Once finished, it counts as a complete run (C12).
 - **The agent must not see the cases.** `invoke.isolate: true` runs the agent and its hooks from a
   per-run copy of the repository without `evals/` (this suite's `env/` is kept). Every run, isolated
   or not, records eval files changed during the run and agent output that names a case file; either

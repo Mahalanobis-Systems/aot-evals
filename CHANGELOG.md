@@ -6,6 +6,17 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+- `aot-evals run --resume RUN_ID` carries on a run that stopped or died partway, in place, instead
+  of starting over. Every (case, trial) with a final attempt is skipped, and the rest are appended
+  to the same `outcomes.jsonl`. Resume is refused if the run is finished, or if the agent commit,
+  the suite's commit, the env, the judges or the case set changed since the run started. A
+  truncated last line is dropped, and a case interrupted mid-retry is run again. The manifest
+  gets a `resumed` list (`at`, `pairs_done_before`) and a `judges_enabled` field. Counts, cost and
+  observed models are now always recomputed from `outcomes.jsonl`. A stopped run prints the
+  resume command.
+- In `outcomes.jsonl`, an attempt's check lines now come before its attempt line, so a crash
+  between them can't leave a final attempt without its checks.
+
 ## 0.1.1 — 2026-10-08
 
 - The discovery report's pillars read "Safe testing environment" and "Golden test cases"
