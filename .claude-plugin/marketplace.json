@@ -11,11 +11,11 @@
       "source": {
         "source": "github",
         "repo": "Mahalanobis-Systems/aot-evals",
-        "ref": "aot-evals--v0.1.1"
+        "ref": "aot-evals--v0.2.0"
       },
       "displayName": "AOT Evals",
       "description": "Design, build, measure and iterate the evals for a production agent.",
-      "version": "0.1.1"
+      "version": "0.2.0"
     }
   ]
 }

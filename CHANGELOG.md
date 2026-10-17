@@ -6,6 +6,8 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+## 0.2.0 — 2026-10-16
+
 - `aot-evals run --resume RUN_ID` carries on a run that stopped or died partway, in place, instead
   of starting over. Every (case, trial) with a final attempt is skipped, and the rest are appended
   to the same `outcomes.jsonl`. Resume is refused if the run is finished, or if the agent commit,
