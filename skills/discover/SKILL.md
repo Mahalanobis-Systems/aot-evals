@@ -89,8 +89,13 @@ point, and where the records are.
    labels, earlier drafts and whether the owner confirmed them). Kinds of private data present,
    with counts: people, family, customers or prospects, locations, secrets. Where raw data sits
    and whether it's kept out of git. Any cleaning tool and what it misses. Whether any data may
-   fall under an NDA or customer agreement. Public benchmarks that fit (names, marked unchecked)
-   and whether they're worth running.
+   fall under an NDA or customer agreement. Public benchmarks that fit, **from the local catalog
+   only, never a web search**: once the task types from subagent 3 are known, run
+   `aot-evals benchmarks --workload TAG --task "<task type>" ...` (one `--task` per task type;
+   `aot-evals benchmarks` alone lists the workload tags) and keep the top fits with the reason
+   each might fit, what to borrow from it (grading design, case template, user simulator,
+   sandbox design, baseline number) and its caveats. Say which of the agent's task types each
+   one informs. Phase 2 may look for newer benchmarks on the web; Phase 1 does not.
 
 Then ask these three questions about the chosen agent, in these words. Offer a suggestion
 for each, drawn from the quick scan, but nothing is built until the owner answers.
@@ -181,7 +186,9 @@ four pillars and puts the last two after the next steps):
    runs, in scope or not; then where the instructions and the traffic disagree. The task types
    (aim for 7) with share, risk and how each is checked (code first; an AI grader only for
    judgement calls); the checks that run on every test. Where examples come from per task type;
-   size and the cost and time of a full pass; public benchmarks.
+   size and the cost and time of a full pass. Then **Public benchmarks that fit**, a table from
+   the catalog matches: Benchmark, Which of our task types it informs, What to borrow, Caveats.
+   Public benchmarks are a source of grading designs and case templates, never of cases.
 5. **Questions for you.** At most five, as a table: Question, Suggested answer, If no reply.
    Anything touching private data waits for a yes; mark questions waiting on the owner with ⏳.
 6. **How this run went.** Time taken per step, and anything that should change. Then sources.

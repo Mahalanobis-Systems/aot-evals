@@ -126,6 +126,13 @@ draft the list from that outside source and have the owner edit it.
 - **Never derive it from `<suite>/cases/`, and never from the categories you are about to build.**
   Coverage against your own cases is always 100% (G5).
 - **Commit `taxonomy.yaml` before the first case.** The gate checks git ancestry.
+- **Public benchmarks, now with the web.** The discovery report lists the fits from the local
+  catalog (`aot-evals benchmarks`, `references/benchmarks.md`). Here, and only here, search the
+  web for benchmarks newer than the catalog for this agent's workload (one short search per
+  workload tag, 10 minutes at most). Use them as sources of grading designs, case templates and
+  taxonomies, never of cases. Add anything worth keeping to the report marked "not in the
+  catalog", and offer to open a pull request that adds it to `references/benchmarks.yaml` with
+  every field filled.
 
 ## C3 categorize → `<suite>/categories.yaml`
 

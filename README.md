@@ -95,6 +95,10 @@ Under the hood:
   defended isn't printed.
 - **A fixed `report.json` schema**, which Claude renders into a local HTML report written for the
   question being asked.
+- **A local catalog of over 350 public agent benchmarks** ([references/benchmarks.md](references/benchmarks.md)).
+  Phase 1 matches your agent against it without a web search, and says what each fit is good for:
+  a grading design, a case template, a user simulator, a sandbox design or a baseline number.
+  Cases still come from your own traffic, never from a benchmark.
 
 The method, with every command, measurement and gate, is in [docs/method.md](docs/method.md).
 

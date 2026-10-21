@@ -35,7 +35,9 @@ have one. When a number cannot be defended, aot-evals refuses to print it and na
 ## 1. Principles
 
 1. **Cases come from the agent's real traffic and real failures**, not from generic benchmarks.
-   Public benchmarks are a source of grading designs, not of cases.
+   Public benchmarks are a source of grading designs, not of cases. Phase 1 matches the agent to
+   a local catalog of them (`aot-evals benchmarks`, [references/benchmarks.md](../references/benchmarks.md))
+   without searching; Phase 2 may search for newer ones.
 2. **Understand the agent before measuring it**: inventory, infrastructure, volume and usage first.
 3. **Grade outcomes, with code first.** Check what changed in the world. Use a judge only where
    code cannot decide, and only after calibrating it.
