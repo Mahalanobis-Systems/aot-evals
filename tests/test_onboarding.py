@@ -19,6 +19,8 @@ def test_demo_runs_the_whole_loop_without_forcing_a_gate(tmp_path, capsys):
     comparison = json.loads(next((suite / "report/comparisons").glob("*.json")).read_text())
     assert comparison["losses"] == ["book-002", "book-003"] and comparison["refused"] is None
     assert (suite / "report/report.json").exists() and list((suite / "report/checkpoints").glob("*.html"))
+    page = (suite / "discovery.html").read_text()  # the Phase 1 report, with its grid
+    assert "Congrats!" in page and "Where the cases are" in page and page.count('class="cell none"') == 7
     assert "Demo ready" in capsys.readouterr().out
 
 

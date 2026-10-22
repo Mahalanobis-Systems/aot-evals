@@ -16,7 +16,11 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
   tool error, …), each cell the cases that exist against the target. `aot-evals benchmarks`
   prints the situations its matches test; catalog entries may list theirs under `situations`.
   Task types are what the person asked for, never a situation; Phase 2 carries each situation
-  as a taxonomy entry so coverage reports the empty cells.
+  as a taxonomy entry so coverage reports the empty cells. Grid targets start flat per task
+  type and are weighted by worth and share, with the weighting stated in the report.
+- `aot-evals demo` now starts by rendering the toy calendar agent's Phase 1 report
+  (`examples/calendar/evals/discovery.md`, rewritten in the current format with a grid) as
+  `discovery.html`, so the demo shows both phases.
 
 ## 0.2.0 — 2026-10-16
 

@@ -187,13 +187,21 @@ next:
 Use `risk` only when something could touch real people, data or money today. Link to a
 section from a step with its heading as an anchor, e.g. `[Read the plan](#safe-testing-environment)`.
 
-**Setting the grid's targets.** Start from the cases per task type the owner's third answer
-implies (about 10, 20 or 30 to 40). About a third of each task type's cases carry a situation;
-split that third by the risks the traffic showed (a situation seen in many failures gets more),
-and give every column at least a few cases in the task types where it can arise. Universal
-situations (marked `*` by `aot-evals benchmarks`) get a column always; the others only when a
-matched benchmark or the traffic says they apply here. The empty cells are the finding: say in
-the pillar's `found` how many columns have no cases at all.
+**Setting the grid's targets.** Start flat: the cases per task type the owner's third answer
+implies (about 10, 20 or 30 to 40), the same for every task type. Then weight it, and say in the
+grid's `note` how. A flat target sends most new cases to the rarest task types, which is right
+when those are also the ones that can send, delete or change what can't be undone (worth), and
+wrong when they are harmless. So give a task type more than the flat number when its worth is
+high or its share of traffic is large, and fewer when both are low; never below 10 for a task
+type that can do something irreversible. About a third of each task type's cases carry a
+situation; split that third by the risks the traffic showed (a situation seen in many failures
+gets more), and give every column at least a few cases in the task types where it can arise.
+Universal situations (marked `*` by `aot-evals benchmarks`) get a column always; the others
+only when a matched benchmark or the traffic says they apply here. The empty cells are the
+finding: say in the pillar's `found` how many columns have no cases at all, and in the
+`open` line where the new cases go. Where that differs from where the agent fails most, say
+so in the markdown: a cell can be empty because nobody wrote cases there, not because the
+agent fails there.
 
 **The markdown.** The first line is the title: what the agent is, in plain words, with its code
 name in brackets, e.g. `# Meeting scheduler (cal-bot)`. Not "<name>: discovery report"; the page

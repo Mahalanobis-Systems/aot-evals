@@ -39,9 +39,9 @@ Run `/aot-evals:start` again for Phase 2: it says where things stand and builds 
 by step, stopping for your review at each checkpoint.
 
 **Try it on a toy agent first (about a minute).** In Claude Code, in any empty folder, ask:
-*"Run `aot-evals demo` and show me what it made."* It builds a toy calendar agent with a finished
-suite, runs a baseline and a candidate that breaks two cases, and compares them. Nothing calls a
-model or a network service.
+*"Run `aot-evals demo` and show me what it made."* It builds a toy calendar agent with a Phase 1
+report and a finished suite, runs a baseline and a candidate that breaks two cases, and compares
+them. Nothing calls a model or a network service.
 
 Judges default to a free System One model (Jev, through OpenCode Zen) that needs no key but
 allows about 250 calls a day; set `ANTHROPIC_API_KEY` to use Claude as a judge. See

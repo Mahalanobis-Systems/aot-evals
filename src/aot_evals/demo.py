@@ -1,10 +1,11 @@
 """`aot-evals demo [DIR]`: a toy agent with a finished suite, to try aot-evals in a few minutes.
 
-It copies examples/calendar (a toy calendar agent, its product spec, exported traces and a
-reviewed suite) into a new git repository, then runs the loop a team runs on its own agent:
-import, screen, allocate, a smoke run, a k = 3 baseline, a candidate that breaks two cases, the
-paired comparison, and the report. Nothing calls a model or a network service, and nothing
-outside DIR is touched. Afterwards, open Claude Code in DIR to explore it with the skills.
+It copies examples/calendar (a toy calendar agent, its product spec, exported traces, a Phase 1
+discovery report and a reviewed suite) into a new git repository, renders the discovery page,
+then runs the loop a team runs on its own agent: import, screen, allocate, a smoke run, a
+k = 3 baseline, a candidate that breaks two cases, the paired comparison, and the report. Nothing
+calls a model or a network service, and nothing outside DIR is touched. Afterwards, open Claude
+Code in DIR to explore it with the skills.
 """
 
 from __future__ import annotations
@@ -64,6 +65,8 @@ def run(dest: Path, cli_main, log=print) -> int:
         if code not in (0, None):
             raise RuntimeError(f"`aot-evals {' '.join(args)}` exited {code}")
 
+    step("Phase 1: the discovery report, as a page", "discovery-page", str(suite / "discovery.md"),
+         "--agent", "Meeting scheduler (toy-calendar)")
     step("C0: import the exported traces, with their provenance",
          "import", str(dest / "traces.jsonl"), "--id", "traces", "--source", "toy calendar traces",
          "--query", "all", "--window", "2026-09-01..2026-09-30")
@@ -88,6 +91,7 @@ def run(dest: Path, cli_main, log=print) -> int:
     log(f"""
 Demo ready in {dest}
 
+  discovery     {suite / 'discovery.html'}
   activity log  {suite / 'journal' / 'activity.html'}
   checkpoint    {suite / 'report' / 'checkpoints'}
   report data   {suite / 'report' / 'report.json'}
