@@ -64,6 +64,11 @@ The two sets are sized by different arithmetic (docs/method.md §2.3):
 Show the user the minimum detectable effect (M7) before anything runs. If the MDE is wider than
 any change they care about, say so now.
 
+Within each category, about a third of its cases carry a situation from the discovery report's
+grid (`grid` in `discovery.md`'s front matter), split by the risks the traffic showed. The
+grid's `want` numbers are that split; keep to them unless the owner changes the budget, and
+update the grid when they do.
+
 `allocation.yaml` records each (category × set) cell. When traffic cannot fill a cell, have the
 owner mark it `scheduled` (synthetic variants, or cases chosen by a selector: uncertainty T1 or
 committee disagreement T2, marked `synthetic: true`) or `out_of_scope`, with a reason either way.
@@ -81,7 +86,10 @@ Start from `${CLAUDE_PLUGIN_ROOT}/templates/case.json`. Each case freezes:
 - `set` (no default);
 - `category`, matching its directory;
 - `failure_modes`;
-- `taxonomy_entries`, which feeds coverage;
+- `taxonomy_entries`, which feeds coverage; a case in a situation lists its `situation.<id>`
+  entry here (a plain request lists none), and borrows that situation's case template from the
+  benchmark the report names (τ-bench's init, solution and assertion shape for a write under
+  policy; CRMArena's "none" answers; BIRD-Interact's ambiguous prompts);
 - `provenance`: source, the export id, trace_ref, `synthetic`, the agent version that produced the
   trace.
 

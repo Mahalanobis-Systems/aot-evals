@@ -10,6 +10,13 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
   workload, task types, environment, grading, data, license and what to borrow) and
   `aot-evals benchmarks --workload TAG --task "..."`, which Phase 1 uses to list the benchmarks
   that fit an agent without searching the web. Phase 2 may search for newer ones.
+- The discovery report's golden test cases now end in a grid: the agent's task types (rows,
+  from its traffic) against the situations public benchmarks test (columns, from
+  `references/situations.yaml`: unanswerable, ambiguous, forbidden, confidential, multi-turn,
+  tool error, …), each cell the cases that exist against the target. `aot-evals benchmarks`
+  prints the situations its matches test; catalog entries may list theirs under `situations`.
+  Task types are what the person asked for, never a situation; Phase 2 carries each situation
+  as a taxonomy entry so coverage reports the empty cells.
 
 ## 0.2.0 — 2026-10-16
 

@@ -132,11 +132,20 @@ draft the list from that outside source and have the owner edit it.
   workload tag, 10 minutes at most). Use them as sources of grading designs, case templates and
   taxonomies, never of cases. Add anything worth keeping to the report marked "not in the
   catalog", and offer to open a pull request that adds it to `references/benchmarks.yaml` with
-  every field filled.
+  every field filled (its `situations` too).
+- **Situations are taxonomy entries.** The grid columns in the discovery report (its front
+  matter `grid.columns`) come from an outside source, the public benchmarks, so they belong in
+  the coverage list: one entry `situation.<id>` per column, with the benchmark that established
+  it as the source. A newer benchmark found above may add a column the same way. Cases tag their
+  situation in `taxonomy_entries` (build C6), so C14 coverage reports the grid's empty cells
+  without any extra step.
 
 ## C3 categorize → `<suite>/categories.yaml`
 
-Sort the export's traces into categories, one category per trace (process step 8):
+Sort the export's traces into categories, one category per trace (process step 8). A category
+is what the person wanted done; the discovery report's task types are the draft. A situation
+(unanswerable, ambiguous, forbidden, multi-turn, …) is never a category: a trace is in one
+category and may show any number of situations, so record those as tags on the trace.
 1. **Heuristics first.** Code rules for the obvious, simple categories (for example "nothing new
    arrived"). Base each rule on the input, not on what the agent did, and cross-check it: a broken
    connection also reports zero new items.

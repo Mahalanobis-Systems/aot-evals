@@ -47,7 +47,37 @@ def test_matching_scores_workload_overlap_above_word_overlap():
 def test_the_command_matches_from_the_local_catalog(capsys):
     assert cli.main(["benchmarks", "--workload", "customer-support", "--task", "cancel a booking under policy",
                      "--json"]) == 0
-    matches = json.loads(capsys.readouterr().out)
+    out = json.loads(capsys.readouterr().out)
+    matches = out["matches"]
     assert matches and all(m["score"] > 0 for m in matches)
     assert any("tau" in m["id"] for m in matches)
+    assert {s["id"] for s in out["situations"]} >= {"forbidden", "multi-turn"}
     assert cli.main(["benchmarks", "--validate"]) == 0
+
+
+def test_the_situations_vocabulary_points_at_catalog_entries_that_tag_it_back():
+    vocab = benchmarks.situations()
+    entries = {e["id"]: e for e in benchmarks.load()}
+    ids = [s["id"] for s in vocab]
+    assert len(ids) == len(set(ids)) and {"unanswerable", "ambiguous", "forbidden", "multi-turn"} <= set(ids)
+    for s in vocab:
+        for k in ("name", "short", "meaning", "catches", "check"):
+            assert isinstance(s.get(k), str) and s[k], (s["id"], k)
+        assert isinstance(s.get("universal"), bool)
+        assert s["from"], s["id"]
+        for eid in s["from"]:
+            assert eid in entries, (s["id"], eid)
+            assert s["id"] in entries[eid].get("situations", []), (s["id"], eid)
+
+
+def test_situations_for_the_grid_are_the_universal_ones_plus_what_the_matches_test():
+    vocab = [{"id": "u", "name": "U", "short": "s", "universal": True, "catches": "c", "check": "k"},
+             {"id": "x", "name": "X", "short": "s", "universal": False, "catches": "c", "check": "k"},
+             {"id": "y", "name": "Y", "short": "s", "universal": False, "catches": "c", "check": "k"}]
+    matches = [{"name": "A", "situations": ["x"]}, {"name": "B", "situations": ["x", "u"]}, {"name": "C"}]
+    got = benchmarks.situations_for(matches, vocab)
+    assert [(s["id"], s["tested_by"]) for s in got] == [("u", ["B"]), ("x", ["A", "B"])]
+    assert "applies to nearly every agent" in benchmarks.render(
+        [{**m, "year": 2025, "by": "b", "score": 1, "status": "active", "fit": "f", "caveats": "c",
+          "good_for": [], "grading": [], "data": "synthetic", "pii": "none", "license": "MIT", "links": {},
+          "why": {"workloads": [], "words": []}} for m in matches[2:]], vocab)

@@ -14,6 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CATALOG = ROOT / "references" / "benchmarks.yaml"
+SITUATIONS = ROOT / "references" / "situations.yaml"
 
 WORKLOADS = {
     "customer-support", "crm", "sales", "retail", "travel", "finance", "legal", "healthcare", "science",
@@ -53,10 +54,23 @@ def load(path: Path = CATALOG) -> list[dict]:
     return data
 
 
-def validate(entries: list[dict]) -> list[str]:
+def situations(path: Path = SITUATIONS) -> list[dict]:
+    """The situations vocabulary (references/situations.yaml): the columns of the golden test case
+    grid, each with what it catches, its default check, whether it applies to nearly every agent,
+    and the catalog entries that established it."""
+    import yaml
+
+    data = yaml.safe_load(path.read_text()) or []
+    if not isinstance(data, list):
+        raise ValueError(f"{path}: expected a list of situations")
+    return data
+
+
+def validate(entries: list[dict], vocab: list[dict] | None = None) -> list[str]:
     """Every problem in the catalog, as 'id: what is wrong'. An empty list means it is valid."""
     problems: list[str] = []
     seen: set[str] = set()
+    situation_ids = {s.get("id") for s in (vocab if vocab is not None else situations())}
 
     def bad(e: dict, msg: str) -> None:
         problems.append(f"{e.get('id', '?')}: {msg}")
@@ -107,6 +121,8 @@ def validate(entries: list[dict]) -> list[str]:
         check_set(e, "harness", HARNESS, True)
         check_set(e, "status", STATUS, False)
         check_set(e, "good_for", GOOD_FOR, True)
+        if "situations" in e:
+            check_set(e, "situations", situation_ids, True)
         links = e.get("links") or {}
         if not isinstance(links, dict) or not any(links.get(k) for k in ("paper", "github", "website")):
             bad(e, "links needs at least one of paper, github, website")
@@ -147,17 +163,40 @@ def match(entries: list[dict], workloads: list[str], tasks: list[str], limit: in
     return results[:limit]
 
 
-def render(matches: list[dict]) -> str:
-    """Matches as plain text for the terminal and the discovery report."""
+def situations_for(matches: list[dict], vocab: list[dict] | None = None) -> list[dict]:
+    """The situations the grid should have columns for: every universal one, plus any that a
+    matched benchmark tests. Each carries `from`, the matched benchmarks that test it (names), so
+    the report can say where the column came from."""
+    vocab = vocab if vocab is not None else situations()
+    out = []
+    for s in vocab:
+        tested_by = [m["name"] for m in matches if s["id"] in (m.get("situations") or [])]
+        if s.get("universal") or tested_by:
+            out.append({**s, "tested_by": tested_by})
+    return out
+
+
+def render(matches: list[dict], vocab: list[dict] | None = None) -> str:
+    """Matches as plain text for the terminal and the discovery report, with the situations the
+    matches say the agent's cases should cover."""
     if not matches:
         return "No catalog entry fits these workloads or task types."
     out = []
+    cols = situations_for(matches, vocab)
+    if cols:
+        lines = ["Situations to cover (columns of the golden test case grid):"]
+        for s in cols:
+            src = ("from " + ", ".join(s["tested_by"])) if s["tested_by"] else "applies to nearly every agent"
+            lines.append(f"  {s['name']} ({s['short']}) · {src}\n"
+                         f"    catches: {s['catches']} · check: {s['check']}")
+        out.append("\n".join(lines))
     for m in matches:
         tags = ", ".join(m["why"]["workloads"]) or "none"
         words = ", ".join(m["why"]["words"]) or "none"
         size = f"{m['size']} tasks" if m.get("size") else "size unknown"
+        sits = f"\n  situations it tests: {', '.join(m['situations'])}" if m.get("situations") else ""
         out.append(f"{m['name']} ({m['year']}, {m['by']}) · score {m['score']} · {size} · {m['status']}\n"
-                   f"  matches: workloads {tags}; words {words}\n"
+                   f"  matches: workloads {tags}; words {words}{sits}\n"
                    f"  fit: {m['fit'].strip()}\n"
                    f"  caveats: {m['caveats'].strip()}\n"
                    f"  good for: {', '.join(m['good_for'])} · grading: {', '.join(m['grading'])}"

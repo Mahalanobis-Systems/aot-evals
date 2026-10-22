@@ -208,6 +208,7 @@
   good_for:
   - case-template
   - user-simulator
+  situations: [ambiguous]
   fit: Fits coding agents and any agent that should ask before acting on vague requests. Borrow the recipe
     of stripping details from SWE-bench Verified issues and scoring both the resolve rate and how many
     questions were asked.
@@ -818,6 +819,7 @@
   good_for:
   - user-simulator
   - baseline
+  situations: [multi-turn, tool-error]
   fit: Fits agents that iterate with a user on code or quantitative answers. The useful part is the GPT-4
     feedback simulator and the turn-budget analysis (k = 1 to 5 turns), which shows how much a feedback
     loop is worth.
@@ -1701,6 +1703,7 @@
   - grading-design
   - case-template
   - baseline
+  situations: [unanswerable]
   fit: The reference for desktop agents; borrow the per-task setup config plus execution-based evaluator
     script pattern and the VM snapshot reset.
   caveats: Original release had over 300 task and environment bugs and is superseded by OSWorld-Verified;
@@ -1744,6 +1747,7 @@
   - baseline
   - case-template
   - grading-design
+  situations: [unanswerable]
   fit: Fits long-running desktop agents; the successor to OSWorld-Verified with headroom. Borrow binary
     completion plus partial-credit scoring and the safety-sensitive action audit.
   caveats: Very expensive (about 318 tool calls per task); task data gated on Hugging Face; best score
@@ -1857,6 +1861,7 @@
   - baseline
   - grading-design
   - sandbox-design
+  situations: [unanswerable]
   fit: Fits general desktop agents on office and OS tasks; the current reference number for computer-use
     models. Borrow the parallel AWS runner that finishes a run within an hour.
   caveats: Top scores (85 to 90 percent in 2026 reports) are past the 72 percent human baseline, so it
@@ -2099,6 +2104,7 @@
   - privacy-pattern
   - taxonomy
   - baseline
+  situations: [unanswerable, persona]
   fit: Fits agents that read a real CRM (Salesforce or similar) to answer service, analyst or manager
     questions. Borrow the persona-based task taxonomy, the 30% unanswerable queries, and the way a synthetic
     org is generated from a schema with hidden latent variables that drive the ground truth.
@@ -2147,6 +2153,7 @@
   - sandbox-design
   - privacy-pattern
   - baseline
+  situations: [ambiguous, forbidden, confidential, multi-turn, persona]
   fit: Fits sales-assist and service agents that work inside a CRM, in both single-shot and conversational
     modes. Borrow the 19-task skill taxonomy (workflow execution, policy compliance, information retrieval,
     textual reasoning), the paired single-turn versus multi-turn scoring, and the confidentiality-awareness
@@ -2192,6 +2199,7 @@
   - case-template
   - grading-design
   - sandbox-design
+  situations: [persona]
   fit: Fits CRM agents working in Salesforce. Borrow the persona-based task sourcing from user interviews
     and milestone scoring against org snapshots.
   caveats: Needs a Salesforce developer org and OAuth login; single product; zero-shot top score 39 percent,
@@ -2276,6 +2284,7 @@
   good_for:
   - grading-design
   - sandbox-design
+  situations: [forbidden, confidential]
   fit: Fits support agents built on MCP tools that must get every policy detail right. Borrow the all-or-nothing
     expert rubric scoring and the RL-environment framing.
   caveats: Built as a training environment by a data vendor; task count and release terms not public on
@@ -2400,6 +2409,7 @@
   - grading-design
   - case-template
   - taxonomy
+  situations: [forbidden]
   fit: Fits support agents whose work is defined by written procedures with preconditions (check this,
     then do that). Borrow the idea of encoding each procedure as code and using it as the oracle verifier
     for outcome, step and trajectory compliance, so no LLM judge is needed.
@@ -2445,6 +2455,7 @@
   - grading-design
   - user-simulator
   - case-template
+  situations: [forbidden]
   fit: Fits support or booking agents that must follow a written policy while talking to a customer and
     writing to a backend. Borrow the end-state database diff as the pass/fail check, the pass^k reliability
     metric, and the simulated user prompted with a hidden user instruction.
@@ -2488,6 +2499,7 @@
   good_for:
   - case-template
   - taxonomy
+  situations: [forbidden, multi-turn]
   fit: 'Fits teams whose agent already does well on τ²-bench and who need harder cases on the same tools.
     Borrow the method: sample valid tool sequences, cluster them for coverage, then write the task around
     the sequence and tune its difficulty.'
@@ -2536,6 +2548,7 @@
   - user-simulator
   - case-template
   - sandbox-design
+  situations: [forbidden, multi-turn, dual-control]
   fit: Fits technical-support agents where the customer must act on their own device or account (dual
     control), and any policy-bound support agent that writes to a backend. Borrow the compositional task
     generator (atomic subtasks with init, solution and assertion functions), the assertion-based end-state
@@ -2586,6 +2599,7 @@
   - grading-design
   - user-simulator
   - sandbox-design
+  situations: [forbidden, multi-turn]
   fit: Fits support agents that must answer from a knowledge base as well as act on a backend, and voice
     agents. Borrow the banking_knowledge domain pattern (retrieval graded against gold read calls) and
     the voice evaluation setup with simulated callers.
@@ -5129,6 +5143,7 @@
   - sandbox-design
   - case-template
   - baseline
+  situations: [unanswerable]
   fit: Fits assistants that drive several apps through APIs on a user's behalf. Borrow its database-state
     unit tests that accept any valid path and also check for unwanted side effects.
   caveats: Consumer apps only (no enterprise systems); test-set solutions are shipped encrypted, and the
@@ -5504,6 +5519,7 @@
   - user-simulator
   - grading-design
   - baseline
+  situations: [ambiguous, multi-turn]
   fit: Fits digital-worker agents that touch several internal tools and must ask coworkers for details.
     Borrow the self-hosted company sandbox, the LLM-played colleagues and the checkpoint-plus-result scoring.
   caveats: Skewed toward software engineering tasks; heavy Docker setup; some checkpoints are LLM-judged.
@@ -6302,6 +6318,7 @@
   - privacy-pattern
   - taxonomy
   - case-template
+  situations: [confidential]
   fit: Fits internal assistants that must respect who can see which data across departments. Borrow its
     generation pipeline that builds consistent synthetic company data from org metadata.
   caveats: No public code or data link found; grading details are thin in the abstract; paper is CC-BY-NC-ND
@@ -9376,6 +9393,7 @@
   - sandbox-design
   - case-template
   - baseline
+  situations: [injected]
   fit: Fits assistants that read untrusted content (email, documents, web) and then act with tools. Borrow
     the pairing of a user task with an injection task, and the utility-under-attack plus targeted attack
     success rate metrics checked on environment state, not on model text.
@@ -9420,6 +9438,7 @@
   - case-template
   - grading-design
   - taxonomy
+  situations: [forbidden]
   fit: Fits any tool-using assistant that must refuse misuse without losing the ability to do the benign
     version. Borrow the harmful/benign task pairs and the split scoring (refusal judge, semantic judge,
     tool-call grading functions).
@@ -9804,6 +9823,7 @@
   good_for:
   - case-template
   - taxonomy
+  situations: [injected]
   fit: Fits a first, cheap check of any tool-calling agent for indirect prompt injection. Borrow the two
     attacker goals (direct harm, data theft) and the user-case times attacker-case crossing that gives
     many cases from few templates.
@@ -9929,6 +9949,7 @@
   - taxonomy
   - grading-design
   - sandbox-design
+  situations: [forbidden]
   fit: Fits agents that connect to third-party MCP servers. Borrow the 20-type attack taxonomy across
     server, host and user sides, and the paired task evaluator plus attack detector that reports task
     success rate and attack success rate together.
@@ -9972,6 +9993,7 @@
   good_for:
   - taxonomy
   - sandbox-design
+  situations: [injected]
   fit: Fits teams shipping an MCP host or client, not just a model. Borrow the 17 attack types over four
     surfaces (client, protocol, server, host) and the success/refusal/execution-error outcome split.
   caveats: No published case count; it is a playground tied to Claude Desktop, OpenAI and Cursor as hosts,
@@ -10011,6 +10033,7 @@
   good_for:
   - case-template
   - taxonomy
+  situations: [injected]
   fit: Fits agents that load tools from external MCP registries. Borrow the three poisoning templates
     and the 10 risk categories to build a tool-description screening test.
   caveats: The official repo README is one line and has no license; case count differs between paper versions
@@ -10140,6 +10163,7 @@
   - sandbox-design
   - grading-design
   - user-simulator
+  situations: [forbidden]
   fit: Fits internal workplace or devops agents that act on real services. Borrow the Docker company sandbox
     from TheAgentCompany, the rule-based final-state checker paired with a four-label trajectory judge,
     and the NPC users that push unsafe requests.
@@ -10313,6 +10337,7 @@
   - grading-design
   - taxonomy
   - case-template
+  situations: [forbidden, confidential]
   fit: Fits browser agents that work inside company systems under rules, such as CRM or admin-panel automation.
     Borrow the Completion Under Policy metric (a task only counts if no policy was broken), the six policy
     dimensions, and the per-policy evaluator pattern.
@@ -10433,6 +10458,7 @@
   - sandbox-design
   - grading-design
   - taxonomy
+  situations: [forbidden]
   fit: Fits teams that need to test dangerous actions before any real tool exists. Borrow the LLM-emulated
     tool sandbox and the paired safety and helpfulness scores on a 0-3 scale.
   caveats: No real execution, so tool behavior is whatever the emulator imagines; 144 cases, GPT-4 judging
@@ -11803,6 +11829,7 @@
   - grading-design
   - case-template
   - taxonomy
+  situations: [tool-error]
   fit: Fits SQL support or database debugging agents that take a user complaint and a broken query and
     must return a working one. Borrow its test-case grading on the live database and its variants (Open
     570 multi-dialect, PostgreSQL 530, Flash 200, BigQuery 200).
@@ -11848,6 +11875,7 @@
   - user-simulator
   - grading-design
   - case-template
+  situations: [ambiguous, multi-turn, tool-error]
   fit: Fits conversational database assistants that must handle vague requests, clarification and write
     operations. Borrow the function-driven user simulator, the two modes (scripted c-Interact and open
     a-Interact) and the per-task executable test cases.
@@ -12996,6 +13024,7 @@
   - user-simulator
   - grading-design
   - case-template
+  situations: [tool-error]
   fit: Fits any agent that gets vague requests and should ask rather than guess. Borrow the case format
     (imperfect query, expected clarifying question, scripted answer, expected call) and the ToolEvaluator
     that scores both accuracy and redundant questions.
@@ -13144,6 +13173,7 @@
   good_for:
   - sandbox-design
   - grading-design
+  situations: [tool-error]
   fit: Fits agents that call many third-party web APIs and need a replayable test bed; the cache plus
     LLM-simulated-API server is the pattern to copy when the real APIs are flaky, and the solvable-only
     filtering shows how to prune unanswerable cases.
@@ -14156,6 +14186,7 @@
   - grading-design
   - case-template
   - baseline
+  situations: [unanswerable]
   fit: Fits browser agents that act inside internal web apps (shop admin, issue tracker, forum). Borrow
     the self-hosted site sandbox and the per-task evaluator mix of exact answer, target URL and page-content
     program checks.
@@ -14232,6 +14263,7 @@
   good_for:
   - grading-design
   - baseline
+  situations: [unanswerable]
   fit: Use instead of original WebArena for any browser agent on internal web apps. Borrow the deterministic,
     type-aware comparators that replaced substring matching and LLM judging.
   caveats: Workshop paper only; numbers are not comparable to the old WebArena leaderboard; still needs

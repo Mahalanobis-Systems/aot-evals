@@ -37,7 +37,13 @@ have one. When a number cannot be defended, aot-evals refuses to print it and na
 1. **Cases come from the agent's real traffic and real failures**, not from generic benchmarks.
    Public benchmarks are a source of grading designs, not of cases. Phase 1 matches the agent to
    a local catalog of them (`aot-evals benchmarks`, [references/benchmarks.md](../references/benchmarks.md))
-   without searching; Phase 2 may search for newer ones.
+   without searching; Phase 2 may search for newer ones. What the catalog does contribute is the
+   **situations** ([references/situations.yaml](../references/situations.yaml)): the conditions a
+   request can put an agent in (unanswerable, ambiguous, forbidden, confidential, multi-turn,
+   tool error, …) that benchmarks were built to test and that an agent's own task types never
+   name. The discovery report lays the agent's task types (rows, from its traffic) against the
+   situations (columns) as a grid of cases that exist against targets; in Phase 2 each situation
+   is a taxonomy entry, so coverage (C14) reports the grid's empty cells.
 2. **Understand the agent before measuring it**: inventory, infrastructure, volume and usage first.
 3. **Grade outcomes, with code first.** Check what changed in the world. Use a judge only where
    code cannot decide, and only after calibrating it.

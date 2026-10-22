@@ -83,8 +83,15 @@ point, and where the records are.
 3. **Traffic and task types.** Match runs to this agent by channel, timer and the agent's files
    together, and say which signal matched. Runs in total and in the last 4 weeks, by trigger;
    outcome mix and failure reasons. Sort recent runs into task types (aim for 7, never 10 or
-   more) by what the agent should do; share, cost and latency (median, 90th percentile) for
-   each. Health of each timer: last success, recent failures. How often the owner corrected it.
+   more) by **what the person wanted done**: look something up, change a record, summarize.
+   A task type is never a property of the request. "Safety", "refusals", "multi-turn",
+   "ambiguous" and the like are **situations**, not task types: a lookup can arrive over four
+   turns and need a question first, so these cut across every task type. Keep them out of the
+   task type list and instead count, per task type, how many runs showed each situation
+   (asked first or didn't, refused, was told "none", a tool call failed, the thread was lost).
+   `aot-evals benchmarks` lists the situations. Share, cost and latency (median, 90th
+   percentile) for each task type. Health of each timer: last success, recent failures. How
+   often the owner corrected it.
 4. **Test data and privacy.** Where examples can come from (real runs, cleaned examples,
    labels, earlier drafts and whether the owner confirmed them). Kinds of private data present,
    with counts: people, family, customers or prospects, locations, secrets. Where raw data sits
@@ -95,7 +102,11 @@ point, and where the records are.
    `aot-evals benchmarks` alone lists the workload tags) and keep the top fits with the reason
    each might fit, what to borrow from it (grading design, case template, user simulator,
    sandbox design, baseline number) and its caveats. Say which of the agent's task types each
-   one informs. Phase 2 may look for newer benchmarks on the web; Phase 1 does not.
+   one informs. The command also prints the **situations to cover**: the columns of the golden
+   test case grid, each with which matched benchmark tests it. Keep that list. Then map every
+   existing case file into the grid: for each task type, how many cases are plain requests and
+   how many sit in each situation (a case with no situation is a plain request). Phase 2 may
+   look for newer benchmarks on the web; Phase 1 does not.
 
 Then ask these three questions about the chosen agent, in these words. Offer a suggestion
 for each, drawn from the quick scan, but nothing is built until the owner answers.
@@ -146,7 +157,22 @@ overview:                        # one entry per pillar, all four, these keys
     open: ...                    # what's still open, under 12 words; "Nothing open" if none
   agent_architecture: {...}      # code, prompts, models, tools, production setup, traces
   safe_testing_env: {...}        # can runs touch real people, data or money; cost and speed
-  golden_use_cases: {...}        # task types found, cases that exist, how many are needed
+  golden_use_cases: {...}        # task types found, cases that exist, how many are needed; name the empty grid cells
+grid:                            # the golden test case grid: task types (rows) by situations (columns)
+  note: ...                      # one sentence on how the targets were set (optional)
+  columns:                       # from the situations `aot-evals benchmarks` printed; order as printed
+    - {id: unanswerable, from: CRMArena}            # `from`: the benchmark(s) that test it, or "applies to nearly every agent"
+    - {id: ambiguous, from: BIRD-Interact, catches: ...}   # `catches` and `check` override the vocabulary's words
+    - {id: stub, name: Oversized result, short: over the 16 KB cap, from: its own traces, catches: ..., check: ...}
+                                 # one column of the agent's own is allowed, when the traces show a failure no benchmark covers
+  rows:                          # one per task type, in the task type table's order
+    - task_type: Look up records and numbers
+      share: 27%                 # of traffic
+      passed: 22%                # in the runs studied (leave out if unknown)
+      cells:                     # `plain` first, then one key per column id
+        plain: {have: 14, want: 14}      # have: cases that exist; want: the target
+        unanswerable: {have: 0, want: 6}
+        ambiguous: null          # null when the situation can't arise for this task type
 next:
   path: ...                      # the recommended path, as a short headline
   why: ...                       # what it gets them, then time and cost
@@ -160,6 +186,14 @@ next:
 
 Use `risk` only when something could touch real people, data or money today. Link to a
 section from a step with its heading as an anchor, e.g. `[Read the plan](#safe-testing-environment)`.
+
+**Setting the grid's targets.** Start from the cases per task type the owner's third answer
+implies (about 10, 20 or 30 to 40). About a third of each task type's cases carry a situation;
+split that third by the risks the traffic showed (a situation seen in many failures gets more),
+and give every column at least a few cases in the task types where it can arise. Universal
+situations (marked `*` by `aot-evals benchmarks`) get a column always; the others only when a
+matched benchmark or the traffic says they apply here. The empty cells are the finding: say in
+the pillar's `found` how many columns have no cases at all.
 
 **The markdown.** The first line is the title: what the agent is, in plain words, with its code
 name in brackets, e.g. `# Meeting scheduler (cal-bot)`. Not "<name>: discovery report"; the page
@@ -184,11 +218,14 @@ four pillars and puts the last two after the next steps):
    needs a yes.
 4. **Golden test cases.** Each job as a table: what starts it, a good result, its limits, recent
    runs, in scope or not; then where the instructions and the traffic disagree. The task types
-   (aim for 7) with share, risk and how each is checked (code first; an AI grader only for
-   judgement calls); the checks that run on every test. Where examples come from per task type;
-   size and the cost and time of a full pass. Then **Public benchmarks that fit**, a table from
-   the catalog matches: Benchmark, Which of our task types it informs, What to borrow, Caveats.
-   Public benchmarks are a source of grading designs and case templates, never of cases.
+   (aim for 7; what people ask for, never a situation such as "safety" or "multi-turn") with
+   share, risk and how each is checked (code first; an AI grader only for judgement calls); the
+   checks that run on every test. Where examples come from per task type; size and the cost and
+   time of a full pass. Then **Public benchmarks that fit**, a table from the catalog matches:
+   Benchmark, Which of our task types it informs, What to borrow, Which situations it adds,
+   Caveats. Public benchmarks are a source of grading designs, case templates and situations,
+   never of cases. The page draws the grid from the front matter at the end of this section, so
+   don't write it out as a table here; one sentence may point at it.
 5. **Questions for you.** At most five, as a table: Question, Suggested answer, If no reply.
    Anything touching private data waits for a yes; mark questions waiting on the owner with ⏳.
 6. **How this run went.** Time taken per step, and anything that should change. Then sources.

@@ -42,8 +42,21 @@ The result says why each fits, so the reader can judge the match rather than tru
 | `status` | | `active`, `frozen` (no new results accepted), `saturated` (top scores above about 90%), `deprecated` |
 | `links` | `paper`, `github`, `website`, `leaderboard`; at least one of the first three | |
 | `good_for` | what a team can borrow | `grading-design`, `case-template`, `baseline`, `user-simulator`, `sandbox-design`, `privacy-pattern`, `taxonomy` |
+| `situations` | the situations it was built to test (optional) | ids from `references/situations.yaml` |
 | `fit` | which production agents it helps and why, 1 or 2 sentences | |
 | `caveats` | what's wrong with it, 1 sentence | |
+
+## Situations
+
+`references/situations.yaml` names the conditions a request can put an agent in: unanswerable,
+ambiguous, forbidden or confirm-first, confidential, multi-turn pair, tool error, different
+asker, injected instruction, person does a step. Each says what it catches, its default check,
+whether it applies to nearly every agent (`universal`), and the catalog entries that established
+it (`from`). `aot-evals benchmarks --workload ... --task ...` prints the situations the matched
+benchmarks test, plus the universal ones; the discovery report uses them as the columns of its
+golden test case grid, with the agent's task types as rows. A benchmark that tests a situation
+lists it under `situations`; `tests/test_benchmarks.py` checks that every `from` id exists and
+tags the situation back.
 
 ## Keeping it current
 

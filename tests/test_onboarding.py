@@ -96,6 +96,47 @@ def test_discovery_page_puts_the_overview_first_and_the_next_steps_last(tmp_path
     assert 'class="you"' in html and "/aot-evals:start" in html and "Baseline now" in html
 
 
+GRID = """grid:
+  note: Targets are for a 140-case comparison set.
+  columns:
+    - {id: unanswerable, from: CRMArena}
+    - {id: ambiguous, from: BIRD-Interact, catches: Writing when two records match}
+    - {id: stub, name: Oversized result, short: over the stub cap, from: its own traces,
+       catches: Wrong counts, check: "Code: the value"}
+  rows:
+    - task_type: Look up records
+      share: 27%
+      passed: 22%
+      cells: {plain: {have: 14, want: 14}, unanswerable: {have: 0, want: 6}, ambiguous: {have: 2, want: 5},
+              stub: {have: 0, want: 4}}
+    - task_type: Summaries
+      share: 12%
+      cells: {plain: {have: 8, want: 10}, unanswerable: {have: 0, want: 6}, ambiguous: null, stub: {have: 1}}
+"""
+
+
+def test_discovery_page_draws_the_grid_from_the_front_matter(tmp_path):
+    from aot_evals.start import write_discovery_page
+
+    src = tmp_path / "evals/agents/pizza-bot/discovery.md"
+    src.parent.mkdir(parents=True)
+    src.write_text(REPORT.replace("next:\n", GRID + "next:\n", 1))
+    html = write_discovery_page(src, "pizza-bot", src.parent).read_text()
+    golden = html[html.index('id="golden-test-cases"'):html.index('id="next"')]
+    assert "Where the cases are" in golden and "<b>Look up records</b><small>27% of traffic</small>" in golden
+    assert golden.count('class="cell ok"') == 2       # 14 of 14, and 1 with no target
+    assert golden.count('class="cell thin"') == 2     # 2 of 5, 8 of 10
+    assert golden.count('class="cell none"') == 3     # the three 0s
+    assert golden.count('class="cell na"') == 1       # ambiguous doesn't apply to summaries
+    assert '<span class="n">1</span></div>' in golden  # a cell with no target shows the count alone
+    assert '<td class="sum">25 of 45</td>' in golden   # 14+0+2+0+8+0+1 of 14+6+5+4+10+6
+    # the vocabulary fills in what a known situation catches; the report may override it, and may add its own column
+    assert "Making up a record, number or outcome" in golden and "Writing when two records match" in golden
+    assert "Oversized result" in golden and "Wrong counts" in golden
+    assert "<b>Unanswerable</b><span>CRMArena</span>" in golden
+    assert ' pass</span></td>' in golden and "22% pass" in golden
+
+
 def test_discovery_page_still_places_pillar_headings_from_0_1_0(tmp_path):
     from aot_evals.start import write_discovery_page
 

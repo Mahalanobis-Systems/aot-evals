@@ -537,6 +537,9 @@ def cmd_benchmarks(args) -> int:
     if not args.workload and not args.task:
         print(f"{len(entries)} benchmarks in {benchmarks.CATALOG}. Pass --workload TAG and --task \"...\" to match.")
         print("workloads: " + ", ".join(sorted(benchmarks.WORKLOADS)))
+        print("situations (the grid's columns, references/situations.yaml): "
+              + ", ".join(f"{s['id']}{'*' if s.get('universal') else ''}" for s in benchmarks.situations())
+              + "   (* applies to nearly every agent)")
         return 0
     bad = [w for w in args.workload if w not in benchmarks.WORKLOADS]
     if bad:
@@ -544,7 +547,8 @@ def cmd_benchmarks(args) -> int:
     matches = benchmarks.match(entries, args.workload, args.task, limit=args.limit,
                                include_saturated=args.include_saturated)
     if args.json:
-        print(json.dumps(matches, ensure_ascii=False, indent=2))
+        print(json.dumps({"situations": benchmarks.situations_for(matches), "matches": matches},
+                         ensure_ascii=False, indent=2))
     else:
         print(benchmarks.render(matches))
     return 0
