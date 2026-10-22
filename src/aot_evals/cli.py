@@ -23,6 +23,7 @@
     aot-evals activity [--open]         render the live activity page, journal/activity.html
     aot-evals checkpoint [--gate CX]    write a branded checkpoint page for the owner to review
     aot-evals telemetry [status|show|off|on]   pseudonymous usage telemetry (SECURITY.md#telemetry)
+    aot-evals benchmarks --workload TAG --task "..."   public benchmarks that fit, from the local catalog
 """
 
 from __future__ import annotations
@@ -525,13 +526,41 @@ def cmd_telemetry(args) -> int:
     return 0
 
 
+def cmd_benchmarks(args) -> int:
+    from . import benchmarks
+
+    entries = benchmarks.load()
+    if args.validate:
+        problems = benchmarks.validate(entries)
+        print("\n".join(problems) if problems else f"{len(entries)} entries, all valid")
+        return 1 if problems else 0
+    if not args.workload and not args.task:
+        print(f"{len(entries)} benchmarks in {benchmarks.CATALOG}. Pass --workload TAG and --task \"...\" to match.")
+        print("workloads: " + ", ".join(sorted(benchmarks.WORKLOADS)))
+        print("situations (the grid's columns, references/situations.yaml): "
+              + ", ".join(f"{s['id']}{'*' if s.get('universal') else ''}" for s in benchmarks.situations())
+              + "   (* applies to nearly every agent)")
+        return 0
+    bad = [w for w in args.workload if w not in benchmarks.WORKLOADS]
+    if bad:
+        sys.exit(f"unknown workload(s) {bad}; see `aot-evals benchmarks` for the vocabulary")
+    matches = benchmarks.match(entries, args.workload, args.task, limit=args.limit,
+                               include_saturated=args.include_saturated)
+    if args.json:
+        print(json.dumps({"situations": benchmarks.situations_for(matches), "matches": matches},
+                         ensure_ascii=False, indent=2))
+    else:
+        print(benchmarks.render(matches))
+    return 0
+
+
 # Milestones sent as telemetry when a command succeeds (SECURITY.md#telemetry).
 _MILESTONES = {"start": "phase1_started", "discovery-page": "discovery_written", "checkpoint": "checkpoint",
                "report": "report_built"}
 
 # Commands that never log themselves: reads, and the commands that write the log.
 _UNLOGGED = {"status", "validate", "log", "activity", "checkpoint", "start", "discovery-page", "snapshot",
-             "doctor", "demo", "telemetry"}
+             "doctor", "demo", "telemetry", "benchmarks"}
 # Commands long enough to log their start, so the activity page shows them in progress.
 _LOG_START = {"run", "calibrate", "reliability", "judge"}
 
@@ -747,6 +776,17 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("action", nargs="?", default="status", choices=["status", "show", "off", "on"],
                    help="status (the default), show the exact event, or turn it off or back on")
     s.set_defaults(fn=cmd_telemetry)
+
+    s = sub.add_parser("benchmarks", help="match an agent to the local catalog of public benchmarks (no web)")
+    s.add_argument("--workload", action="append", default=[], metavar="TAG",
+                   help="the agent's workload tag(s); run with no options to list them")
+    s.add_argument("--task", action="append", default=[], metavar="TEXT",
+                   help="one of the agent's task types, in plain words (repeatable)")
+    s.add_argument("--limit", type=int, default=8, help="how many fits to show (default 8)")
+    s.add_argument("--include-saturated", action="store_true", help="also show benchmarks models have saturated")
+    s.add_argument("--json", action="store_true", help="print the matches as JSON")
+    s.add_argument("--validate", action="store_true", help="check the catalog against its schema")
+    s.set_defaults(fn=cmd_benchmarks)
 
     s = sub.add_parser("report", help="C18: write report/report.json")
     s.add_argument("--run", action="append", help="run id(s); default: the latest baseline")
