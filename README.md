@@ -39,9 +39,9 @@ Run `/aot-evals:start` again for Phase 2: it says where things stand and builds 
 by step, stopping for your review at each checkpoint.
 
 **Try it on a toy agent first (about a minute).** In Claude Code, in any empty folder, ask:
-*"Run `aot-evals demo` and show me what it made."* It builds a toy calendar agent with a finished
-suite, runs a baseline and a candidate that breaks two cases, and compares them. Nothing calls a
-model or a network service.
+*"Run `aot-evals demo` and show me what it made."* It builds a toy calendar agent with a Phase 1
+report and a finished suite, runs a baseline and a candidate that breaks two cases, and compares
+them. Nothing calls a model or a network service.
 
 Judges default to a free System One model (Jev, through OpenCode Zen) that needs no key but
 allows about 250 calls a day; set `ANTHROPIC_API_KEY` to use Claude as a judge. See
@@ -95,6 +95,13 @@ Under the hood:
   defended isn't printed.
 - **A fixed `report.json` schema**, which Claude renders into a local HTML report written for the
   question being asked.
+- **A local catalog of over 350 public agent benchmarks** ([references/benchmarks.md](references/benchmarks.md)).
+  Phase 1 matches your agent against it without a web search, and says what each fit is good for:
+  a grading design, a case template, a user simulator, a sandbox design or a baseline number.
+  The matches also set the columns of the report's golden test case grid: the situations
+  (unanswerable, ambiguous, forbidden, multi-turn, …) that benchmarks were built to test, laid
+  against your agent's own task types, so the empty cells are visible before a case is written.
+  Cases still come from your own traffic, never from a benchmark.
 
 The method, with every command, measurement and gate, is in [docs/method.md](docs/method.md).
 

@@ -6,6 +6,22 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+- A local catalog of public agent benchmarks (`references/benchmarks.yaml`, over 100 entries with
+  workload, task types, environment, grading, data, license and what to borrow) and
+  `aot-evals benchmarks --workload TAG --task "..."`, which Phase 1 uses to list the benchmarks
+  that fit an agent without searching the web. Phase 2 may search for newer ones.
+- The discovery report's golden test cases now end in a grid: the agent's task types (rows,
+  from its traffic) against the situations public benchmarks test (columns, from
+  `references/situations.yaml`: unanswerable, ambiguous, forbidden, confidential, multi-turn,
+  tool error, …), each cell the cases that exist against the target. `aot-evals benchmarks`
+  prints the situations its matches test; catalog entries may list theirs under `situations`.
+  Task types are what the person asked for, never a situation; Phase 2 carries each situation
+  as a taxonomy entry so coverage reports the empty cells. Grid targets start flat per task
+  type and are weighted by worth and share, with the weighting stated in the report.
+- `aot-evals demo` now starts by rendering the toy calendar agent's Phase 1 report
+  (`examples/calendar/evals/discovery.md`, rewritten in the current format with a grid) as
+  `discovery.html`, so the demo shows both phases.
+
 ## 0.2.0 — 2026-10-16
 
 - `aot-evals run --resume RUN_ID` carries on a run that stopped or died partway, in place, instead

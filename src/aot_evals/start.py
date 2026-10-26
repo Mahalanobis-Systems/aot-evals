@@ -153,10 +153,87 @@ def _next(fm: dict) -> str:
 </section>"""
 
 
+def _cell(c) -> str:
+    """One grid cell: how many cases sit there against the target, with its state in its form."""
+    if c is None:
+        return '<td><div class="cell na" title="Doesn\'t apply">·</div></td>'
+    have, want = int((c or {}).get("have") or 0), (c or {}).get("want")
+    state = "none" if have == 0 else ("ok" if want is None or have >= int(want) else "thin")
+    target = f'<span class="t">of {int(want)}</span>' if want is not None else ""
+    return f'<td><div class="cell {state}"><span class="n">{have}</span>{target}</div></td>'
+
+
+def grid_html(grid: dict) -> str:
+    """The golden test case grid: the agent's task types (rows) against the situations public
+    benchmarks test (columns), each cell the cases that exist against the target. Rows and
+    columns come from the report's front matter; what each situation catches and how it's checked
+    comes from references/situations.yaml unless the report overrides it."""
+    from . import benchmarks
+
+    cols = [c for c in (grid.get("columns") or []) if isinstance(c, dict) and c.get("id")]
+    rows = [r for r in (grid.get("rows") or []) if isinstance(r, dict) and r.get("task_type")]
+    if not cols or not rows:
+        return ""
+    vocab = {s["id"]: s for s in benchmarks.situations()}
+    head = ['<th>Task type</th>', '<th class="mod">Plain request<small>answerable, clear</small></th>']
+    for c in cols:
+        v = vocab.get(c["id"], {})
+        head.append(f'<th class="mod">{_i(c.get("name") or v.get("name") or c["id"])}'
+                    f'<small>{_i(c.get("short") or v.get("short"))}</small></th>')
+    head.append("<th>Cases · pass</th>")
+    body, totals = [], {"plain": [0, 0], **{c["id"]: [0, 0] for c in cols}}
+    for r in rows:
+        cells = r.get("cells") or {}
+        tds = []
+        for key in ["plain"] + [c["id"] for c in cols]:
+            c = cells.get(key)
+            tds.append(_cell(c))
+            if isinstance(c, dict):
+                totals[key][0] += int(c.get("have") or 0)
+                totals[key][1] += int(c.get("want") or 0)
+        have = sum(int((cells.get(k) or {}).get("have") or 0) for k in cells if isinstance(cells.get(k), dict))
+        passed = f' <span class="pass">· {_i(r["passed"])} pass</span>' if r.get("passed") else ""
+        share = f"<small>{_i(r['share'])} of traffic</small>" if r.get("share") else ""
+        body.append(f'<tr><td class="fam"><b>{_i(r["task_type"])}</b>{share}</td>{"".join(tds)}'
+                    f'<td class="sum">{have}{passed}</td></tr>')
+    tot = "".join(f'<td><div class="cell"><span class="n">{h}</span><span class="t">of {w}</span></div></td>'
+                  for h, w in totals.values())
+    all_have, all_want = sum(v[0] for v in totals.values()), sum(v[1] for v in totals.values())
+    body.append(f'<tr class="total"><td class="fam">All</td>{tot}<td class="sum">{all_have} of {all_want}</td></tr>')
+    srcs = []
+    for c in cols:
+        v = vocab.get(c["id"], {})
+        srcs.append(f'<span class="src"><b>{_i(c.get("name") or v.get("name") or c["id"])}</b>'
+                    f'<span>{_i(c.get("from") or ("applies to nearly every agent" if v.get("universal") else ""))}'
+                    f'</span></span>')
+    catches = "".join(
+        f'<tr><td>{_i(c.get("name") or vocab.get(c["id"], {}).get("name") or c["id"])}</td>'
+        f'<td>{_i(c.get("catches") or vocab.get(c["id"], {}).get("catches"))}</td>'
+        f'<td>{_i(c.get("check") or vocab.get(c["id"], {}).get("check"))}</td></tr>' for c in cols)
+    note = f'<p class="caption">{_i(grid["note"])}</p>' if grid.get("note") else ""
+    return f"""<div class="grid-block">
+<h3>Where the cases are, and where they aren't</h3>
+<p class="caption">Rows are what people ask it to do, from its own traffic. Columns are the situations public
+benchmarks found agents fail in. A cell is how many cases sit there, against the target.</p>
+<div class="wrap"><table class="grid"><thead><tr>{"".join(head)}</tr></thead>
+<tbody>{"".join(body)}</tbody></table></div>
+<div class="legend"><span><i class="ok"></i> At target</span><span><i class="thin"></i> Some cases, below target</span>
+<span><i class="none"></i> No cases yet</span><span>· Doesn't apply</span></div>
+{note}
+<p class="where"><b>Where the columns come from.</b> Each is a situation a public benchmark was built to test,
+from the local catalog match for this agent's kind of work.</p>
+<div class="sources">{"".join(srcs)}</div>
+<h3>What each situation catches, and how it's checked</h3>
+<div class="wrap"><table class="cats"><thead><tr><th>Situation</th><th>Catches</th><th>Check</th></tr></thead>
+<tbody>{catches}</tbody></table></div>
+</div>"""
+
+
 def discovery_body(fm: dict, text: str, agent: str) -> str:
     """The discovery page's body. With front matter (`fm`): the overview (congrats, value, the four
-    pillars with what discovery found), the details grouped by pillar, then the next steps. Without
-    it, the markdown as written."""
+    pillars with what discovery found), the details grouped by pillar (the golden test case grid,
+    when the front matter has one, closes the fourth), then the next steps. Without front matter,
+    the markdown as written."""
     if not fm:
         return markdown.render(text)
     lead, secs = _sections(text)
@@ -168,8 +245,10 @@ def discovery_body(fm: dict, text: str, agent: str) -> str:
         pillar = OLD_HEADS.get(head, head)
         if pillar in names:
             num = f'<span class="num">{names.index(pillar) + 1:02d}</span> '
+            golden = pillar == "Golden test cases" and isinstance(fm.get("grid"), dict)
+            extra = grid_html(fm["grid"]) if golden else ""
             before.append(f'<section class="detail-group" id="{slug(head)}"><h2>{num}{markdown.inline(head)}</h2>'
-                          f"{markdown.render(body)}</section>")
+                          f"{markdown.render(body)}{extra}</section>")
         else:
             group = after if head in AFTER_NEXT else before
             group.append(f'<section class="detail-group" id="{slug(head)}"><h2>{markdown.inline(head)}</h2>'
