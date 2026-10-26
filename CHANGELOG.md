@@ -6,6 +6,8 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+## 0.3.0 — 2026-10-26
+
 - A local catalog of public agent benchmarks (`references/benchmarks.yaml`, over 100 entries with
   workload, task types, environment, grading, data, license and what to borrow) and
   `aot-evals benchmarks --workload TAG --task "..."`, which Phase 1 uses to list the benchmarks
