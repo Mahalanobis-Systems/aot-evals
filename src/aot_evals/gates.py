@@ -368,6 +368,10 @@ def c7(ev: Evals) -> Gate:
                 why.append("a do-nothing agent passes")
             if s.get("claim_sensitive_checks"):
                 why.append(f"claim-sensitive checks {s['claim_sensitive_checks']}")
+            if s.get("failing_paraphrases"):
+                why.append(f"a correct answer worded differently fails ({s['failing_paraphrases'][0]})")
+            if s.get("liar_fails") is False:
+                why.append("the reference answer with nothing changed passes")
             problems.append(f"case {c.get('id')}: {'; '.join(why) or 'screen incomplete'} "
                             "(fix it or drop it with a reason)")
     rate = len(dropped) / len(cases)

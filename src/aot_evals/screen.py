@@ -14,12 +14,25 @@ The do-nothing screen runs twice: once with no output and once with a confident 
 as the output. A check that fails the first and passes the second is grading the agent's own
 report of success; it is recorded in `claim_sensitive_checks` and refused by G10.
 
+Three more screens use the case's reference answer (`expected_end_state.output`) and any other
+correct wordings of it (`expected_end_state.output_variants`), because a check that matches one
+wording fails correct answers written another way (E5: "$1.413M" against "1,413,000"):
+
+- **paraphrases pass**: every variant, with the expected world, passes every check;
+- **the liar fails**: the reference answer with the world unchanged fails at least one check,
+  when the case expects a change. A suite that passes it grades what the agent says, not what it
+  did;
+- **a wrong number fails**: the reference answer with every number changed fails at least one
+  check. Reported, not blocking: it says whether anything checks the answer's numbers, which is
+  where every arm of E5 was blind.
+
 The screens run the checks against the states written in the case. They do not run the agent.
 """
 
 from __future__ import annotations
 
 import json
+import re
 
 from .checks import run_check
 from .repo import Evals
@@ -78,9 +91,54 @@ def screen_case(ev: Evals, case: dict) -> dict:
     result["claim_sensitive_checks"] = [
         s.id for s, c in zip(silent, claim, strict=True) if s.passed is False and c.passed is True
     ]
+
+    def run_all(end):
+        return [run_check(cid, ev.code_check_path(cid), start, end, case) for cid, _ in checks]
+
+    variants = (expected.get("output_variants") if isinstance(expected, dict) else None) or []
+    result["failing_paraphrases"] = [
+        f"variant {i + 1}: {r.id}: {r.detail}" for i, v in enumerate(variants)
+        for r in run_all({"world": exp_world, "output": v}) if r.passed is not True]
+    if exp_output and not _same(exp_world, start_world):
+        result["liar_fails"] = any(r.passed is False for r in run_all({"world": start_world, "output": exp_output}))
+        if not result["liar_fails"]:
+            result["notes"].append("the reference answer with nothing changed passes every check: the "
+                                   "suite grades what the agent says, not what it did")
+    else:
+        result["liar_fails"] = None
+    numbered = [o for o in [exp_output, *variants] if isinstance(o, str) and NUMBER.search(o)]
+    if numbered:
+        result["wrong_number_fails"] = all(
+            any(r.passed is False for r in run_all({"world": exp_world, "output": wrong_numbers(o)}))
+            for o in numbered)
+        if not result["wrong_number_fails"]:
+            result["notes"].append("an answer with every number wrong passes: nothing checks the answer's numbers")
+    else:
+        result["wrong_number_fails"] = None
     if result["claim_sensitive_checks"]:
         result["notes"].append("these checks pass when the agent merely claims success (G10)")
     return result
+
+
+NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+
+def wrong_numbers(text: str) -> str:
+    """Every number in the text changed, keeping its format: 1,413,000 -> 2,413,001; 14:00 -> 25:11."""
+    def bump(m):
+        digits = m.group(0)
+        out, carry = [], True
+        for ch in reversed(digits):
+            if ch.isdigit() and carry:
+                n = int(ch) + 1
+                out.append(str(n % 10))
+                carry = n == 10
+            else:
+                out.append(ch)
+        changed = "".join(reversed(out))
+        first = next(i for i, ch in enumerate(changed) if ch.isdigit())
+        return changed[:first] + str((int(changed[first]) + 1) % 10 or 1) + changed[first + 1:]
+    return NUMBER.sub(bump, text)
 
 
 def _same(a, b) -> bool:
@@ -93,7 +151,7 @@ def passes(screen: dict | None) -> bool:
         return False
     if screen.get("human_read") is not True or screen.get("reference_passes") is not True:
         return False
-    if screen.get("claim_sensitive_checks"):
+    if screen.get("claim_sensitive_checks") or screen.get("failing_paraphrases") or screen.get("liar_fails") is False:
         return False
     dn = screen.get("donothing_fails")
     if dn is None:

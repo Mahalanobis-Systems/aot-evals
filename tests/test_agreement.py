@@ -12,11 +12,10 @@ import csv
 import json
 
 import yaml
+from test_suite import baseline
 
 from aot_evals import agreement, gates
 from aot_evals.repo import Evals
-
-from test_suite import baseline
 
 
 def _gate(repo) -> gates.Gate:
