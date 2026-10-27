@@ -33,6 +33,9 @@ read. This release checks the whole.
   reported when it passes.
 - The `build` skill now asks for expected values derived from the start state, and a grounding
   check for every fact a prose answer states.
+- `aot-evals replay run|seed|observe RECORDS`: recorded runs stand in for the agent and its
+  hooks, so a suite can be built, screened, run and checked against people offline, from traces
+  (references/agent-contract.md, "Recorded runs").
 
 ## 0.3.0 — 2026-10-26
 

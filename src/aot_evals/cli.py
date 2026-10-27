@@ -376,6 +376,12 @@ def cmd_agreement(args) -> int:
     return 1 if result["problems"] else 0
 
 
+def cmd_replay(args) -> int:
+    from . import replay
+
+    return replay.main(args.action, args.records)
+
+
 def cmd_calibrate(args) -> int:
     from . import calibrate as cal_mod
 
@@ -629,7 +635,7 @@ _MILESTONES = {"start": "phase1_started", "discovery-page": "discovery_written",
                "report": "report_built"}
 
 # Commands that never log themselves: reads, and the commands that write the log.
-_UNLOGGED = {"status", "validate", "log", "activity", "checkpoint", "start", "discovery-page", "snapshot",
+_UNLOGGED = {"replay", "status", "validate", "log", "activity", "checkpoint", "start", "discovery-page", "snapshot",
              "doctor", "demo", "telemetry", "benchmarks"}
 # Commands long enough to log their start, so the activity page shows them in progress.
 _LOG_START = {"run", "calibrate", "reliability", "judge"}
@@ -785,6 +791,11 @@ def main(argv: list[str] | None = None) -> int:
                    help="regrade: check that code checks give the run's recorded verdicts on its raw records")
     s.add_argument("--open", action="store_true", help="label queue, page: open the page")
     s.set_defaults(fn=cmd_agreement)
+
+    s = sub.add_parser("replay", help="act as the agent and its hooks by replaying recorded runs (offline grading)")
+    s.add_argument("action", choices=["run", "seed", "observe"])
+    s.add_argument("records", help="directory of <case-id>.t<trial>.json records")
+    s.set_defaults(fn=cmd_replay)
 
     s = sub.add_parser("calibrate", help="C10: measure a judge's backends on its labels")
     s.add_argument("--judge", required=True)
