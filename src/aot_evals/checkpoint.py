@@ -3,7 +3,7 @@
 `aot-evals checkpoint` writes `evals/report/checkpoints/<nnn>-<gate>-<date>.html`. It is
 deterministic: it renders what is on disk, so it costs no model calls and reads the same for
 everyone. Each page shows:
-- where the evals stand: the C0-C18 roadmap, in plain words;
+- where the evals stand: the C0-C19 roadmap, in plain words;
 - what happened since the last checkpoint: Claude's summary and the activity log;
 - what the work has produced so far: every design file, rendered as tables;
 - what Claude needs from the owner: the questions, and what still blocks the gate;
@@ -33,7 +33,7 @@ STAGES = [
      "about": "How many test cases are needed, the cases themselves, and the pass/fail checks."},
     {"name": "Judges", "skill": "calibrate", "gates": ["C9", "C10", "C11"],
      "about": "Whether the checks that need a model to grade them can be trusted."},
-    {"name": "Run", "skill": "run", "gates": ["C12", "C13", "C14", "C15", "C16", "C17"],
+    {"name": "Run", "skill": "run", "gates": ["C12", "C19", "C13", "C14", "C15", "C16", "C17"],
      "about": "Running the suite, comparing versions, and finding out whether the suite is any good."},
     {"name": "Report", "skill": "report", "gates": ["C18"],
      "about": "A diagnostic report shaped around the question you are asking."},
@@ -95,6 +95,11 @@ GUIDE = {
             "Run the whole suite 3 to 5 times on the current agent: per-category results, how much "
             "they vary from run to run, and cost and latency against budget.",
             "Approval of the run's cost; a committed, unchanged agent."),
+    "C19": ("Check the suite against a person",
+            "A person judges whole runs from the baseline, pass or fail, without seeing the checks. "
+            "The suite's verdict on the same runs is compared: how many of the person's failures it "
+            "catches, how many of their passes it passes, and why each disagreement happened.",
+            "About 60 whole runs labelled pass or fail, with a note for each failure."),
     "C13": ("Compare a change",
             "After a change to the agent, run it again and list exactly which cases got better and "
             "which got worse, with a paired test. Never just a net number.",
@@ -134,7 +139,7 @@ def write(ev: Evals, gate: str | None = None, title: str | None = None, summary:
     nxt = gates_mod.next_unmet(gs)
     focus = gate or (nxt.id if nxt else "C18")
     if focus not in gates_mod.COMMAND_BY_ID:
-        raise ValueError(f"unknown gate {focus!r}; one of C0..C18")
+        raise ValueError(f"unknown gate {focus!r}; one of C0..C19")
     items = journal.entries(ev)
     path = next_path(ev, focus)
     path.parent.mkdir(parents=True, exist_ok=True)

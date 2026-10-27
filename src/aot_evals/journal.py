@@ -27,7 +27,7 @@ KIND_LABEL = {"step": "doing", "finding": "found", "decision": "decided", "quest
 # Which gate a CLI command works on, for commands that are about one gate.
 COMMAND_GATE = {"import": "C0", "allocate": "C5", "screen": "C7", "label": "C9", "calibrate": "C10",
                 "reliability": "C11", "judge": "C10", "compare": "C13", "coverage": "C14",
-                "redundancy": "C15", "report": "C18", "init": "C0"}
+                "redundancy": "C15", "report": "C18", "agreement": "C19", "init": "C0"}
 RUN_GATE = {"smoke": "C1", "baseline": "C12", "candidate": "C13", "drift": "C16"}
 RELOAD_MS = 4000
 _PROGRESS_EVERY_S = 2.0
@@ -101,7 +101,7 @@ def _collapse_progress(items: list[dict]) -> list[dict]:
 
 
 def roadmap_html(snapshot: list[dict] | None, focus: str | None = None) -> str:
-    """The C0-C18 strip: one cell per gate, grouped by stage, the focus gate outlined."""
+    """The C0-C19 strip: one cell per gate, grouped by stage, the focus gate outlined."""
     from .checkpoint import STAGES
 
     if not snapshot:
@@ -118,7 +118,7 @@ def roadmap_html(snapshot: list[dict] | None, focus: str | None = None) -> str:
             cells.append(f'<span class="gate {cls}{mark}" title="{gid} {_esc(st)}">{gid}</span>')
         groups.append(f'<div class="stage"><span class="stage-name">{_esc(stage["name"])}</span>'
                       f'<span class="gates">{"".join(cells)}</span></div>')
-    return ('<div class="roadmap" aria-label="Gates C0 to C18">' + "".join(groups) +
+    return ('<div class="roadmap" aria-label="Gates C0 to C19">' + "".join(groups) +
             '</div><p class="caption legend"><span class="gate met">C0</span> met '
             '<span class="gate unmet">C0</span> open <span class="gate na">C0</span> does not apply '
             '<span class="gate later">C0</span> not yet automated</p>')

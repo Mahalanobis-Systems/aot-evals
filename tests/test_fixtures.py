@@ -31,7 +31,7 @@ def test_good_agent_clears_every_phase1_gate(make_repo):
     repo = make_repo()
     ev = Evals(repo.evals)
     unmet = [g.id for g in gates.evaluate(ev) if g.status == "unmet"]
-    assert unmet == ["C1", "C12", "C18"]  # C1 waits only on the smoke run
+    assert unmet == ["C1", "C12", "C19", "C18"]  # C1 waits only on the smoke run
 
     assert repo.cli("run", "--purpose", "smoke", "--case", "book-001") == 0
     assert repo.cli("run", "--purpose", "baseline", "--k", "3") == 0
@@ -39,7 +39,8 @@ def test_good_agent_clears_every_phase1_gate(make_repo):
     r = repo.report()
     assert failing(r) == set()
     assert all(repo.gate(r, g)["status"] == "pass" for g in PHASE1_GATES)
-    assert [g.id for g in gates.evaluate(ev) if g.status == "unmet"] == []
+    # C19 waits on a person: whole runs labelled pass or fail (test_agreement.py clears it)
+    assert [g.id for g in gates.evaluate(ev) if g.status == "unmet"] == ["C19"]
 
     for row in r["categories"]:
         assert row["pass_rate"]["point"] == 1.0

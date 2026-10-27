@@ -45,6 +45,9 @@ COMMANDS = [
     ("C10", "calibrate", "calibrate"),
     ("C11", "reliability", "calibrate"),
     ("C12", "baseline", "run"),
+    # C19 runs after the baseline (it grades the baseline's runs) and before any comparison; it is
+    # numbered last so the numbers teams already use stay stable.
+    ("C19", "agreement", "run"),
     ("C13", "compare", "run"),
     ("C14", "coverage", "run"),
     ("C15", "redundancy", "run"),
@@ -547,6 +550,15 @@ def c12(ev: Evals) -> Gate:
     return _gate("C12", problems, [f"baseline {base['run_id']}"])
 
 
+def c19(ev: Evals) -> Gate:
+    from . import agreement
+
+    if not ev.latest_run("baseline"):
+        return _gate("C19", ["needs a baseline to label and grade (C12)"])
+    problems, info = agreement.status(ev)
+    return _gate("C19", problems, info)
+
+
 # ---- C13-C15: suite measurement ------------------------------------------------------------------
 
 def c13(ev: Evals) -> Gate:
@@ -622,7 +634,7 @@ def c18(ev: Evals) -> Gate:
 
 def evaluate(ev: Evals) -> list[Gate]:
     fns = {"C0": c0, "C1": c1, "C2": c2, "C3": c3, "C4": c4, "C5": c5, "C6": c6, "C7": c7,
-           "C8": c8, "C9": c9, "C10": c10, "C11": c11, "C12": c12, "C13": c13, "C14": c14,
+           "C8": c8, "C9": c9, "C10": c10, "C11": c11, "C12": c12, "C19": c19, "C13": c13, "C14": c14,
            "C15": c15, "C18": c18}
     out = []
     for gid, _, _ in COMMANDS:
