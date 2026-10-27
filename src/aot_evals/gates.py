@@ -324,11 +324,14 @@ def c6(ev: Evals) -> Gate:
         return _gate("C6", [str(e)])
     if not cases:
         return _gate("C6", ["no cases authored"])
-    problems, warnings = [], []
+    from . import requirements as req
+
+    problems, warnings = req.standard_problems(ev), []
+    rules = (req.load_standard(ev) or {}).get("rules") or []
     traces: dict[str, tuple] = {}
     for c in cases:
         p, w = case_problems(ev, c)
-        problems += p
+        problems += p + req.author_problems(ev, c, rules)
         warnings += w
         ref = (c.get("provenance") or {}).get("trace_ref")
         if ref:
@@ -405,6 +408,10 @@ def c8(ev: Evals) -> Gate:
     if not side:
         problems.append("no side-effect check: add a failure mode with side_effect: true, "
                         "categories: ['*'] and a code check (nothing changed outside scope)")
+    from . import requirements as req
+
+    for c in ev.cases(include_dropped=False):
+        problems += req.check_problems(ev, c)
     claim = sorted({cid for c in ev.cases(include_dropped=False)
                     for cid in (c.get("screen") or {}).get("claim_sensitive_checks") or []})
     if claim:

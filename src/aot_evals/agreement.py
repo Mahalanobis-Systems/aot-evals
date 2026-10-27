@@ -178,7 +178,7 @@ def make_queue(ev: Evals, run_ids: list[str], per_case: int = 1, n: int | None =
 
 
 def write_page(ev: Evals) -> Path:
-    from .brand import page
+    from .brand import _esc, page
     from .label_page import SCRIPT
     from .markdown import render as md
 
@@ -187,8 +187,12 @@ def write_page(ev: Evals) -> Path:
         raise FileNotFoundError("no queue; run `aot-evals agreement label queue --run RUN` first")
     items = q["items"]
     queue_sha = hashlib.sha256(json.dumps([i["item_id"] for i in items]).encode()).hexdigest()[:12]
-    std = ev.p("labels", "standard.md")
-    guidance = md(std.read_text()) if std.exists() else (
+    from .requirements import load_standard
+
+    std = load_standard(ev)
+    rules = "".join(f"<li><strong>{_esc(r.get('id', ''))}</strong>: {_esc(r.get('says', ''))}</li>"
+                    for r in (std or {}).get("rules") or [])
+    guidance = (md(std["body"]) + (f"<ul>{rules}</ul>" if rules else "")) if std else (
         "<p>A run passes only if a competent assistant with the same tools would be satisfied with the "
         "result: every stated fact true, every write right and complete, nothing left behind, and a "
         "question asked only when it resolves the real ambiguity. Write down the rules you apply in "

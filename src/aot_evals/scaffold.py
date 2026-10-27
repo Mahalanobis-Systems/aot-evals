@@ -15,6 +15,7 @@ FILES = {
     "categories.yaml": "categories.yaml",
     "failure_modes.yaml": "failure_modes.yaml",
     "budgets.yaml": "budgets.yaml",
+    "labels/standard.md": "standard.md",
     ".gitignore": "gitignore",
     "data/export.manifest.json": "export.manifest.json",
 }
