@@ -256,11 +256,23 @@ def _record(row: dict, label: bool, labeller: str) -> dict:
             "split": split_for(row["item_id"]), "at": now_iso()}
 
 
-def import_rows(ev: Evals, rows: list[dict], default_labeller: str | None) -> dict:
+def import_rows(ev: Evals, rows: list[dict], default_labeller: str | None, run_id: str | None = None) -> dict:
+    """With `run_id`, rows that give only case_id and trial (labels made outside this tool) are
+    attached to that run's final attempt of the case and trial."""
     added = skipped = 0
     problems = []
     labels_path(ev).parent.mkdir(parents=True, exist_ok=True)
+    finals_of = {}
+    if run_id:
+        finals_of = {(a["case_id"], int(a["trial"])): a for a in finals(ev, [run_id])}
     for row in rows:
+        if not row.get("item_id") and run_id:
+            a = finals_of.get((row.get("case_id"), int(row.get("trial") or -1)))
+            if a is None:
+                problems.append(f"{row.get('case_id')} trial {row.get('trial')}: no final attempt in {run_id}")
+                continue
+            row = {**row, "item_id": item_key(run_id, a["case_id"], a["trial"], a["attempt"]), "run": run_id,
+                   "attempt": a["attempt"]}
         label = parse_label(row.get("label") or "")
         if label is None:
             skipped += 1
@@ -277,9 +289,9 @@ def import_rows(ev: Evals, rows: list[dict], default_labeller: str | None) -> di
     return {"added": added, "skipped_unlabelled": skipped, "problems": problems}
 
 
-def import_csv(ev: Evals, path: Path, labeller: str | None) -> dict:
+def import_csv(ev: Evals, path: Path, labeller: str | None, run_id: str | None = None) -> dict:
     with path.open(newline="") as f:
-        return import_rows(ev, list(csv.DictReader(f)), labeller)
+        return import_rows(ev, list(csv.DictReader(f)), labeller, run_id)
 
 
 def add(ev: Evals, item: str, label: str, labeller: str, note: str | None) -> dict:

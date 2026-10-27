@@ -105,3 +105,15 @@ def test_a_note_holding_a_secret_is_not_imported(make_repo):
     key = agreement.item_key(item["run_id"], item["case_id"], item["trial"], item["attempt"])
     res = agreement.add(ev, key, "fail", "ana", "token sk-ant-api03-" + "a" * 40)
     assert res["added"] == 0 and res["problems"]
+
+
+def test_labels_made_elsewhere_attach_to_a_run_by_case_and_trial(make_repo):
+    repo = make_repo()
+    baseline(repo)
+    ev = Evals.find(str(repo.evals))
+    run_id = ev.latest_run("baseline")["run_id"]
+    path = repo.root / "outside.csv"
+    path.write_text("case_id,trial,label,note\nbook-001,1,fail,wrong room\nbook-404,0,pass,\n")
+    assert repo.cli("agreement", "label", "import", "--csv", str(path), "--by", "ana", "--run", run_id) == 1
+    labels = agreement.load_labels(ev)
+    assert len(labels) == 1 and labels[0]["item_id"].startswith(f"{run_id}/book-001.t1.a")

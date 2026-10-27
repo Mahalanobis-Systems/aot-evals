@@ -336,7 +336,7 @@ def cmd_agreement(args) -> int:
             if action == "import":
                 if not args.csv:
                     sys.exit("agreement label import needs --csv FILE")
-                res = ag.import_csv(ev, Path(args.csv), args.by)
+                res = ag.import_csv(ev, Path(args.csv), args.by, (args.run or [None])[0])
             else:
                 if not (args.item and args.label and args.by):
                     sys.exit("agreement label add needs --item, --label pass|fail and --by NAME")
@@ -776,7 +776,9 @@ def main(argv: list[str] | None = None) -> int:
 
     s = sub.add_parser("agreement", help="C19: the suite's verdict on whole runs against a person's")
     s.add_argument("what", nargs="*", help="(nothing): measure; label queue|page|import|add|status; regrade")
-    s.add_argument("--run", action="append", help="label queue, regrade: these runs (default: latest baseline)")
+    s.add_argument("--run", action="append",
+                   help="label queue, regrade: these runs (default: latest baseline); label import: attach "
+                   "rows that give only case_id and trial to this run")
     s.add_argument("--per-case", type=int, default=1, help="label queue: runs per case (default 1)")
     s.add_argument("--n", type=int, help="label queue: at most this many runs")
     s.add_argument("--seed", type=int, default=0)
