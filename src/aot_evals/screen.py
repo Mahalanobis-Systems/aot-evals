@@ -22,6 +22,10 @@ wording fails correct answers written another way (E5: "$1.413M" against "1,413,
 - **the liar fails**: the reference answer with the world unchanged fails at least one check,
   when the case expects a change. A suite that passes it grades what the agent says, not what it
   did;
+- **a non-answer fails**: "Done!", or the request echoed back, with nothing changed fails at
+  least one check. Unlike do-nothing, this applies when no change is expected: a question whose
+  answer is "that isn't on record" still needs an answer (E5: a bare "Done!" passed every such
+  case in two suites). With `--judges`, calibrated judges count in this screen and the liar's;
 - **a wrong number fails**: the reference answer with every number changed fails at least one
   check. Reported, not blocking: it says whether anything checks the answer's numbers, which is
   where every arm of E5 was blind.
@@ -42,7 +46,9 @@ SUCCESS_CLAIM = ("Done. I completed everything you asked: all changes were made 
                  "successfully.")
 
 
-def screen_case(ev: Evals, case: dict) -> dict:
+def screen_case(ev: Evals, case: dict, judges=None) -> dict:
+    """`judges`, when given, is a callable (start, end) -> [(check_id, passed)] for the case's
+    calibrated judges; the non-answer and liar screens then count their verdicts too."""
     checks = ev.checks_for_case(case, check_type="code")
     start_world = case.get("start_state")
     expected = case.get("expected_end_state") or {}
@@ -95,12 +101,28 @@ def screen_case(ev: Evals, case: dict) -> dict:
     def run_all(end):
         return [run_check(cid, ev.code_check_path(cid), start, end, case) for cid, _ in checks]
 
+    def fails(end) -> bool:
+        if any(r.passed is False for r in run_all(end)):
+            return True
+        return bool(judges) and any(v is False for _, v in judges(start, end))
+
+    if exp_output:
+        trigger = case.get("trigger") or {}
+        ask = trigger.get("text") if isinstance(trigger, dict) else str(trigger)
+        non_answers = ["Done!", f"Done. {ask or ''}".strip()]
+        result["non_answer_fails"] = all(fails({"world": start_world, "output": o}) for o in non_answers)
+        if not result["non_answer_fails"]:
+            result["notes"].append("a non-answer ('Done!', or the request echoed back) with nothing changed passes"
+                                   + ("" if judges else "; if a judge decides this case, screen with --judges"))
+    else:
+        result["non_answer_fails"] = None
+
     variants = (expected.get("output_variants") if isinstance(expected, dict) else None) or []
     result["failing_paraphrases"] = [
         f"variant {i + 1}: {r.id}: {r.detail}" for i, v in enumerate(variants)
         for r in run_all({"world": exp_world, "output": v}) if r.passed is not True]
     if exp_output and not _same(exp_world, start_world):
-        result["liar_fails"] = any(r.passed is False for r in run_all({"world": start_world, "output": exp_output}))
+        result["liar_fails"] = fails({"world": start_world, "output": exp_output})
         if not result["liar_fails"]:
             result["notes"].append("the reference answer with nothing changed passes every check: the "
                                    "suite grades what the agent says, not what it did")
@@ -151,7 +173,8 @@ def passes(screen: dict | None) -> bool:
         return False
     if screen.get("human_read") is not True or screen.get("reference_passes") is not True:
         return False
-    if screen.get("claim_sensitive_checks") or screen.get("failing_paraphrases") or screen.get("liar_fails") is False:
+    if (screen.get("claim_sensitive_checks") or screen.get("failing_paraphrases")
+            or screen.get("liar_fails") is False or screen.get("non_answer_fails") is False):
         return False
     dn = screen.get("donothing_fails")
     if dn is None:
@@ -159,8 +182,30 @@ def passes(screen: dict | None) -> bool:
     return dn is True
 
 
+def judge_verdicts(ev: Evals, case: dict):
+    """(start, end) -> [(check_id, passed)] for the case's calibrated judges (calls cost money)."""
+    from .judging import JudgeRunner
+    from .report import judge_states
+
+    states = judge_states(ev)
+    runner = JudgeRunner(ev)
+
+    def run(start, end):
+        out = []
+        for cid, fm in ev.checks_for_case(case, check_type="judge"):
+            st = states.get(cid) or {}
+            if not st.get("calibrated"):
+                continue
+            line = runner.line(st["spec"], st["backend"], fm.get("id"), case, start, end,
+                               {"run_id": "screen", "case_id": case.get("id"), "trial": 0, "attempt": 0})
+            score = line.get("score")
+            out.append((cid, score >= st["threshold_or_default"] if score is not None else line.get("passed")))
+        return out
+    return run
+
+
 def run_screen(ev: Evals, case_ids: list[str] | None = None, read_by: str | None = None,
-               drop: str | None = None, reason: str | None = None) -> list[dict]:
+               drop: str | None = None, reason: str | None = None, judges: bool = False) -> list[dict]:
     """Screen cases and write each result into the case file's `screen` block."""
     rows = []
     for case in ev.cases():
@@ -174,7 +219,7 @@ def run_screen(ev: Evals, case_ids: list[str] | None = None, read_by: str | None
             screen = dict(case.get("screen") or {})
             screen.update({"dropped": True, "drop_reason": reason, "dropped_at": now_iso()})
         else:
-            screen = screen_case(ev, case)
+            screen = screen_case(ev, case, judge_verdicts(ev, case) if judges else None)
             if read_by and (not case_ids or cid in case_ids):
                 screen["human_read"] = True
                 screen["read_by"] = read_by

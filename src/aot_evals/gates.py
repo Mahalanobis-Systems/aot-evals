@@ -129,6 +129,16 @@ def c1(ev: Evals) -> Gate:
     if not (ev.repo_root / str(cwd)).is_dir():
         problems.append(f"agent.yaml: invoke.cwd {cwd!r} is not a directory under the repository "
                         f"root {ev.repo_root} (relative paths start there)")
+    from .replay import records_dir
+
+    if records_dir(a.get("invoke")):
+        # A replay is not the agent running. The end-to-end run can't be shown, so C1 neither
+        # passes nor blocks: the suite grades recorded runs until the agent can run again.
+        if problems:
+            return _gate("C1", problems)
+        return Gate("C1", "not_applicable", info=[
+            f"the agent is replayed from {records_dir(a.get('invoke'))}: recorded runs are graded, the agent "
+            "isn't run. Run it once live (aot-evals run --purpose smoke) to show it runs end to end"])
     ok_run = any((m.get("counts") or {}).get("ok", 0) > 0 for m in ev.runs())
     if not ok_run:
         problems.append("the agent has not yet run end to end from its command "
@@ -372,6 +382,8 @@ def c7(ev: Evals) -> Gate:
                 why.append(f"a correct answer worded differently fails ({s['failing_paraphrases'][0]})")
             if s.get("liar_fails") is False:
                 why.append("the reference answer with nothing changed passes")
+            if s.get("non_answer_fails") is False:
+                why.append("a non-answer ('Done!') passes")
             problems.append(f"case {c.get('id')}: {'; '.join(why) or 'screen incomplete'} "
                             "(fix it or drop it with a reason)")
     rate = len(dropped) / len(cases)

@@ -33,9 +33,15 @@ read. This release checks the whole.
   reported when it passes.
 - The `build` skill now asks for expected values derived from the start state, and a grounding
   check for every fact a prose answer states.
+- **A non-answer fails** (C7): "Done!", or the request echoed back, with nothing changed must fail
+  every case that has a reference answer, including cases where nothing should change ("that
+  isn't on record"), which the do-nothing screen skips. `aot-evals screen --judges` lets calibrated
+  judges count in this screen and the liar's.
 - `aot-evals replay run|seed|observe RECORDS`: recorded runs stand in for the agent and its
   hooks, so a suite can be built, screened, run and checked against people offline, from traces
-  (references/agent-contract.md, "Recorded runs").
+  (references/agent-contract.md, "Recorded runs"). Under replay, C1 is not applicable rather than
+  met, replays of the same records are one agent version, and plane B is not measured. A suite's
+  own replay script can declare `invoke.recorded: DIR`.
 
 ## 0.3.0 — 2026-10-26
 

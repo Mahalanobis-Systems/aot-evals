@@ -61,3 +61,22 @@ def test_a_missing_record_is_operational(make_repo):
     repo.cli("run", "--purpose", "baseline", "--k", "3", "--force")
     a = next(a for a in _finals(repo) if a["case_id"] == "book-001" and a["trial"] == 1)
     assert a["outcome"] == "no_output" and a["passed"] is None
+
+
+def test_a_replay_neither_clears_nor_blocks_c1_and_is_one_version(make_repo):
+    from aot_evals import gates, suite
+
+    repo = make_repo()
+    _record_all(repo, broken=set())
+    ev = Evals.find(str(repo.evals))
+    c1 = next(g for g in gates.evaluate(ev) if g.id == "C1")
+    assert c1.status == "not_applicable" and "replayed" in c1.info[0]
+    assert repo.cli("run", "--purpose", "baseline", "--k", "3", "--force") == 0
+    agent = repo.evals / "agent.yaml"
+    agent.write_text(agent.read_text().replace("timeout: 30", "timeout: 40"))
+    repo.commit("a different invoke, the same records")
+    assert repo.cli("run", "--purpose", "baseline", "--k", "3", "--force") == 0
+    assert len(suite.versions(Evals.find(str(repo.evals)))) == 1
+    assert repo.cli("report") == 0
+    r = repo.report()
+    assert all(row["operational"]["budget_status"] == "not_measured" for row in r["categories"])

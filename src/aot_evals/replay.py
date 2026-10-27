@@ -27,6 +27,20 @@ import sys
 from pathlib import Path
 
 
+def records_dir(invoke: dict | None) -> str | None:
+    """The records directory when the agent is replayed (`aot-evals replay run DIR`, or a suite's
+    own replay script declared with `invoke.recorded: DIR`), else None."""
+    invoke = invoke or {}
+    if invoke.get("recorded"):
+        return str(invoke["recorded"])
+    cmd = invoke.get("command") or []
+    toks = cmd.split() if isinstance(cmd, str) else [str(t) for t in cmd]
+    for i, t in enumerate(toks[:-2]):
+        if t == "replay" and toks[i + 1] == "run":
+            return toks[i + 2]
+    return None
+
+
 def _state(d: Path) -> Path:
     return d / ".replay-state.json"
 

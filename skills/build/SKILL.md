@@ -151,9 +151,14 @@ the agent's report, and G10 refuses it.
 When a case has a reference answer (`expected_end_state.output`), write two or three other correct
 wordings of it in `expected_end_state.output_variants` (other number formats: "$1.413M",
 "1,413,000"; other phrasings; another order), and confirm them with the owner like the reference.
-The screen then also checks:
+Every case that expects an answer needs a reference answer, including a question whose right
+answer is "that isn't on record": that is the case where a bare "Done!" slips through, because
+doing nothing leaves the world exactly as expected. The screen then also checks:
 - **paraphrases pass**: every variant passes every check. A check bound to one wording fails
   correct answers in real runs (in E5, 6 of a suite's 13 false alarms);
+- **a non-answer fails**: "Done!", or the request echoed back, with nothing changed. This applies
+  even when no change is expected. When a judge decides the case, run `aot-evals screen --judges`
+  so calibrated judges count (it calls them; say what it costs first);
 - **the liar fails**: the reference answer with nothing changed fails, when a change is expected;
 - **a wrong number fails**: the reference answer with every number changed fails. Reported, not
   blocking: when it passes, nothing checks the answer's numbers. Add a check for the case's
@@ -198,7 +203,9 @@ answers in prose, give each case a `facts-true` requirement decided by a groundi
 that extracts each number, total or name from the answer and compares it with values computed
 from the start state, or a judge given the answer and the full records it should rest on, asked
 whether every stated fact is supported. One judge spec can serve every such case; its inputs
-must include the records, not a summary of them.
+must include the records, not a summary of them. An answer that states records' facts with no
+lookup behind it (no read in the recorded tool calls) has nothing to ground it and fails, however
+plausible it reads: that is how a fabricated answer passes a judge that only checks plausibility.
 
 **Gate:** every failure mode that isn't monitor-only has at least one check file; a side-effect
 code check exists; no check declares or shows reliance on the agent's report; every requirement

@@ -239,7 +239,13 @@ BUDGET_KEYS = {
 }
 
 
-def operational(attempts: list[dict], budget: dict | None) -> dict:
+def operational(attempts: list[dict], budget: dict | None, replay: bool = False) -> dict:
+    if replay:
+        # replayed records: their cost, latency and errors describe the replay, not the agent
+        return {"n_trials": len({(a["run_id"], a["case_id"], a["trial"]) for a in attempts}),
+                "n_attempts": len(attempts), "not_measured": "recorded runs replayed: plane B describes "
+                "the replay, not the agent", "budget": budget or {}, "budget_status": "not_measured",
+                "budget_breaches": []}
     trials = {(a["run_id"], a["case_id"], a["trial"]) for a in attempts}
     n_trials = len(trials)
     costs = [a["cost_usd"] for a in attempts if a.get("cost_usd") is not None]
@@ -327,7 +333,8 @@ def category_rows(ctx: Context) -> list[dict]:
             "observed_share": cat.get("observed_share"),
             "n_cases": len({a["case_id"] for a in gated_finals}),
             **correctness(ctx, gated_finals, set_name),
-            "operational": operational(attempts, ev.budget_for(cid)),
+            "operational": operational(attempts, ev.budget_for(cid),
+                                       replay=bool(ctx.manifests) and all(m.get("replay") for m in ctx.manifests)),
             "excluded": None,
         }
         if ungated_finals:

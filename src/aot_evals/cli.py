@@ -165,7 +165,7 @@ def cmd_screen(args) -> int:
         sys.exit("--read-by records a human read: name the cases read with --case (repeatable), "
                  "or pass --all if NAME really read every case")
     rows = screen_mod.run_screen(ev, case_ids=args.case or None, read_by=args.read_by,
-                                 drop=args.drop, reason=args.reason)
+                                 drop=args.drop, reason=args.reason, judges=args.judges)
     print(f"  {'case':<32} {'read':>5} {'ref':>5} {'noop':>5}  status")
     for r in rows:
         def f(v):
@@ -731,6 +731,8 @@ def main(argv: list[str] | None = None) -> int:
     s.set_defaults(fn=cmd_allocate)
 
     s = sub.add_parser("screen", help="C7: screen cases")
+    s.add_argument("--judges", action="store_true",
+                   help="let calibrated judges count in the non-answer and liar screens (calls cost money)")
     s.add_argument("--case", action="append", help="limit to this case id (repeatable)")
     s.add_argument("--read-by", help="record that NAME read the selected cases (a human read)")
     s.add_argument("--all", action="store_true", help="with --read-by: NAME read every case")

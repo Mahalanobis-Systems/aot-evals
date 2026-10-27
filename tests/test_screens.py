@@ -55,3 +55,20 @@ def test_wrong_numbers_are_reported_when_nothing_reads_them(make_repo):
     s = screen_case(ev, next(c for c in ev.cases() if c["id"] == "book-001"))
     assert s["wrong_number_fails"] is False
     assert any("nothing checks the answer's numbers" in n for n in s["notes"])
+
+
+def test_a_non_answer_must_fail_even_when_nothing_should_change(make_repo):
+    repo = make_repo()
+    path = next((repo.evals / "cases").glob("*/none-001.json"))
+    case = json.loads(path.read_text())
+    case["expected_end_state"]["output"] = "You're welcome, see you then."
+    path.write_text(json.dumps(case, indent=2))
+    ev = Evals.find(str(repo.evals))
+    s = screen_case(ev, next(c for c in ev.cases() if c["id"] == "none-001"))
+    assert s["non_answer_fails"] is False  # nothing reads the reply, so "Done!" passes
+    assert any("non-answer" in n for n in s["notes"])
+
+    s = screen_case(ev, next(c for c in ev.cases() if c["id"] == "none-001"),
+                    judges=lambda start, end: [("reply-judge", end["output"] not in ("Done!",) and
+                                                not end["output"].startswith("Done."))])
+    assert s["non_answer_fails"] is True
