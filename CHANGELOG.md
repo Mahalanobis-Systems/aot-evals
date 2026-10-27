@@ -6,6 +6,34 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+What E5 ("Who tests the tests?") taught us. A suite built and calibrated with aot-evals 0.1.1
+caught 69% of the runs a person failed and passed 81% of the runs a person passed; plain Claude
+Code, given the same 79 requests, wrote suites that did better in all four sessions. Every miss
+traced to a part nobody had checked against a whole run: requirements no check looked at,
+expected answers bound to one wording, code-check bugs, and numbers inside answers that nothing
+read. This release checks the whole.
+
+- **C19 agreement**, right after the baseline: a person labels whole runs pass or fail
+  (`aot-evals agreement label queue|import`), every labelled run is re-graded from its raw record
+  with the suite as it is now (`aot-evals agreement`), and the catch rate and clean pass rate are
+  reported, dev and holdout (M29). Every dev disagreement gets a cause in `labels/triage.yaml`.
+  The gate needs 60 runs with 15 of each kind, current measurements, both rates at or above 85%
+  on dev, and every dev disagreement triaged. `aot-evals agreement regrade --run R` re-grades a
+  whole run offline; `--reproduces` finds code checks that read something besides the record.
+- **G14**: until C19 is met the report refuses the word "validated" and comparisons are marked
+  provisional. `report.json` gains an `agreement` block.
+- **The labelling standard and per-case requirements** (C6, C8). `labels/standard.md` (written by
+  `init`) holds the rules a person applies when failing a run, with the categories each applies
+  to. Every case carries `requirements`, each citing a rule and naming the checks that decide it;
+  every rule that applies to a case is cited or excused. `status` prints per rule how many cases
+  it applies to, cite it, and check it. Existing suites need a standard and requirements before
+  C6 and C8 are met again.
+- **Screens on the reference answer** (C7): other correct wordings (`output_variants`) must pass,
+  the reference answer with nothing changed must fail, and an answer with every number wrong is
+  reported when it passes.
+- The `build` skill now asks for expected values derived from the start state, and a grounding
+  check for every fact a prose answer states.
+
 ## 0.3.0 — 2026-10-26
 
 - A local catalog of public agent benchmarks (`references/benchmarks.yaml`, over 100 entries with

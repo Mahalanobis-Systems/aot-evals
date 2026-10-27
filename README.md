@@ -91,7 +91,7 @@ Under the hood:
 - **Three planes, reported separately:** correctness, operational cost, and trust in the
   instruments.
 - **Two case sets:** one for finding errors, one for estimating quality.
-- **Commands C0–C18, each with an exit gate.** Refusal gates G1–G13 mean a number that can't be
+- **Commands C0–C19, each with an exit gate.** Refusal gates G1–G14 mean a number that can't be
   defended isn't printed.
 - **A fixed `report.json` schema**, which Claude renders into a local HTML report written for the
   question being asked.
@@ -131,7 +131,7 @@ several agents in one repository, pass `--agent NAME` to every command.
 aot-evals demo [DIR]                             # a toy agent with a finished suite
 aot-evals doctor                                 # check the environment
 aot-evals --agent NAME init                      # create evals/agents/NAME/
-aot-evals status                                 # gates C0–C18, and what's next
+aot-evals status                                 # gates C0–C19, and what's next
 aot-evals import traces.jsonl --source ... --query ... --window ...   # C0
 aot-evals ops --export <id> --field cost_usd=... # E14: operational costs in week one
 aot-evals run --purpose smoke --question "..."   # C1: the agent runs end to end

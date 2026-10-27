@@ -1,7 +1,7 @@
 # The aot-evals method
 
 This is the reference for what aot-evals does and why: the principles, the measurement frame,
-the files it keeps in your repository, the commands C0–C18 and their exit gates, the
+the files it keeps in your repository, the commands C0–C19 and their exit gates, the
 measurements (M), experiments (E), report panels (P) and refusal gates (G) that the skills and
 the CLI name. The skills read the section they need; you can too.
 
@@ -144,7 +144,12 @@ evals/agents/<agent>/
   failure_modes.yaml         # per failure mode: >=1 check, >=1 category, a cost-matrix cell
   budgets.yaml               # plane B: cost / latency / token / error-rate budgets per category
   allocation.yaml            # C5's plan: sizes, and each unfilled cell scheduled or out of scope
-  cases/<category>/<case-id>.json   # frozen inputs, start state, trigger, expected end state, set, provenance
+  cases/<category>/<case-id>.json   # frozen inputs, start state, trigger, expected end state, set, provenance,
+                                    #   requirements (what a correct run must do, each with its checks)
+  labels/standard.md         # the labelling standard: rules a person applies, with the categories each applies to
+  labels/runs.jsonl          # C19: whole-run human labels (label and note; no agent output)
+  labels/triage.yaml         # C19: a cause for each disagreement between the suite and a person
+  labels/floors.yaml         # optional: C19's floors (min_catch, min_clean, min_runs, min_each)
   checks/
     code/<check-id>.py              # binary state diff: check(start, end, case) -> (bool, detail)
     judge/<check-id>.md             # one failure mode, binary, typed; backend-agnostic (§5)
@@ -156,6 +161,7 @@ evals/agents/<agent>/
   runs/<run-id>/manifest.json       # the condition record
   runs/<run-id>/outcomes.jsonl      # one line per attempt and per check verdict
   report/report.json                # §8
+  report/agreement.json             # C19: catch and clean pass rates on whole runs, dev and holdout
   report/report-<date>.html         # §9
   report/checkpoints/               # §9: one page per owner checkpoint
   journal/                          # §9: the activity log; ignores itself
@@ -179,6 +185,9 @@ Rules:
   ends. A resumed run lists each resume under `resumed` (`at`, `pairs_done_before`). Two runs whose manifests differ on any field other than the declared independent
   variable are not compared (G7).
 - **Every case has a `set`**: `error_finding` or `quality_estimate`. There is no default.
+- **Every case has `requirements`**: what a correct run of it must do, each citing a rule of
+  `labels/standard.md` and naming the checks that decide it, or why it is unchecked. Every rule
+  that applies to the case's category is cited or excused in `rules_not_applicable` (C6, C8).
 - **`taxonomy.yaml` names the document it came from**, and is committed before the first case. A
   model may draft it (C2), but only from a source outside `cases/`.
 - **Unknown values are `null`, never `0`.**
@@ -199,13 +208,14 @@ records that it did). `aot-evals status` shows every gate and the next unmet one
 | C3 | `categorize` | Sort traces into categories, one per trace. Give each a worth and a per-failure-kind cost matrix. Count observed share. | Every category has a definition, an example, worth, a simple flag, a cost row and a measured share. "Other" is under 10%. |
 | C4 | `decompose` | Within each category: feature → scenario → failure mode. Mark each failure mode code-checkable, judge-needed or monitor-only, and set plane-B budgets. | Every failure mode names its category, check type and cost cell; `budgets.yaml` covers every category. |
 | C5 | `allocate` | Size both case sets and print the arithmetic. Error-finding: ≥10 per category, 3 for simple ones. Quality-estimate: proportional to observed share, sized by the interval the owner needs (M14). | Both budgets printed with target intervals and the minimum detectable effect (M7); every cell filled, scheduled, or declared out of scope with a reason. |
-| C6 | `author` | Write cases: frozen inputs, start state, trigger, scripted follow-ups, expected end state. Prefer self-verifying pairs where state allows. Scrub before writing. | Every case has a set, a category, failure modes, provenance, and no secrets. |
-| C7 | `screen` | Per case: a human read; the checks must pass on start → expected end (reference) and fail on start → start (do nothing); a third pass, do-nothing plus a success claim, catches checks that trust the agent's report (G10). Drop cases that fail, and record the drop. | Screens recorded per case; drop rate reported. |
-| C8 | `checks` | Implement plane-A checks: code state diffs first, graded against the goal rather than one path; binary judges only where code cannot decide; side-effect checks on every agent. A check never uses the agent's own report of success. | Every failure mode has at least one binary check; side-effect checks present. |
+| C6 | `author` | Write the labelling standard, then cases: frozen inputs, start state, trigger, scripted follow-ups, expected end state, and requirements walked rule by rule from the standard. Prefer self-verifying pairs where state allows. Scrub before writing. | The standard exists; every case has a set, a category, failure modes, provenance, requirements covering every rule that applies to it, and no secrets. |
+| C7 | `screen` | Per case: a human read; the checks must pass on start → expected end (reference) and fail on start → start (do nothing); a third pass, do-nothing plus a success claim, catches checks that trust the agent's report (G10). With a reference answer: other correct wordings must pass, the reference answer with nothing changed must fail, and an answer with every number wrong is reported if it passes. Drop cases that fail, and record the drop. | Screens recorded per case; drop rate reported. |
+| C8 | `checks` | Implement plane-A checks: code state diffs first, graded against the goal rather than one path; binary judges only where code cannot decide; side-effect checks on every agent; a grounding check for every fact a prose answer states. A check never uses the agent's own report of success. | Every failure mode has at least one binary check; side-effect checks present; every requirement names a check that runs on its case, or why it is unchecked. |
 | C9 | `label` | Collect human labels per judge, stratified across categories: one item per case first, then other trials where the answers differ. Target 100–200; below 60 the interval is too wide to act on. | Label count and stratification printed per judge. |
 | C10 | `calibrate` | Measure each judge against its labels: TPR and TNR separately (never raw agreement), κ, confusion matrix, cost per judgement. Choose a probabilistic backend's threshold on the labels. Version the criteria. | Every judge has TPR/TNR on ≥60 labels at or above its floors, a named backend and model family, and a version. Uncalibrated judges may run but never count toward headline numbers. |
 | C11 | `reliability` | Run *m* fresh sessions per item on two backends from different model families; report agreement at three levels (all / majority / none) next to C10's TPR/TNR. | Self-consistency and cross-family agreement reported next to TPR/TNR, never in place of it. |
 | C12 | `baseline` | Run the suite k = 3–5 times on an unchanged, committed build. Write per-trial outcomes and plane-B counters. Compute the variance band. | Run complete and finished, manifest complete, no eval-file exposure, variance band per category, plane B recorded against `budgets.yaml`. |
+| C19 | `agreement` | Runs after C12 (numbered last so earlier numbers stay stable). A person labels whole baseline runs pass or fail with a note, seeing the request, the answer and what changed, never the checks. Every labelled run is re-graded from its raw record with the suite as it is now, so labels outlive suite versions. Report the catch rate and clean pass rate (M29), dev and holdout; give every dev disagreement a cause. | ≥60 labelled runs with ≥15 of each kind; a measurement current for the suite and the labels; dev catch and clean pass rates at or above their floors (85% by default); every dev disagreement triaged. Until then G14 fails and comparisons are provisional. |
 | C13 | `compare` | Run a candidate on the same cases with one declared independent variable. Report gains, losses and a paired test, never a net delta alone, with plane-B deltas alongside. | Paired test present; gains and losses listed; manifests differ only on the declared variable. |
 | C14 | `coverage` | Count cases per (taxonomy entry × failure mode), zeros included, with the source document named. | Coverage reported against an external list, or refused (G5). |
 | C15 | `redundancy` | Over ≥2 agent versions, classify each case; report the discriminating fraction and a per-case index; propose prunes and cells to extend. | Discriminating fraction published; below the threshold (default 0.3), a prune/extend proposal. |
@@ -328,6 +338,7 @@ are guidance for the online regime and are not yet computed by the CLI.
 | M25 | C | Compounded validity | product of stated stage validities (task × simulator × judge) | printed in the report header; 70% × 70% × 70% ≈ 34% |
 | M26 | A | Leakage screen | overlap of case provenance with likely training or benchmark sources | required for cases built from a public source |
 | M27 † | B | Online fingerprints | per agent: unanswered requests, time to first response, tokens and cost per turn, tool calls per turn, category mix, model id per call | drift in the part of the system that cannot be sandboxed |
+| M29 | C | Whole-run agreement | catch rate (share of runs a person fails that the suite fails) and clean pass rate (share a person passes that the suite passes), each with a Wilson interval, dev and holdout; a run with no verdict counts as wrong either way | C19, G14. Per-check validity (M8, M22) does not imply it: a suite can clear every screen and miss what a person fails runs for |
 | M28 † | A | Behavioural signals | post-output edits, acceptance, follow-up corrections, re-asks | free labels for C9 |
 
 ---
@@ -351,6 +362,7 @@ No comparison runs before E1. Experiments marked † are guidance only.
 | E11 † | Shadow / canary | the candidate states what it would do; compare with what happened; then a fraction of live traffic | the gate before write access, for agents with no sandbox |
 | E12 † | Fake contract test | replay each fake against the live API on a schedule; diff | M23 |
 | E13 † | Drift watch | the frozen set on a schedule, plus M27 on a control chart with M5's limits | the standing check for provider-side and self-inflicted changes |
+| E15 | Suite validity | whole-run human labels on baseline runs, the suite re-graded on them; iterate on dev disagreements by cause; check holdout once; label a fresh batch before a new claim | M29, a triaged list of what the suite misses and why |
 | E14 | Operational sweep | plane B only, no labels or judges: budgets vs actuals per category | M18–M21; can run in week one, from an export |
 
 ---
@@ -474,7 +486,7 @@ browser and steer at every gate.
   decisions and questions with `aot-evals log`. Each append re-renders `activity.html`, which
   reloads itself and says when Claude is waiting. The journal ignores itself in git: it may quote
   unreviewed trace text, and the committed record of a decision is the file it changed.
-- **Checkpoints.** `aot-evals checkpoint` writes a page for one gate: the C0–C18 roadmap in plain
+- **Checkpoints.** `aot-evals checkpoint` writes a page for one gate: the C0–C19 roadmap in plain
   words, Claude's summary, the log since the last checkpoint, every design file rendered as tables,
   the owner's questions, what still blocks the gate, and the next step. It makes no model calls.
 - **Pacing.** Every skill works until a gate clears or the work needs the owner, publishes a
@@ -506,3 +518,4 @@ Visual style follows [brand/README.md](../brand/README.md).
 | G11 | A "better" verdict while plane B regressed beyond budget | the verdict; it becomes "trade", with both numbers |
 | G12 | A number whose data does not trace to an export manifest entry or a committed case | that number |
 | G13 | Retried attempts or operational failures missing from `outcomes.jsonl`, or scored as correctness | the run's plane-A and plane-B numbers |
+| G14 | The suite's verdict on whole runs not measured against a person's, stale, below its floors, or with untriaged dev disagreements (C19) | the word "validated"; every comparison is marked provisional |

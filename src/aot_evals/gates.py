@@ -420,7 +420,9 @@ def c8(ev: Evals) -> Gate:
                     for cid in (c.get("screen") or {}).get("claim_sensitive_checks") or []})
     if claim:
         problems.append(f"checks that pass on a bare success claim (G10): {claim}")
-    return _gate("C8", problems)
+    info = [f"rule {r['rule']}: applies to {r['applies']} cases, cited by {r['cited']}, checked in {r['checked']}"
+            for r in req.coverage(ev)]
+    return _gate("C8", problems, info)
 
 
 # ---- C9-C11: judges ---------------------------------------------------------------------------

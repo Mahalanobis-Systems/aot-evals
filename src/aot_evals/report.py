@@ -1,7 +1,7 @@
 """C18 `report`: write `evals/report/report.json` (docs/method.md §8).
 
 Everything here is recomputed from per-trial records; nothing is pre-rounded; unknown values are
-`null`, never `0`. The report gates (G1-G13, docs/method.md §10) are evaluated here and decide which
+`null`, never `0`. The report gates (G1-G14, docs/method.md §10) are evaluated here and decide which
 numbers may appear: a refused number is removed or greyed, and its gate says why.
 """
 
@@ -15,7 +15,7 @@ from .checks import declares_agent_report
 from .gates import manifest_problems, taxonomy_problems, untracked_cases
 from .repo import SETS, Evals
 from .screen import passes as screen_passes
-from .util import now_iso, write_json
+from .util import load_json, now_iso, write_json
 
 SCHEMA = "aot-evals/report@1"
 
@@ -511,7 +511,7 @@ def case_rows(ctx: Context) -> list[dict]:
     return rows
 
 
-# ---- gates G1-G13 ---------------------------------------------------------------------------
+# ---- gates G1-G14 ---------------------------------------------------------------------------
 
 def _g(gid: str, ok: bool | None, detail: str, blocks: list[str]) -> dict:
     status = {True: "pass", False: "fail", None: "not_applicable"}[ok]
@@ -640,6 +640,12 @@ def evaluate_gates(ctx: Context) -> list[dict]:
     gates.append(_g("G13", None if not ctx.manifests else not g13,
                     "; ".join(g13[:5]) or "every attempt recorded; only ok attempts scored",
                     ["plane_a", "plane_b"] if g13 else []))
+
+    # G14: the suite's verdict on whole runs not checked against a person's, or below floors (C19)
+    from . import agreement
+    probs = agreement.gate_problems(ev, load_json(agreement.result_path(ev)))
+    gates.append(_g("G14", not probs, "; ".join(probs[:3]) or "the suite agrees with a person on whole runs "
+                    "(C19 floors met; every dev disagreement triaged)", ["validated"] if probs else []))
     return gates
 
 
@@ -704,6 +710,7 @@ def build(ev: Evals, run_ids: list[str] | None = None, candidate_runs: list[str]
         "coverage": coverage(ev, status["G5"] == "pass"),
         "redundancy": suite.redundancy(ev),
         "comparison": comparison,
+        "agreement": _agreement_summary(ev),
         "online": None,
         "validity": _validity(agent),
         "gates": gates,
@@ -729,6 +736,18 @@ def build(ev: Evals, run_ids: list[str] | None = None, candidate_runs: list[str]
     report["categories"] = category_rows(ctx)
     report["next_actions"] = next_actions(ev, report)
     return report
+
+
+def _agreement_summary(ev: Evals) -> dict | None:
+    """C19 in brief: dev and holdout catch and clean pass rates, and how many disagreements."""
+    from . import agreement
+    res = load_json(agreement.result_path(ev))
+    if not res:
+        return None
+    return {"measured_at": res.get("measured_at"), "current": not any("stale" in p for p in
+                                                                      agreement.gate_problems(ev, res)),
+            "dev": res.get("dev"), "holdout": res.get("holdout"),
+            "disagreements": len(res.get("disagreements") or [])}
 
 
 def comparison_gates(c: dict) -> list[dict]:

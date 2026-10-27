@@ -20,7 +20,9 @@ PHASE1_GATES = ("G1", "G2", "G5", "G6", "G8", "G10", "G12", "G13")
 
 
 def failing(report: dict) -> set[str]:
-    return {g["id"] for g in report["gates"] if g["status"] == "fail"}
+    """Failing report gates, leaving out G14: no fixture labels whole runs, so G14 fails in every
+    one of them until C19 is done (test_agreement.py covers it)."""
+    return {g["id"] for g in report["gates"] if g["status"] == "fail" and g["id"] != "G14"}
 
 
 def rows(report: dict, category: str) -> list[dict]:
@@ -38,6 +40,7 @@ def test_good_agent_clears_every_phase1_gate(make_repo):
     assert repo.cli("report") == 0
     r = repo.report()
     assert failing(r) == set()
+    assert repo.gate(r, "G14")["status"] == "fail" and repo.gate(r, "G14")["blocks"] == ["validated"]
     assert all(repo.gate(r, g)["status"] == "pass" for g in PHASE1_GATES)
     # C19 waits on a person: whole runs labelled pass or fail (test_agreement.py clears it)
     assert [g.id for g in gates.evaluate(ev) if g.status == "unmet"] == ["C19"]

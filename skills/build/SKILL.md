@@ -91,7 +91,30 @@ Start from `${CLAUDE_PLUGIN_ROOT}/templates/case.json`. Each case freezes:
   benchmark the report names (τ-bench's init, solution and assertion shape for a write under
   policy; CRMArena's "none" answers; BIRD-Interact's ambiguous prompts);
 - `provenance`: source, the export id, trace_ref, `synthetic`, the agent version that produced the
-  trace.
+  trace;
+- `requirements`: what a correct run of this case must do, in plain words, each citing a rule of
+  the standard and naming the checks that decide it (below).
+
+**Write the standard first.** `labels/standard.md` (`aot-evals init` writes a template) holds the
+rules a person applies when failing a run, with the categories each applies to: every stated
+fact true, lists complete or marked partial, writes right and complete, related records
+connected, nothing left behind, wide changes confirmed, the turn delivers. Fit them to the agent
+with the owner before writing cases; the same rules guide labelling (C9, C19).
+
+**Then, for every case, walk the rules.** For each rule that applies to the case's category,
+write the requirement it implies for this case, concretely ("lists all 28 deals over $100K, or
+says it shows a part and why"; "the follow-up task is attached to the deal and to Ana"), or say
+in `rules_not_applicable` why it doesn't apply. This is the step that catches what a check per
+failure mode misses: E5's calibrated suite missed partial lists, unattached tasks and leftover
+junk because no case said they mattered.
+
+```json
+"requirements": [
+  {"id": "all-deals", "rule": "complete", "says": "lists all 28 open deals over $100K", "checks": ["lists-every-deal"]},
+  {"id": "total-true", "rule": "facts-true", "says": "the stated total is $6.593M", "checks": ["answer-grounded"]}
+],
+"rules_not_applicable": {"connected": "read-only: nothing to connect"}
+```
 
 - **Cases come from reviewed real traces** (process steps 9–10). The confirmed review becomes the
   expected end state. Never ship an uncorrected model draft as ground truth.
@@ -100,7 +123,13 @@ Start from `${CLAUDE_PLUGIN_ROOT}/templates/case.json`. Each case freezes:
   `aot-evals validate` blocks on secrets and warns on likely PII; a person still reads every case.
 - **Keep the two sets disjoint:** one trace never feeds both sets.
 
-**Gate:** every case has a set, category, failure modes, provenance, and no secrets.
+- **Derive expected values from the start state** wherever you can (a count, a total, a list of
+  ids computed from the seeded records), rather than typing them in. A typed-in expected answer
+  is where E5's suite was wrong (a count of 55 for a true 87; an expected title with a stray
+  asterisk).
+
+**Gate:** every case has a set, category, failure modes, provenance, requirements covering every
+rule that applies to it, and no secrets; the standard exists.
 
 ## C7 screen
 
@@ -117,7 +146,18 @@ Per case (M22):
 - a **human read** it.
 
 The screen also replays "do nothing, but claim success". A check that passes only then is grading
-the agent's report, and G10 refuses it. Expect losses: SWE-bench kept 500 of 2,294 tasks. Report
+the agent's report, and G10 refuses it.
+
+When a case has a reference answer (`expected_end_state.output`), write two or three other correct
+wordings of it in `expected_end_state.output_variants` (other number formats: "$1.413M",
+"1,413,000"; other phrasings; another order), and confirm them with the owner like the reference.
+The screen then also checks:
+- **paraphrases pass**: every variant passes every check. A check bound to one wording fails
+  correct answers in real runs (in E5, 6 of a suite's 13 false alarms);
+- **the liar fails**: the reference answer with nothing changed fails, when a change is expected;
+- **a wrong number fails**: the reference answer with every number changed fails. Reported, not
+  blocking: when it passes, nothing checks the answer's numbers. Add a check for the case's
+  `facts-true` requirement. Expect losses: SWE-bench kept 500 of 2,294 tasks. Report
 the drop rate. Unscreened cases never count toward gated numbers (G8).
 
 **Gate:** both machine screens and the human read are recorded for every case, and every drop has
@@ -146,7 +186,22 @@ backend must come from a different family than the agent (G4). Judges run and ar
 the first run, but they count toward pass rates only once they're calibrated in `calibrate`
 (G3).
 
+**Every requirement is decided by a check that runs on the case** (its failure mode listed in the
+case, the check listed under that failure mode), or says why it is `unchecked`. An unchecked
+requirement is allowed and stays visible; C19's triage will show what it costs. `aot-evals
+status` prints, per rule, how many cases it applies to, cite it, and check it: a rule cited
+everywhere and checked in a few cases is the gap to close first.
+
+**Check every fact an answer states.** A false number inside an otherwise right answer (micros
+read as dollars, a wrong percentage, a wrong date) was the one failure no arm of E5 caught. For
+answers in prose, give each case a `facts-true` requirement decided by a grounding check: code
+that extracts each number, total or name from the answer and compares it with values computed
+from the start state, or a judge given the answer and the full records it should rest on, asked
+whether every stated fact is supported. One judge spec can serve every such case; its inputs
+must include the records, not a summary of them.
+
 **Gate:** every failure mode that isn't monitor-only has at least one check file; a side-effect
-code check exists; no check declares or shows reliance on the agent's report. Then
+code check exists; no check declares or shows reliance on the agent's report; every requirement
+names a check that runs on its case or says why it is unchecked. Then
 `aot-evals status`. With judge checks, go to `calibrate` next (C9–C11 do not block a baseline,
 and a baseline gives you items to label). Without them, C9–C11 show `n/a`; go to `run`.
