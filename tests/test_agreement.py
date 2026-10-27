@@ -36,7 +36,8 @@ def _label_all(repo, fail: dict[str, str]) -> None:
             bad = it["case_id"] in fail
             w.writerow({**it, "label": "fail" if bad else "pass", "labeller": "ana",
                         "note": fail.get(it["case_id"], ""), "input": json.dumps(it["input"])})
-    assert repo.cli("agreement", "label", "import", "--csv", str(path)) == 0
+    assert repo.cli("agreement", "label", "import", "--csv", str(path)) == 0  # creates labels/
+    _small_floors(repo)
     # the split is a hash of the run id; pin every label to dev so the gate's dev rules are exercised
     labels = repo.evals / "labels" / "runs.jsonl"
     rows = [json.loads(line) for line in labels.read_text().splitlines()]
@@ -60,7 +61,6 @@ def test_c19_needs_a_baseline_then_labels(make_repo):
 def test_disagreements_are_listed_with_the_note_and_must_be_triaged(make_repo):
     repo = make_repo()
     baseline(repo, break_cases=["book-002"])
-    _small_floors(repo)
     _label_all(repo, {"book-002": "booked the wrong slot", "book-003": "invited the wrong person"})
     repo.cli("agreement")
     res = json.loads((repo.evals / "report" / "agreement.json").read_text())
@@ -79,7 +79,6 @@ def test_disagreements_are_listed_with_the_note_and_must_be_triaged(make_repo):
 def test_a_changed_check_makes_agreement_stale(make_repo):
     repo = make_repo()
     baseline(repo)
-    _small_floors(repo)
     _label_all(repo, {})
     repo.cli("agreement")
     assert not any("stale" in p for p in _gate(repo).problems)

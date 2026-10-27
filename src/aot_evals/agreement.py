@@ -255,6 +255,7 @@ def _record(row: dict, label: bool, labeller: str) -> dict:
 def import_rows(ev: Evals, rows: list[dict], default_labeller: str | None) -> dict:
     added = skipped = 0
     problems = []
+    labels_path(ev).parent.mkdir(parents=True, exist_ok=True)
     for row in rows:
         label = parse_label(row.get("label") or "")
         if label is None:
