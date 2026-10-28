@@ -8,9 +8,21 @@ operational outcome, not a correctness failure.
 from __future__ import annotations
 
 import json
+import os
 import sys
+from pathlib import Path
 
+import pytest
+
+import aot_evals
 from aot_evals.repo import Evals
+
+
+@pytest.fixture(autouse=True)
+def absolute_pythonpath(monkeypatch):
+    # The replay commands run in the fixture repo, where a relative PYTHONPATH (as CI sets) finds nothing.
+    src = str(Path(aot_evals.__file__).resolve().parents[1])
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join(filter(None, [src, os.environ.get("PYTHONPATH")])))
 
 
 def _record_all(repo, broken: set[str], missing: set[str] = frozenset()) -> None:
