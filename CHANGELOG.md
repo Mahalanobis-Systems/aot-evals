@@ -6,12 +6,14 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
-What E5 ("Who tests the tests?") taught us. A suite built and calibrated with aot-evals 0.1.1
-caught 69% of the runs a person failed and passed 81% of the runs a person passed; plain Claude
+What our experiments comparing aot-evals with plain Claude Code taught us. Graded against a
+person's pass or fail on the same recorded runs, a suite built and calibrated with aot-evals 0.1.1
+caught 69% of the runs the person failed and passed 81% of the runs they passed; plain Claude
 Code, given the same 79 requests, wrote suites that did better in all four sessions. Every miss
 traced to a part nobody had checked against a whole run: requirements no check looked at,
 expected answers bound to one wording, code-check bugs, and numbers inside answers that nothing
-read. This release checks the whole.
+read. This release checks the whole. On runs no suite had seen, a suite built with it caught 93%
+of the failures and passed 92% of the good runs, level with the best plain Claude Code suite.
 
 - **C19 agreement**, right after the baseline: a person labels whole runs pass or fail
   (`aot-evals agreement label queue|import`), every labelled run is re-graded from its raw record

@@ -16,7 +16,7 @@ report of success; it is recorded in `claim_sensitive_checks` and refused by G10
 
 Three more screens use the case's reference answer (`expected_end_state.output`) and any other
 correct wordings of it (`expected_end_state.output_variants`), because a check that matches one
-wording fails correct answers written another way (E5: "$1.413M" against "1,413,000"):
+wording fails correct answers written another way (in our experiments: "$1.413M" against "1,413,000"):
 
 - **paraphrases pass**: every variant, with the expected world, passes every check;
 - **the liar fails**: the reference answer with the world unchanged fails at least one check,
@@ -24,11 +24,11 @@ wording fails correct answers written another way (E5: "$1.413M" against "1,413,
   did;
 - **a non-answer fails**: "Done!", or the request echoed back, with nothing changed fails at
   least one check. Unlike do-nothing, this applies when no change is expected: a question whose
-  answer is "that isn't on record" still needs an answer (E5: a bare "Done!" passed every such
+  answer is "that isn't on record" still needs an answer (in our experiments, a bare "Done!" passed every such
   case in two suites). With `--judges`, calibrated judges count in this screen and the liar's;
 - **a wrong number fails**: the reference answer with every number changed fails at least one
   check. Reported, not blocking: it says whether anything checks the answer's numbers, which is
-  where every arm of E5 was blind.
+  where every suite in our experiments was blind.
 
 The screens run the checks against the states written in the case. They do not run the agent.
 """

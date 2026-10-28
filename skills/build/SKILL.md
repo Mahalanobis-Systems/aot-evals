@@ -105,8 +105,8 @@ with the owner before writing cases; the same rules guide labelling (C9, C19).
 write the requirement it implies for this case, concretely ("lists all 28 deals over $100K, or
 says it shows a part and why"; "the follow-up task is attached to the deal and to Ana"), or say
 in `rules_not_applicable` why it doesn't apply. This is the step that catches what a check per
-failure mode misses: E5's calibrated suite missed partial lists, unattached tasks and leftover
-junk because no case said they mattered.
+failure mode misses: in our experiments, a calibrated suite missed partial lists, unattached
+tasks and leftover junk because no case said they mattered.
 
 ```json
 "requirements": [
@@ -125,7 +125,7 @@ junk because no case said they mattered.
 
 - **Derive expected values from the start state** wherever you can (a count, a total, a list of
   ids computed from the seeded records), rather than typing them in. A typed-in expected answer
-  is where E5's suite was wrong (a count of 55 for a true 87; an expected title with a stray
+  is where a suite in our experiments was wrong (a count of 55 for a true 87; an expected title with a stray
   asterisk).
 
 **Gate:** every case has a set, category, failure modes, provenance, requirements covering every
@@ -155,7 +155,7 @@ Every case that expects an answer needs a reference answer, including a question
 answer is "that isn't on record": that is the case where a bare "Done!" slips through, because
 doing nothing leaves the world exactly as expected. The screen then also checks:
 - **paraphrases pass**: every variant passes every check. A check bound to one wording fails
-  correct answers in real runs (in E5, 6 of a suite's 13 false alarms);
+  correct answers in real runs (in our experiments, 6 of one suite's 13 false alarms);
 - **a non-answer fails**: "Done!", or the request echoed back, with nothing changed. This applies
   even when no change is expected. When a judge decides the case, run `aot-evals screen --judges`
   so calibrated judges count (it calls them; say what it costs first);
@@ -198,8 +198,8 @@ status` prints, per rule, how many cases it applies to, cite it, and check it: a
 everywhere and checked in a few cases is the gap to close first.
 
 **Check every fact an answer states.** A false number inside an otherwise right answer (micros
-read as dollars, a wrong percentage, a wrong date) was the one failure no arm of E5 caught. For
-answers in prose, give each case a `facts-true` requirement decided by a grounding check: code
+read as dollars, a wrong percentage, a wrong date) was the one failure no suite in our experiments
+caught, ours or plain Claude Code's. For answers in prose, give each case a `facts-true` requirement decided by a grounding check: code
 that extracts each number, total or name from the answer and compares it with values computed
 from the start state, or a judge given the answer and the full records it should rest on, asked
 whether every stated fact is supported. One judge spec can serve every such case; its inputs

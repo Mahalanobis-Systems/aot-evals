@@ -1,7 +1,8 @@
 """The labelling standard and each case's requirements (C6, C8).
 
-E5 found that a suite whose checks each decide correctly can still miss most of what makes a
-person fail a run, because nobody wrote down what a correct run must do. Checks were derived
+Our experiments comparing aot-evals with plain Claude Code found that a suite whose checks each
+decide correctly can still miss most of what makes a person fail a run, because nobody wrote
+down what a correct run must do. Checks were derived
 from failure modes per category ("the expected change happened"), and nothing asked, case by
 case, whether the list was complete, the task was attached, or the answer's numbers were true.
 

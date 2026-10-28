@@ -110,7 +110,7 @@ tokens: a tokenizer change alone has moved token counts by about 30%.
 Every earlier screen looks at a part: C7 at one case's states, C10 at one judge's narrow
 question. A suite can clear all of them and still pass runs a person would fail, because no check
 looks at what the person failed them for, or fail correct runs because an expected answer only
-matches one wording. In E5 a calibrated suite caught 69% of the failures a person found while
+matches one wording. In our experiments a calibrated suite caught 69% of the failures a person found while
 plain Claude Code caught 73–82%; every miss traced to a part nobody had checked against a whole
 run. C19 measures the whole.
 
