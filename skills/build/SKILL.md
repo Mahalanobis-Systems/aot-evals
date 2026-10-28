@@ -125,8 +125,7 @@ tasks and leftover junk because no case said they mattered.
 
 - **Derive expected values from the start state** wherever you can (a count, a total, a list of
   ids computed from the seeded records), rather than typing them in. A typed-in expected answer
-  is where a suite in our experiments was wrong (a count of 55 for a true 87; an expected title with a stray
-  asterisk).
+  is where a suite in our experiments was wrong (an expected title with a stray asterisk).
 
 **Gate:** every case has a set, category, failure modes, provenance, requirements covering every
 rule that applies to it, and no secrets; the standard exists.
