@@ -5,6 +5,24 @@
   "failure_modes": [
     "meeting-not-booked"
   ],
+  "requirements": [
+    {
+      "id": "meeting-booked",
+      "rule": "writes-right",
+      "says": "the requested meeting exists exactly once at the requested date and time",
+      "checks": [
+        "requested-event-exists"
+      ]
+    },
+    {
+      "id": "nothing-else",
+      "rule": "leaves-the-rest",
+      "says": "no other event is added, moved or removed",
+      "checks": [
+        "no-out-of-scope-changes"
+      ]
+    }
+  ],
   "taxonomy_entries": [
     "schedule-meeting"
   ],

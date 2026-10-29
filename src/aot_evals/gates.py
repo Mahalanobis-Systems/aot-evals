@@ -45,6 +45,9 @@ COMMANDS = [
     ("C10", "calibrate", "calibrate"),
     ("C11", "reliability", "calibrate"),
     ("C12", "baseline", "run"),
+    # C19 runs after the baseline (it grades the baseline's runs) and before any comparison; it is
+    # numbered last so the numbers teams already use stay stable.
+    ("C19", "agreement", "run"),
     ("C13", "compare", "run"),
     ("C14", "coverage", "run"),
     ("C15", "redundancy", "run"),
@@ -126,6 +129,16 @@ def c1(ev: Evals) -> Gate:
     if not (ev.repo_root / str(cwd)).is_dir():
         problems.append(f"agent.yaml: invoke.cwd {cwd!r} is not a directory under the repository "
                         f"root {ev.repo_root} (relative paths start there)")
+    from .replay import records_dir
+
+    if records_dir(a.get("invoke")):
+        # A replay is not the agent running. The end-to-end run can't be shown, so C1 neither
+        # passes nor blocks: the suite grades recorded runs until the agent can run again.
+        if problems:
+            return _gate("C1", problems)
+        return Gate("C1", "not_applicable", info=[
+            f"the agent is replayed from {records_dir(a.get('invoke'))}: recorded runs are graded, the agent "
+            "isn't run. Run it once live (aot-evals run --purpose smoke) to show it runs end to end"])
     ok_run = any((m.get("counts") or {}).get("ok", 0) > 0 for m in ev.runs())
     if not ok_run:
         problems.append("the agent has not yet run end to end from its command "
@@ -321,11 +334,14 @@ def c6(ev: Evals) -> Gate:
         return _gate("C6", [str(e)])
     if not cases:
         return _gate("C6", ["no cases authored"])
-    problems, warnings = [], []
+    from . import requirements as req
+
+    problems, warnings = req.standard_problems(ev), []
+    rules = (req.load_standard(ev) or {}).get("rules") or []
     traces: dict[str, tuple] = {}
     for c in cases:
         p, w = case_problems(ev, c)
-        problems += p
+        problems += p + req.author_problems(ev, c, rules)
         warnings += w
         ref = (c.get("provenance") or {}).get("trace_ref")
         if ref:
@@ -362,6 +378,12 @@ def c7(ev: Evals) -> Gate:
                 why.append("a do-nothing agent passes")
             if s.get("claim_sensitive_checks"):
                 why.append(f"claim-sensitive checks {s['claim_sensitive_checks']}")
+            if s.get("failing_paraphrases"):
+                why.append(f"a correct answer worded differently fails ({s['failing_paraphrases'][0]})")
+            if s.get("liar_fails") is False:
+                why.append("the reference answer with nothing changed passes")
+            if s.get("non_answer_fails") is False:
+                why.append("a non-answer ('Done!') passes")
             problems.append(f"case {c.get('id')}: {'; '.join(why) or 'screen incomplete'} "
                             "(fix it or drop it with a reason)")
     rate = len(dropped) / len(cases)
@@ -402,11 +424,17 @@ def c8(ev: Evals) -> Gate:
     if not side:
         problems.append("no side-effect check: add a failure mode with side_effect: true, "
                         "categories: ['*'] and a code check (nothing changed outside scope)")
+    from . import requirements as req
+
+    for c in ev.cases(include_dropped=False):
+        problems += req.check_problems(ev, c)
     claim = sorted({cid for c in ev.cases(include_dropped=False)
                     for cid in (c.get("screen") or {}).get("claim_sensitive_checks") or []})
     if claim:
         problems.append(f"checks that pass on a bare success claim (G10): {claim}")
-    return _gate("C8", problems)
+    info = [f"rule {r['rule']}: applies to {r['applies']} cases, cited by {r['cited']}, checked in {r['checked']}"
+            for r in req.coverage(ev)]
+    return _gate("C8", problems, info)
 
 
 # ---- C9-C11: judges ---------------------------------------------------------------------------
@@ -547,6 +575,15 @@ def c12(ev: Evals) -> Gate:
     return _gate("C12", problems, [f"baseline {base['run_id']}"])
 
 
+def c19(ev: Evals) -> Gate:
+    from . import agreement
+
+    if not ev.latest_run("baseline"):
+        return _gate("C19", ["needs a baseline to label and grade (C12)"])
+    problems, info = agreement.status(ev)
+    return _gate("C19", problems, info)
+
+
 # ---- C13-C15: suite measurement ------------------------------------------------------------------
 
 def c13(ev: Evals) -> Gate:
@@ -622,7 +659,7 @@ def c18(ev: Evals) -> Gate:
 
 def evaluate(ev: Evals) -> list[Gate]:
     fns = {"C0": c0, "C1": c1, "C2": c2, "C3": c3, "C4": c4, "C5": c5, "C6": c6, "C7": c7,
-           "C8": c8, "C9": c9, "C10": c10, "C11": c11, "C12": c12, "C13": c13, "C14": c14,
+           "C8": c8, "C9": c9, "C10": c10, "C11": c11, "C12": c12, "C19": c19, "C13": c13, "C14": c14,
            "C15": c15, "C18": c18}
     out = []
     for gid, _, _ in COMMANDS:

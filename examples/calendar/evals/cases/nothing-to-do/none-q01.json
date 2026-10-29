@@ -5,6 +5,16 @@
   "failure_modes": [
     "out-of-scope-change"
   ],
+  "requirements": [
+    {
+      "id": "nothing-else",
+      "rule": "leaves-the-rest",
+      "says": "no other event is added, moved or removed",
+      "checks": [
+        "no-out-of-scope-changes"
+      ]
+    }
+  ],
   "taxonomy_entries": [
     "leave-alone"
   ],

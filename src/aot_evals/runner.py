@@ -19,6 +19,7 @@ stdout/stderr per attempt; it is git-ignored, and `trace_ref` points into it.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import platform
@@ -122,10 +123,28 @@ def build_manifest(ev: Evals, run_id: str, purpose: str, k: int, cases: list[dic
                    # env values may be secrets: record the names and a hash, never the values
                    "env_keys": sorted(executor.invoke.get("env") or {}),
                    "env_sha": _env_sha(executor.invoke.get("env"))},
+        "replay": _replay(ev, executor),
         "tool": {"aot_evals": __version__, "python": platform.python_version()},
         "cost_usd": None,
         "counts": None,
     }
+
+
+def _replay(ev: Evals, executor: Executor) -> dict | None:
+    """When recorded runs stand in for the agent: which records, by content."""
+    from .replay import records_dir
+
+    d = records_dir(executor.invoke)
+    if not d:
+        return None
+    path = (executor.cwd / d).resolve()
+    if not path.is_dir():
+        return {"records": d, "sha256": None}
+    h = hashlib.sha256()
+    for f in sorted(p for p in path.glob("*.json") if not p.name.startswith(".")):  # not replay's state file
+        h.update(f.name.encode())
+        h.update(f.read_bytes())
+    return {"records": d, "sha256": h.hexdigest()}
 
 
 def _env_sha(env: dict | None) -> str | None:

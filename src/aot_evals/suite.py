@@ -71,7 +71,9 @@ def versions(ev: Evals, run_ids: list[str] | None = None) -> list[dict]:
     groups: dict[str, list[dict]] = {}
     for m in manifests:
         v = view(m)
-        key = json.dumps({f: v[f] for f in VERSION_FIELDS}, sort_keys=True, default=str)
+        # replays of the same recorded runs are one agent version, whatever else changed
+        key = (json.dumps({"replay": (m.get("replay") or {}).get("sha256")}) if m.get("replay")
+               else json.dumps({f: v[f] for f in VERSION_FIELDS}, sort_keys=True, default=str))
         groups.setdefault(key, []).append(m)
     out = []
     for i, ms in enumerate(groups.values()):

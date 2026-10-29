@@ -27,7 +27,7 @@ from collections import defaultdict
 from . import stats
 from .repo import SETS, Evals
 from .report import BUILD_FIELDS, Context, manifest_view, operational
-from .util import now_iso, write_json
+from .util import load_json, now_iso, write_json
 
 # Declared variable (the part before "=" in `run --variable`) -> manifest fields it may change.
 VARIABLES = {
@@ -327,6 +327,10 @@ def compare(ev: Evals, baseline_runs: list[str], candidate_runs: list[str]) -> d
             reasons.append(f"also regressed beyond budget: {breaches}")
     out["verdict"] = verdict
     out["verdict_reasons"] = reasons
+    from . import agreement
+    probs = agreement.gate_problems(ev, load_json(agreement.result_path(ev)))
+    out["provisional"] = (f"the suite's agreement with a person on whole runs is not established (C19): "
+                          f"{probs[0]}") if probs else None
     return out
 
 
@@ -364,6 +368,8 @@ def render(c: dict) -> str:
     if c.get("refused"):
         lines.append(f"  REFUSED {c['refused']}")
         return "\n".join(lines)
+    if c.get("provisional"):
+        lines.append(f"  PROVISIONAL {c['provisional']}")
 
     def pct(v):
         return "-" if v is None else f"{100 * v:+.1f} pts"

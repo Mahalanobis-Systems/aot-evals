@@ -82,6 +82,30 @@ proxy for structured SaaS APIs, record-and-replay for read-only APIs. Fake only 
 state, and keep fakes and cassettes in `evals/env/`; their hash goes into every run manifest. Where
 it can't, see framework Q5: recorded replay, shadow and canary, online judging.
 
+## Recorded runs: grading without the agent
+
+When the agent can't be run (no sandbox, a retired version, production traces) or the suite is
+built after the runs happened, `aot-evals replay` stands in for the agent and its hooks, so every
+command (screen, run, agreement, compare) works on recorded runs unchanged:
+
+```yaml
+invoke:
+  command: [aot-evals, replay, run, records/]
+  seed: aot-evals replay seed records/
+  observe: aot-evals replay observe records/
+```
+
+Use the CLI's full path in the hooks (`"${CLAUDE_PLUGIN_ROOT}/bin/aot-evals"`, expanded) when an
+older `aot-evals` may be on the PATH: the hooks run in the agent's environment. Under replay, C1 is
+marked not applicable (a replay doesn't show the agent runs), replays of the same records count as
+one agent version (C15), and plane B is not measured.
+
+`records/<case-id>.t<trial>.json` is one recorded run: `{"answer": ..., "world": ...}`, plus
+optional `usage` and `model_ids`. The world is whatever the checks need, recorded at the time:
+the state changes, the tool calls with their arguments and results. `records/<case-id>.start.json`
+is the world before it, if it differs from the case's `start_state`. `--k N` replays trials 0 to
+N-1; a missing record is `no_output`. Record enough: a check can only grade what was recorded.
+
 ## Environment
 
 The agent runs in `invoke.cwd` (relative to the repository root), in the team's own environment:

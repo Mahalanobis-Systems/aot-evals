@@ -29,7 +29,7 @@ decides what leads:
 | Question | Leads with |
 |---|---|
 | "How is the agent doing?" | P1 gates, P3 + P4 side by side, P9 flakiness |
-| "Is this suite any good?" | P1 gates, P5 coverage, P6 discrimination, P13 next actions |
+| "Is this suite any good?" | P1 gates, P14 agreement with a person, P5 coverage, P6 discrimination, P13 next actions |
 | "Why did the candidate regress?" | P7 comparison, the losing cases in P12 |
 | "What does it cost?" | P4 operational, budget breaches, cost per success |
 
@@ -66,7 +66,7 @@ data shows one line saying so.
 | id | Panel | From report.json |
 |---|---|---|
 | P0 | Conditions: agent and commits (flag dirty), every model id declared and observed, harness, k, N per set, regime, exports, dates, total cost | `agent`, `conditions`, `sets`, `runs` |
-| P1 | Gates: every G1–G13, pass/fail/n.a., what each failure blocks. **Above the results** | `gates` |
+| P1 | Gates: every G1–G14, pass/fail/n.a., what each failure blocks. **Above the results** | `gates` |
 | P2 | Validity: task × simulator × judge and the product (M25), plus the MDE per set (M7) | `validity`, `sets.*.mde_at_80_power` |
 | P3 | Correctness by category: pass rate with CI error bars and `pass^k`, ordered by worth, variance band shaded, n, k and set on every row; where `pass^k` is null, show `pass_pow_k_reason` instead of a bare dash; excluded (unscreened) cases greyed beside it | `categories[].pass_rate`, `.pass_pow_k`, `.pass_pow_k_reason`, `.variance_band`, `.excluded` |
 | P4 | Operational by category against budgets: cost per success, p50/p90, cache-hit, errors by outcome code with CI, retries, kills; breaches flagged. **Next to P3, never merged with it** | `categories[].operational` |
@@ -79,6 +79,7 @@ data shows one line saying so.
 | P11 | Online (not yet automated) | `online` |
 | P12 | Case detail: inputs, start and expected state, actual state diff, each check's verdict and detail (for judges: score, reasoning, and whether it `counted`), plane-B counters, trace ref, provenance, screen status | `cases[]` |
 | P13 | Next actions, each with the command that clears it | `next_actions` |
+| P14 | Agreement with a person (C19, M29): catch rate and clean pass rate with intervals, dev and holdout side by side, against their floors; how many disagreements, by cause from `labels/triage.yaml`. With `agreement: null`: "the suite's verdicts have not been checked against a person's (G14)". Place it beside P3: a pass rate means little without it | `agreement` |
 
 ### Rules (docs/method.md §9)
 

@@ -12,7 +12,7 @@ CLI: `"${CLAUDE_PLUGIN_ROOT}/bin/aot-evals"` (also `aot-evals` on PATH while the
 
 ## Rules for everything you write to the owner
 
-- Plain English a ninth grader can follow. No step codes (no C0–C18, gate ids, "Part 3",
+- Plain English a ninth grader can follow. No step codes (no C0–C19, gate ids, "Part 3",
   "Build 2"), no jargon a new engineer wouldn't know.
 - Say what a thing is, not its label: "three booking bugs found on Mar 3", not "BK-101 to
   BK-103"; "look up records", not "read-lookup"; "the reply stopped partway", not "stall";

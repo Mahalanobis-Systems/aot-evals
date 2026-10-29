@@ -144,6 +144,12 @@ different families; System One versus generative is a good pair. The command rep
 **Reliability is not validity.** Two judges agreeing can be a shared error, which is why the
 report gives reliability its own column group and never uses it in place of TPR/TNR.
 
+**Calibrated judges are not a validated suite.** C10 shows each judge answers its own question
+well. It can't show that the questions cover what a person fails runs for: in our experiments
+all seven of a suite's judges cleared their floors and the suite still missed a third of the failures a person found. That is
+C19's job (the `run` skill), on whole runs. A C19 disagreement triaged `judge-error` comes back
+here: add the run's judge input to the judge's labels and iterate on dev.
+
 ## 4. After calibration
 
 - `aot-evals judge apply --judge <id> --run <run>` judges a run made before calibration, or made

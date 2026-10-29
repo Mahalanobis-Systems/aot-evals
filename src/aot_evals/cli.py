@@ -3,7 +3,7 @@
     aot-evals demo [DIR]                a toy agent with a finished suite, to try it in minutes
     aot-evals doctor                    check the environment (paste into bug reports)
     aot-evals init                      create the agent's suite, evals/agents/<agent>/, with templates
-    aot-evals status [--json]           every command gate (C0-C18); the next unmet one
+    aot-evals status [--json]           every command gate (C0-C19); the next unmet one
     aot-evals validate                  every problem and warning, across all gates
     aot-evals import FILE ...           C0: copy an export into evals/data/, record provenance
     aot-evals allocate [--write]        C5: size both case sets, print the arithmetic
@@ -165,7 +165,7 @@ def cmd_screen(args) -> int:
         sys.exit("--read-by records a human read: name the cases read with --case (repeatable), "
                  "or pass --all if NAME really read every case")
     rows = screen_mod.run_screen(ev, case_ids=args.case or None, read_by=args.read_by,
-                                 drop=args.drop, reason=args.reason)
+                                 drop=args.drop, reason=args.reason, judges=args.judges)
     print(f"  {'case':<32} {'read':>5} {'ref':>5} {'noop':>5}  status")
     for r in rows:
         def f(v):
@@ -304,6 +304,82 @@ def cmd_label(args) -> int:
         print(f"  {line}")
     print(labels_mod.render_status(labels_mod.status(ev, spec)))
     return 1 if res["refused"] else 0
+
+
+def cmd_agreement(args) -> int:
+    from pathlib import Path
+
+    from . import agreement as ag
+
+    ev = _evals(args)
+    what = args.what or ["measure"]
+    if what[0] == "label":
+        action = what[1] if len(what) > 1 else "status"
+        if action == "queue":
+            runs = args.run or report_mod.default_runs(ev)
+            if not runs:
+                sys.exit("no runs to sample from; run a baseline first (aot-evals run --purpose baseline)")
+            path, items = ag.make_queue(ev, runs, per_case=args.per_case, n=args.n, seed=args.seed)
+            page = ag.write_page(ev)
+            print(f"wrote {len(items)} runs to {path} (git-ignored)")
+            print(f"label them on the page {page} (git-ignored); then: aot-evals agreement label import --csv FILE")
+            if args.open:
+                _open(page)
+            return 0
+        if action == "page":
+            page = ag.write_page(ev)
+            print(f"wrote {page} (git-ignored)")
+            if args.open:
+                _open(page)
+            return 0
+        if action in ("import", "add"):
+            if action == "import":
+                if not args.csv:
+                    sys.exit("agreement label import needs --csv FILE")
+                res = ag.import_csv(ev, Path(args.csv), args.by, (args.run or [None])[0])
+            else:
+                if not (args.item and args.label and args.by):
+                    sys.exit("agreement label add needs --item, --label pass|fail and --by NAME")
+                res = ag.add(ev, args.item, args.label, args.by, args.note)
+            print(f"added {res['added']} label(s); {res['skipped_unlabelled']} row(s) had no label")
+            for line in res["problems"]:
+                print(f"  {line}")
+            return 1 if res["problems"] else 0
+        if action == "status":
+            labels = ag.load_labels(ev)
+            n_fail = sum(not r["label"] for r in labels)
+            print(f"{len(labels)} whole runs labelled: {n_fail} fail, {len(labels) - n_fail} pass")
+            return 0
+        sys.exit(f"unknown: agreement label {action} (queue, page, import, add, status)")
+    if what[0] == "regrade":
+        if not args.run:
+            sys.exit("agreement regrade needs --run RUN_ID")
+        for rid in args.run:
+            if args.reproduces:
+                r = ag.reproduces(ev, rid)
+                print(f"{rid}: {r['compared']} code-check verdicts compared; "
+                      + ("all reproduce" if not r["differ"] else f"differ: {r['differ']}"))
+                continue
+            rows = ag.regrade(ev, rid, call_judges=args.call_judges)
+            out = ev.p("data", "agreement", f"regrade-{rid}.jsonl")
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text("".join(json.dumps(r) + "\n" for r in rows))
+            counts = {v: sum(r["verdict"] == v for r in rows) for v in ("pass", "fail", None)}
+            print(f"{rid}: {len(rows)} attempts re-graded: {counts['pass']} pass, {counts['fail']} fail, "
+                  f"{counts[None]} no verdict; wrote {out} (git-ignored)")
+        return 0
+    if what[0] != "measure":
+        sys.exit(f"unknown: agreement {what[0]} (measure, label, regrade)")
+    result = ag.measure(ev, call_judges=args.call_judges)
+    print(ag.render(result))
+    print(f"  wrote {ag.result_path(ev)}")
+    return 1 if result["problems"] else 0
+
+
+def cmd_replay(args) -> int:
+    from . import replay
+
+    return replay.main(args.action, args.records)
 
 
 def cmd_calibrate(args) -> int:
@@ -559,7 +635,7 @@ _MILESTONES = {"start": "phase1_started", "discovery-page": "discovery_written",
                "report": "report_built"}
 
 # Commands that never log themselves: reads, and the commands that write the log.
-_UNLOGGED = {"status", "validate", "log", "activity", "checkpoint", "start", "discovery-page", "snapshot",
+_UNLOGGED = {"replay", "status", "validate", "log", "activity", "checkpoint", "start", "discovery-page", "snapshot",
              "doctor", "demo", "telemetry", "benchmarks"}
 # Commands long enough to log their start, so the activity page shows them in progress.
 _LOG_START = {"run", "calibrate", "reliability", "judge"}
@@ -624,7 +700,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("init", help="create the agent's suite (evals/agents/AGENT/) with templates"
                    ).set_defaults(fn=cmd_init)
 
-    s = sub.add_parser("status", help="command gates C0-C18 and the next unmet one")
+    s = sub.add_parser("status", help="command gates C0-C19 and the next unmet one")
     s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_status)
 
@@ -655,6 +731,8 @@ def main(argv: list[str] | None = None) -> int:
     s.set_defaults(fn=cmd_allocate)
 
     s = sub.add_parser("screen", help="C7: screen cases")
+    s.add_argument("--judges", action="store_true",
+                   help="let calibrated judges count in the non-answer and liar screens (calls cost money)")
     s.add_argument("--case", action="append", help="limit to this case id (repeatable)")
     s.add_argument("--read-by", help="record that NAME read the selected cases (a human read)")
     s.add_argument("--all", action="store_true", help="with --read-by: NAME read every case")
@@ -697,6 +775,31 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--note")
     s.add_argument("--open", action="store_true", help="queue, page: open the labelling page")
     s.set_defaults(fn=cmd_label)
+
+    s = sub.add_parser("agreement", help="C19: the suite's verdict on whole runs against a person's")
+    s.add_argument("what", nargs="*", help="(nothing): measure; label queue|page|import|add|status; regrade")
+    s.add_argument("--run", action="append",
+                   help="label queue, regrade: these runs (default: latest baseline); label import: attach "
+                   "rows that give only case_id and trial to this run")
+    s.add_argument("--per-case", type=int, default=1, help="label queue: runs per case (default 1)")
+    s.add_argument("--n", type=int, help="label queue: at most this many runs")
+    s.add_argument("--seed", type=int, default=0)
+    s.add_argument("--csv", help="label import: the downloaded CSV")
+    s.add_argument("--by", help="labeller name")
+    s.add_argument("--item", help="label add: run item id (RUN/CASE.tN.aM)")
+    s.add_argument("--label", help="label add: pass or fail")
+    s.add_argument("--note")
+    s.add_argument("--call-judges", action="store_true",
+                   help="call judges with no recorded verdict for this judge version (costs money)")
+    s.add_argument("--reproduces", action="store_true",
+                   help="regrade: check that code checks give the run's recorded verdicts on its raw records")
+    s.add_argument("--open", action="store_true", help="label queue, page: open the page")
+    s.set_defaults(fn=cmd_agreement)
+
+    s = sub.add_parser("replay", help="act as the agent and its hooks by replaying recorded runs (offline grading)")
+    s.add_argument("action", choices=["run", "seed", "observe"])
+    s.add_argument("records", help="directory of <case-id>.t<trial>.json records")
+    s.set_defaults(fn=cmd_replay)
 
     s = sub.add_parser("calibrate", help="C10: measure a judge's backends on its labels")
     s.add_argument("--judge", required=True)

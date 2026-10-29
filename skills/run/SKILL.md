@@ -1,6 +1,6 @@
 ---
 name: run
-description: Commands C12-C17 of aot-evals - run the baseline k=3-5 times with per-trial outcomes and plane-B counters, read the variance band, run the operational sweep (E14) against budgets, compare a candidate with a paired test (gains, losses, McNemar, trade verdicts), audit coverage against the external taxonomy, and measure redundancy with a prune proposal; drift and online evaluation are guidance only for now. Use when status reports C12 unmet, after any prompt/skill/tool/model/harness change, or when someone asks whether a change made the agent better.
+description: Commands C12-C17 and C19 of aot-evals - run the baseline k=3-5 times with per-trial outcomes and plane-B counters, read the variance band, check the suite's verdicts on whole runs against a person's (C19 agreement: catch and clean pass rates, every disagreement triaged), run the operational sweep (E14) against budgets, compare a candidate with a paired test (gains, losses, McNemar, trade verdicts), audit coverage against the external taxonomy, and measure redundancy with a prune proposal; drift and online evaluation are guidance only for now. Use when status reports C12 unmet, after any prompt/skill/tool/model/harness change, or when someone asks whether a change made the agent better.
 user-invocable: false
 ---
 
@@ -42,6 +42,8 @@ produced. Work so those pages tell the story, and stop wherever the person shoul
 Checkpoints in this skill:
 - **Before the baseline**: the run's size (cases × k), its likely cost, and whether judges run.
 - **C12**: the baseline per category, the variance band, and plane B against budgets.
+- **C19**: the whole-run labelling page is ready; stop until the labels are in. Then the
+  agreement table and every disagreement with its proposed cause, for the owner to confirm.
 - **C13**: gains and losses, and the verdict.
 - **C14**: the empty coverage cells, for the owner to triage.
 - **C15**: the prune proposal, for the owner to decide case by case.
@@ -102,6 +104,54 @@ Plane B is counters, not judgements:
 An operational regression is a finding even when correctness hasn't changed. A cost jump at an
 unchanged pass rate usually means a prompt-prefix edit broke the cache. Compare dollars, not
 tokens: a tokenizer change alone has moved token counts by about 30%.
+
+## C19 agreement: does the suite fail what a person would fail?
+
+Every earlier screen looks at a part: C7 at one case's states, C10 at one judge's narrow
+question. A suite can clear all of them and still pass runs a person would fail, because no check
+looks at what the person failed them for, or fail correct runs because an expected answer only
+matches one wording. In our experiments a calibrated suite caught 69% of the failures a person found while
+plain Claude Code caught 73–82%; every miss traced to a part nobody had checked against a whole
+run. C19 measures the whole.
+
+```bash
+aot-evals agreement label queue --open          # one run per case from the latest baseline
+# the person labels each whole run pass/fail with a note, on the page; then Download CSV
+aot-evals agreement label import --csv <file> --by <name>
+aot-evals agreement                             # re-grade the labelled runs; rates and disagreements
+aot-evals agreement regrade --reproduces --run <baseline>   # can recorded runs be re-graded?
+```
+
+- **Who labels.** Only a person, from scratch: the page shows the request, the answer and what
+  changed, never the checks or the expected state. The standard (`labels/standard.md`) is the
+  guidance; when the person makes a new ruling, add it there.
+- **How many.** At least 60 runs with 15 of each kind (`labels/floors.yaml` changes this). One
+  per case first; add a second trial per case where the agent's runs differ.
+- **Re-grading.** Labels are about the agent's runs, not the suite, so they outlive suite
+  versions: `aot-evals agreement` re-grades every labelled run from its raw record with the suite
+  as it is now. Judges reuse recorded verdicts for their current version; `--call-judges` calls
+  them for the rest (costs money; say so first). Run `regrade --reproduces` once: a code check
+  that gives a different verdict on the raw record reads something besides (start, end, case),
+  such as the live system, and must be fixed before its verdicts can be trusted.
+- **Every dev disagreement gets a cause** in `labels/triage.yaml`:
+
+  ```yaml
+  <run>/<case>.t3.a0: {cause: missing-requirement, note: "no check that the list is complete"}
+  ```
+
+  Causes: `missing-requirement` (add the requirement and its check: C6, C8),
+  `wrong-expectation` (fix the case: C6), `check-bug` (C8), `judge-error` (iterate the judge on
+  its dev errors: C10), `out-of-scope` or `accepted`, each with why. Propose a cause for each,
+  then confirm them with the owner at the checkpoint. Fix the suite, not the labels: a label
+  changes only when the person changes their mind.
+- **Holdout.** One run in five is held out by a hash of its id. Iterate on dev disagreements only;
+  report holdout once the dev floors are met. If holdout is much worse, the fixes were fitted to
+  dev. Label a fresh batch before claiming anything new.
+
+**Gate:** enough labels of both kinds, a measurement current for this suite and these labels, dev
+catch rate and clean pass rate at or above their floors (85% by default), and every dev
+disagreement triaged. Until then the report fails G14, and every comparison is marked
+provisional.
 
 ## C13 compare (E2): "did my change help?"
 

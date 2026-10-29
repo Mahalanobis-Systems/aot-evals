@@ -1,6 +1,6 @@
 ---
 name: status
-description: Phase 2 entry point, after discover has written a discovery report (evals/agents/<agent>/discovery.md); with no discovery report, load discover instead. Designing, building, measuring and iterating a production agent's evals. Reads the state of the repo's evals/ directory, reports which command gate (C0-C18) is unmet, and routes to the skill that clears it (scope, build, calibrate, run, report). Use when a team wants evals for an agent, asks "where are we with our evals", "what's next", or "is this suite any good", or when any other aot-evals skill is unsure where to start.
+description: Phase 2 entry point, after discover has written a discovery report (evals/agents/<agent>/discovery.md); with no discovery report, load discover instead. Designing, building, measuring and iterating a production agent's evals. Reads the state of the repo's evals/ directory, reports which command gate (C0-C19) is unmet, and routes to the skill that clears it (scope, build, calibrate, run, report). Use when a team wants evals for an agent, asks "where are we with our evals", "what's next", or "is this suite any good", or when any other aot-evals skill is unsure where to start.
 ---
 
 # status
@@ -20,7 +20,7 @@ team's project.
 ## 1. Read the state, publish it, and stop
 
 ```bash
-aot-evals status            # each gate C0–C18 and the next unmet one
+aot-evals status            # each gate C0–C19 and the next unmet one
 aot-evals validate          # every problem across all gates
 ```
 
@@ -83,7 +83,7 @@ Every skill below follows this pattern. Each one lists its own checkpoints.
 | C0–C4 | `scope` | import, inventory, taxonomy, categorize, decompose |
 | C5–C8 | `build` | allocate, author, screen, checks |
 | C9–C11 | `calibrate` | label, calibrate, reliability |
-| C12–C17 | `run` | baseline, compare, coverage, redundancy, drift, online (C16–C17 are guidance only for now) |
+| C12, C19, C13–C17 | `run` | baseline, agreement (C19 comes right after the baseline), compare, coverage, redundancy, drift, online (C16–C17 are guidance only for now) |
 | C18 | `report` | the report |
 
 Once the person replies to the first checkpoint, load the skill that clears the next unmet gate
@@ -117,7 +117,7 @@ Two exceptions to the order:
 
 ## 4. The loop
 
-C3–C18 repeat. Two events force re-entry:
+C3–C19 repeat. Two events force re-entry:
 - a **prompt rewrite**: most of the hardest cases can change, so re-derive the hard set and
   re-run the baseline;
 - a **shift in category mix**: re-open C3 (shares) and C5 (allocation).
