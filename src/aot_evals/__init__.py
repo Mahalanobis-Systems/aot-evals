@@ -1,3 +1,3 @@
 """aot-evals: design, build, measure and iterate an agent's evals (see docs/method.md)."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
