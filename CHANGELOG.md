@@ -6,6 +6,8 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+## 0.4.0 — 2026-10-29
+
 What our experiments comparing aot-evals with plain Claude Code taught us. Graded against a
 person's pass or fail on the same recorded runs, a suite built and calibrated with aot-evals 0.1.1
 caught 69% of the runs the person failed and passed 81% of the runs they passed; plain Claude
