@@ -6,6 +6,8 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+## 0.4.1 — 2026-10-30
+
 - **The method as a download.** Each release now attaches `aot-evals-method-<version>.zip`, the
   method, process, practice findings, benchmark catalog and templates as plain files to read or
   hand to any coding agent without installing the plugin, and `evals.json`, the same as data
