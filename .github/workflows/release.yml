@@ -1,7 +1,8 @@
 name: Release
 
 # When a version bump (scripts/release.py) lands on main, tag that commit
-# aot-evals--v<version> and publish a GitHub release with its changelog section. The
+# aot-evals--v<version> and publish a GitHub release with its changelog section, evals.json
+# (the method as data, which the website imports) and the method's zip. The
 # marketplace entry installs the plugin from that tag, so users get the release only once the
 # tag exists. Nothing happens when the tag already exists, or while the repository is private
 # (so the pre-launch history never gets a release tag).
@@ -22,6 +23,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
       - name: Read the version
         id: version
         run: |
@@ -41,9 +43,11 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
+          uv run --no-project --with pyyaml python3 scripts/build_site.py --out dist
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "${TAG}" -m "aot-evals ${VERSION}"
           git push origin "${TAG}"
           python3 scripts/release.py --notes "${VERSION}" > notes.md
-          gh release create "${TAG}" --title "aot-evals ${VERSION}" --notes-file notes.md
+          gh release create "${TAG}" --title "aot-evals ${VERSION}" --notes-file notes.md \
+            dist/evals.json "dist/aot-evals-method-${VERSION}.zip"

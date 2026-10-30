@@ -88,5 +88,17 @@ unreleased work on `main` never reaches users.
    aot-evals@aot-evals` (then a restart), or automatically if they turned on auto-update for
    the marketplace.
 
+The release also attaches the method as published files, built by `scripts/build_site.py`:
+`evals.json` (the method, process, practice findings, benchmark catalog, situations and
+templates as data, which mahalsystems.ai imports) and `aot-evals-method-<version>.zip` (the same
+as plain files, to download and read without the plugin). The commands, gates, measurements,
+experiments and panels are parsed from the tables in docs/method.md, so keep their columns as
+they are; `tests/test_build_site.py` fails if a table no longer parses. To see what a release
+will publish:
+
+```bash
+uv run --no-project --with pyyaml python3 scripts/build_site.py   # writes dist/
+```
+
 If the workflow fails, fix the cause and re-run it from the Actions tab (it skips a tag that
 already exists). Never move or delete a published tag: release a new patch version instead.
