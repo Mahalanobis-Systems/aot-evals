@@ -195,6 +195,7 @@ def cmd_run(args) -> int:
         given = [flag for flag, v in (("--purpose", args.purpose), ("--k", args.k),
                                       ("--case", args.case), ("--category", args.category),
                                       ("--question", args.question), ("--variable", args.variable),
+                                      ("--model", args.model),
                                       ("--label", args.label), ("--force", args.force)) if v not in (None, False)]
         if given:
             sys.exit(f"refused: --resume carries on the run as its manifest recorded it; drop "
@@ -209,6 +210,8 @@ def cmd_run(args) -> int:
     args.k = 1 if args.k is None else args.k
     upto = "C1" if args.purpose == "smoke" else "C12"
     forced = _refuse_unless(ev, upto, args.force)
+    if args.model and args.purpose == "candidate" and not args.variable:
+        args.variable = f"model={args.model}"
     if args.purpose == "candidate" and not args.variable and not args.force:
         sys.exit("refused: a candidate run declares its one independent variable, e.g. --variable "
                  "model=claude-haiku-4-5 or --variable prompt=v7 (C13, G7). Kinds: "
@@ -217,7 +220,7 @@ def cmd_run(args) -> int:
         sys.exit("refused: a baseline needs k >= 3 to measure variance (C12, M5); pass --k 3..5")
     m = runner_mod.run(ev, purpose=args.purpose, k=args.k, case_ids=args.case or None,
                        categories=args.category or None, variable=args.variable,
-                       label=args.label, adhoc_question=args.question,
+                       label=args.label, adhoc_question=args.question, model=args.model,
                        log=_progress(ev, journal.command_gate("run", args.purpose)), forced=forced,
                        judges=not args.no_judges, pause_every=args.pause_every,
                        pause_seconds=args.pause_seconds, stop_after=args.stop_after)
@@ -752,6 +755,10 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--question", help="smoke only: run one ad-hoc trigger before any case exists")
     s.add_argument("--variable", help="the declared independent variable, e.g. 'model=claude-haiku-4-5'")
     s.add_argument("--label", help="suffix for the run id")
+    s.add_argument("--model", help="pin the agent's model for this run: overrides agent.yaml "
+                   "invoke.model, reaches the agent as stdin `model` and the {model} placeholder, "
+                   "and is recorded in the manifest; a candidate with no --variable declares "
+                   "model=MODEL")
     s.add_argument("--no-judges", action="store_true", help="run code checks only (judges cost money)")
     s.add_argument("--pause-every", type=int, default=0, metavar="N",
                    help="pause after every N cases, for a rate-limited agent runtime (default: never)")

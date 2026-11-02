@@ -182,7 +182,9 @@ Rules:
   excluded, so committing a run or a label is never an agent change) and this suite's commit, every
   model id, harness, fakes, k, total cost, and whether the run was isolated or saw the eval files
   (§4, C12). Counts, cost and observed models are recomputed from `outcomes.jsonl` when the run
-  ends. A resumed run lists each resume under `resumed` (`at`, `pairs_done_before`). Two runs whose manifests differ on any field other than the declared independent
+  ends. A resumed run lists each resume under `resumed` (`at`, `pairs_done_before`). A run
+  started with `--model <id>` records it as `invoke.model`; the agent receives it as `model`, a
+  candidate without `--variable` declares `model=<id>`, and a resume keeps it. Two runs whose manifests differ on any field other than the declared independent
   variable are not compared (G7).
 - **Every case has a `set`**: `error_finding` or `quality_estimate`. There is no default.
 - **Every case has `requirements`**: what a correct run of it must do, each citing a rule of

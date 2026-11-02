@@ -120,6 +120,8 @@ def build_manifest(ev: Evals, run_id: str, purpose: str, k: int, cases: list[dic
         "invoke": {**{key: executor.invoke.get(key) for key in
                       ("command", "cwd", "timeout", "setup", "reset", "reset_scope", "seed",
                        "observe", "max_attempts", "isolate")},
+                   # only when set, so manifests from before it was recorded still compare
+                   **({"model": executor.invoke["model"]} if executor.invoke.get("model") else {}),
                    # env values may be secrets: record the names and a hash, never the values
                    "env_keys": sorted(executor.invoke.get("env") or {}),
                    "env_sha": _env_sha(executor.invoke.get("env"))},
@@ -194,7 +196,7 @@ def _hash_files(paths: list[Path], base: Path) -> str | None:
 def run(ev: Evals, *, purpose: str, k: int, case_ids: list[str] | None = None,
         categories: list[str] | None = None, variable: str | None = None,
         label: str | None = None, adhoc_question: str | None = None,
-        log=print, forced: list[str] | None = None, judges: bool = True,
+        model: str | None = None, log=print, forced: list[str] | None = None, judges: bool = True,
         pause_every: int = 0, pause_seconds: float = 900, stop_after: int = 5,
         sleep=time.sleep) -> dict:
     """Run every case k times. `pause_every` N cases, wait `pause_seconds` (pacing for a
@@ -204,6 +206,8 @@ def run(ev: Evals, *, purpose: str, k: int, case_ids: list[str] | None = None,
     if purpose not in PURPOSES:
         raise ValueError(f"purpose must be one of {PURPOSES}")
     agent = ev.agent()
+    if model:  # --model: this run only; agent.yaml is untouched
+        agent = {**agent, "invoke": {**(agent.get("invoke") or {}), "model": model}}
     invoke = agent.get("invoke") or {}
     Executor(invoke, ev.repo_root)  # validate agent.yaml before copying anything
     isolated = isolation.make_copy(ev, purpose) if invoke.get("isolate") else None
@@ -276,6 +280,8 @@ def resume(ev: Evals, run_id: str, *, log=print, judges: bool = True, pause_ever
                          f"judges; resume it {'without' if m['judges_enabled'] else 'with'} --no-judges")
     agent = ev.agent()
     invoke = agent.get("invoke") or {}
+    if (m.get("invoke") or {}).get("model"):  # a --model run carries on with the same model
+        invoke = {**invoke, "model": m["invoke"]["model"]}
     Executor(invoke, ev.repo_root)  # validate agent.yaml before copying anything
     by_id = {c.get("id"): c for c in ev.cases(include_dropped=False)}
     gone = [i for i in ids if i not in by_id]

@@ -28,6 +28,10 @@ The command receives one JSON object on stdin, then stdin closes:
 the remaining fields of the case. An agent that already has a CLI can use `{question}`, `{model}`,
 `{timeout}`, `{case_id}` and `{trial}` placeholders in `invoke.command` and ignore stdin.
 
+`model` is `invoke.model` from `agent.yaml`, or empty when unset. `aot-evals run --model <id>`
+overrides it for one run without editing `agent.yaml`. An agent that honours `model` can then be
+measured on another model, such as a cheaper one, a local one or a fine-tune, with the same suite.
+
 ## stdout: the result
 
 The command prints exactly one JSON object to stdout. Anything printed before it is ignored.
