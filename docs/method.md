@@ -147,7 +147,10 @@ evals/agents/<agent>/
   cases/<category>/<case-id>.json   # frozen inputs, start state, trigger, expected end state, set, provenance,
                                     #   requirements (what a correct run must do, each with its checks)
   labels/standard.md         # the labelling standard: rules a person applies, with the categories each applies to
-  labels/runs.jsonl          # C19: whole-run human labels (label and note; no agent output)
+  labels/runs.jsonl          # C19: whole-run human labels, one line per (run, labeller); no agent output
+  labels/rulings.jsonl       # §4.2: the verdict on a run its labellers disagreed on
+  labels/proposals.yaml      # §4.2: rules proposed from rulings, accepted or declined by the owner
+  labels/drafts/             # §4.2: cases a grader drafted, waiting for an engineer
   labels/triage.yaml         # C19: a cause for each disagreement between the suite and a person
   labels/floors.yaml         # optional: C19's floors (min_catch, min_clean, min_runs, min_each)
   checks/
@@ -307,7 +310,44 @@ finished baseline and names each change with its short path back:
 | The labelling standard changed (a ruling became a rule) | the labels the rule could flip | recheck those labels, then re-grade |
 | Labels added | the measured agreement | measure it again |
 
-An uncommitted agent is named too: a run of it can't be compared (G7).
+An uncommitted agent is named too: a run of it can't be compared (G7). When the agent's
+current version has already run as a candidate and been compared, the step is to decide: have
+a person label only the runs whose verdict moved, then run it as the new baseline if it ships.
+
+### 4.2 The bench of graders and the grader application
+
+`aot-evals serve` starts the grader application: a local web page, served from the suite, for
+the Judge phase. It binds to 127.0.0.1 and needs the session token in the link it prints;
+`&labeller=NAME` on that link gives each grader their own. Everything it does writes the suite's
+own files, which are reviewed and committed like any other change:
+
+| What a grader does | Where it is written |
+|---|---|
+| Labels whole runs pass or fail, with a note, blind to the checks, the expected state and other people's labels | `labels/runs.jsonl`, one line per (run, labeller) |
+| Settles a run two labellers disagree on | `labels/rulings.jsonl` |
+| Gives a cause to a disagreement between the suite and a person | `labels/triage.yaml` |
+| Accepts an answer the suite failed as another correct wording | the case's `expected_end_state.output_variants`; the case is screened again |
+| Proposes a rule from a pattern of rulings; the owner accepts or declines it | `labels/proposals.yaml`; an accepted rule joins `labels/standard.md` |
+| Labels items for a judge, and recalibrates it (confirming the cost of any new calls) | `checks/judge/<id>.labels.jsonl`, `<id>.calibration.json` |
+| Drafts a new case in the shape of an existing one | `labels/drafts/<id>.json`, until an engineer finishes it |
+
+Rules:
+
+- **Several people label the same run, blind.** Each labeller's latest label is kept. Where all
+  of a run's labellers agree, that is its verdict; where they differ, it has no verdict until
+  someone rules, and C19 stays open while any such run is unruled. Agreement between each pair of
+  labellers (share agreed and Cohen's κ) is reported beside the suite's agreement with people.
+- **Queues are per labeller.** A new labeller starts with up to five runs whose answer is
+  settled (a ruling, or two people agreeing) and sees the settled answer after each label. After
+  that, one run in four is one someone else labelled, so agreement between people can be measured,
+  and the rest are runs nobody has labelled, one per case first. After a change, the queue can be
+  limited to the cases whose verdict moved (`aot-evals agreement label queue --changed`).
+- **Re-grading is offline.** The application re-grades the labelled runs from their recorded raw
+  records with the suite as it is now: no agent runs and no judge calls.
+- **An accepted wording is screened.** Every accepted wording must pass every check (C7). If a
+  check still rejects it, the disagreement is triaged as a check bug for an engineer.
+- **The engineering inbox** lists what only engineering can do: triaged disagreements whose cause
+  is a fix to a case or check, drafted cases, and changes that need the agent run.
 
 ---
 

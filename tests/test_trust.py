@@ -93,7 +93,7 @@ def test_changes_since_the_baseline_name_the_short_path(make_repo):
     a = repo.yaml("agent.yaml")
     a["invoke"]["env"]["AGENT_BREAK"] = "book-002"
     repo.write_yaml("agent.yaml", a)
-    assert any(c["kind"] == "agent" and "env_sha" in c["what"] for c in trust.changes(ev))
+    assert any(c["kind"] == "agent" and "environment variables" in c["what"] for c in trust.changes(ev))
     a["invoke"]["env"].pop("AGENT_BREAK")
     repo.write_yaml("agent.yaml", a)
 

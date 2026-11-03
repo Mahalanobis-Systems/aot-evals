@@ -9,6 +9,7 @@
     aot-evals allocate [--write]        C5: size both case sets, print the arithmetic
     aot-evals screen [--read-by NAME]   C7: reference / do-nothing / claim screens per case
     aot-evals run --purpose P --k N     C1 smoke, C12 baseline, candidate runs
+    aot-evals serve [--open]            the grader application: label runs, rule, triage, rules, judges
     aot-evals label queue|page|import|add|status   C9: human labels per judge (page: label in a browser)
     aot-evals calibrate --judge ID      C10 / E3 / E5: TPR/TNR per backend on the labels
     aot-evals reliability --judge ID    C11 / E4: self-consistency and cross-family agreement
@@ -311,6 +312,14 @@ def cmd_label(args) -> int:
     return 1 if res["refused"] else 0
 
 
+def cmd_serve(args) -> int:
+    from . import serve as serve_mod
+
+    ev = _evals(args)
+    serve_mod.serve(ev, host=args.host, port=args.port, open_browser=args.open)
+    return 0
+
+
 def cmd_agreement(args) -> int:
     from pathlib import Path
 
@@ -321,10 +330,26 @@ def cmd_agreement(args) -> int:
     if what[0] == "label":
         action = what[1] if len(what) > 1 else "status"
         if action == "queue":
-            runs = args.run or report_mod.default_runs(ev)
+            only = None
+            if args.changed:
+                from . import bench
+
+                cand = bench.label_runs(ev)[1:]
+                if not cand:
+                    sys.exit("--changed needs a candidate run after the baseline, compared with it "
+                             "(aot-evals run --purpose candidate ...; aot-evals compare)")
+                only = set(bench.changed_cases(ev))
+                if not only:
+                    sys.exit("no case's verdict moved in the latest comparison: nothing to label "
+                             "(or run aot-evals compare first)")
+                runs = args.run or cand
+                print(f"{len(only)} case(s) whose verdict moved: {', '.join(sorted(only)[:10])}")
+            else:
+                runs = args.run or report_mod.default_runs(ev)
             if not runs:
                 sys.exit("no runs to sample from; run a baseline first (aot-evals run --purpose baseline)")
-            path, items = ag.make_queue(ev, runs, per_case=args.per_case, n=args.n, seed=args.seed)
+            path, items = ag.make_queue(ev, runs, per_case=args.per_case, n=args.n, seed=args.seed,
+                                        only_cases=only)
             page = ag.write_page(ev)
             print(f"wrote {len(items)} runs to {path} (git-ignored)")
             print(f"label them on the page {page} (git-ignored); then: aot-evals agreement label import --csv FILE")
@@ -353,9 +378,28 @@ def cmd_agreement(args) -> int:
         if action == "status":
             labels = ag.load_labels(ev)
             n_fail = sum(not r["label"] for r in labels)
-            print(f"{len(labels)} whole runs labelled: {n_fail} fail, {len(labels) - n_fail} pass")
+            print(f"{len(labels)} whole runs with a verdict: {n_fail} fail, {len(labels) - n_fail} pass")
+            for pair in ag.labeller_agreement(ev):
+                k = "n/a" if pair["kappa"] is None else f"{pair['kappa']:.2f}"
+                print(f"  {' & '.join(pair['labellers'])}: {pair['agree']}/{pair['n']} agreed, κ {k}")
+            dis = ag.disputes(ev)
+            if dis:
+                print(f"{len(dis)} run(s) where labellers disagree, waiting for a ruling "
+                      "(aot-evals agreement rule --item ID --label pass|fail --by NAME --note WHY):")
+                for d in dis[:10]:
+                    who = ", ".join(f"{x['labeller']} {'pass' if x['label'] else 'fail'}" for x in d["labels"])
+                    print(f"  {d['item_id']}: {who}")
             return 0
         sys.exit(f"unknown: agreement label {action} (queue, page, import, add, status)")
+    if what[0] == "rule":
+        from .labels import parse_label
+
+        lab = parse_label(args.label or "")
+        if not (args.item and lab is not None and args.by):
+            sys.exit("agreement rule needs --item RUN/CASE.tN.aM, --label pass|fail and --by NAME")
+        rec = ag.add_ruling(ev, args.item, lab, args.by, args.note or "")
+        print(f"ruled {rec['item_id']} {'pass' if rec['label'] else 'fail'} ({rec['by']})")
+        return 0
     if what[0] == "regrade":
         if not args.run:
             sys.exit("agreement regrade needs --run RUN_ID")
@@ -641,7 +685,7 @@ _MILESTONES = {"start": "phase1_started", "discovery-page": "discovery_written",
 
 # Commands that never log themselves: reads, and the commands that write the log.
 _UNLOGGED = {"replay", "status", "validate", "log", "activity", "checkpoint", "start", "discovery-page", "snapshot",
-             "doctor", "demo", "telemetry", "benchmarks"}
+             "doctor", "demo", "telemetry", "benchmarks", "serve"}
 # Commands long enough to log their start, so the activity page shows them in progress.
 _LOG_START = {"run", "calibrate", "reliability", "judge"}
 
@@ -787,7 +831,7 @@ def main(argv: list[str] | None = None) -> int:
     s.set_defaults(fn=cmd_label)
 
     s = sub.add_parser("agreement", help="C19: the suite's verdict on whole runs against a person's")
-    s.add_argument("what", nargs="*", help="(nothing): measure; label queue|page|import|add|status; regrade")
+    s.add_argument("what", nargs="*", help="(nothing): measure; label queue|page|import|add|status; rule; regrade")
     s.add_argument("--run", action="append",
                    help="label queue, regrade: these runs (default: latest baseline); label import: attach "
                    "rows that give only case_id and trial to this run")
@@ -804,7 +848,17 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--reproduces", action="store_true",
                    help="regrade: check that code checks give the run's recorded verdicts on its raw records")
     s.add_argument("--open", action="store_true", help="label queue, page: open the page")
+    s.add_argument("--changed", action="store_true",
+                   help="label queue: only cases whose verdict moved between the baseline and the latest "
+                   "compared candidate, from the candidate run")
     s.set_defaults(fn=cmd_agreement)
+
+    s = sub.add_parser("serve", help="the grader application: label runs, rulings, triage, rules, judges")
+    s.add_argument("--host", default="127.0.0.1",
+                   help="address to listen on (default 127.0.0.1; 0.0.0.0 lets others on the network in)")
+    s.add_argument("--port", type=int, default=8765, help="port (default 8765; 0 picks a free one)")
+    s.add_argument("--open", action="store_true", help="open it in the default browser")
+    s.set_defaults(fn=cmd_serve)
 
     s = sub.add_parser("replay", help="act as the agent and its hooks by replaying recorded runs (offline grading)")
     s.add_argument("action", choices=["run", "seed", "observe"])

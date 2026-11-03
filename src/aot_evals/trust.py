@@ -44,6 +44,10 @@ PATHS = {
     "standard": ["Recheck the labels the changed rules could flip, then aot-evals agreement."],
     "labels": ["Measure agreement again: aot-evals agreement."],
     "candidate": ["Compare it with the baseline: aot-evals compare."],
+    "adopt": ["Have a person label the runs whose verdict moved: aot-evals agreement label queue --changed "
+              "(or Label runs › Only what the last change moved, in aot-evals serve).",
+              "If the change ships, run it as the new baseline: aot-evals run --purpose baseline --k 5. "
+              "If not, put the agent back."],
 }
 
 
@@ -133,25 +137,22 @@ def changes(ev: Evals) -> list[dict]:
     def add(kind: str, what: str) -> None:
         out.append({"kind": kind, "what": what, "path": PATHS[kind]})
 
-    invoke = ev.agent().get("invoke") or {}
-    cwd = (ev.repo_root / str(invoke.get("cwd", "."))).resolve()
-    g = git_commit_info(cwd, exclude=ev.evals_dir) if cwd.is_dir() else {"commit": None, "dirty": None}
-    if g["commit"] and base.get("agent_commit") and g["commit"] != base["agent_commit"]:
-        add("agent", f"the agent changed (commit {base['agent_commit'][:8]} → {g['commit'][:8]})")
-    if g["dirty"]:
+    agent_diff = _agent_diff(ev, base)
+    if agent_diff["dirty"]:
         add("agent-uncommitted", "the agent has uncommitted changes")
-    base_invoke = base.get("invoke") or {}
-    if (invoke.get("model") or None) != (base_invoke.get("model") or None):
-        add("agent", f"the agent's model setting changed ({base_invoke.get('model')} → {invoke.get('model')})")
-    else:
-        from .runner import _env_sha
+    if agent_diff["what"]:
+        # The current version may already have run as a candidate: then the step is to decide.
+        from .compare import latest_for
 
-        now_invoke = {"command": invoke.get("command"), "cwd": invoke.get("cwd"),
-                      "env_sha": _env_sha(invoke.get("env"))}
-        then = {k: base_invoke.get(k) for k in now_invoke}
-        if then != now_invoke and any(then.values()):
-            what = ", ".join(k for k in now_invoke if now_invoke[k] != then[k])
-            add("agent", f"how the agent is invoked changed in agent.yaml ({what})")
+        cand = next((m for m in reversed(ev.runs("candidate")) if m.get("finished")
+                     and m["finished"] > base.get("finished", "") and not _agent_diff(ev, m)["what"]), None)
+        comp = latest_for(ev, [base["run_id"]]) if cand else None
+        if cand and comp and cand["run_id"] in comp.get("candidate_runs", []):
+            add("adopt", f"the agent's current version ran as candidate {cand['run_id']} and was compared "
+                         f"with the baseline: {comp.get('verdict')}, {len(comp.get('gains') or [])} gain(s), "
+                         f"{len(comp.get('losses') or [])} loss(es)")
+        elif not cand:
+            add("agent", "; ".join(agent_diff["what"]))
 
     cases = ev.cases(include_dropped=False)
     base_files = (base.get("case_set") or {}).get("files") or {}
@@ -218,6 +219,30 @@ def changes(ev: Evals) -> list[dict]:
         if pending:
             add("candidate", f"candidate {pending[-1]} has not been compared with the baseline")
     return out
+
+
+_INVOKE_WORDS = {"command": "its command", "cwd": "the folder it runs in", "env_sha": "its environment variables"}
+
+
+def _agent_diff(ev: Evals, m: dict) -> dict:
+    """How the agent now differs from the agent a run used: {what: [plain-words changes], dirty}."""
+    from .runner import _env_sha
+
+    invoke = ev.agent().get("invoke") or {}
+    cwd = (ev.repo_root / str(invoke.get("cwd", "."))).resolve()
+    g = git_commit_info(cwd, exclude=ev.evals_dir) if cwd.is_dir() else {"commit": None, "dirty": None}
+    what = []
+    if g["commit"] and m.get("agent_commit") and g["commit"] != m["agent_commit"]:
+        what.append(f"the agent changed (commit {m['agent_commit'][:8]} → {g['commit'][:8]})")
+    then_inv = m.get("invoke") or {}
+    if (invoke.get("model") or None) != (then_inv.get("model") or None):
+        what.append(f"the agent's model setting changed ({then_inv.get('model')} → {invoke.get('model')})")
+    now = {"command": invoke.get("command"), "cwd": invoke.get("cwd"), "env_sha": _env_sha(invoke.get("env"))}
+    then = {k: then_inv.get(k) for k in now}
+    if then != now and any(then.values()):
+        words = ", ".join(_INVOKE_WORDS[k] for k in now if now[k] != then[k])
+        what.append(f"how agent.yaml runs the agent changed ({words})")
+    return {"what": what, "dirty": bool(g["dirty"])}
 
 
 # ---- the next step ---------------------------------------------------------------------------------

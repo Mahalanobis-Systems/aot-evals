@@ -87,7 +87,8 @@ the people who will label. Everything else the method knows how to do (a coverag
 budgets, screens, judge calibration) is an upgrade that raises trust in a number, and the report
 says which upgrades are still missing rather than refusing to run.
 
-**Judge (ongoing).** Product owners, experts or end users label whole runs pass or fail, the suite
+**Judge (ongoing).** In the grader application (`aot-evals serve`), product owners, experts or
+end users label whole runs pass or fail, the suite
 is held to their verdicts, judges are calibrated on their labels, and their rulings become rules.
 Each category moves from provisional to validated on its own. When something changes, the agent,
 a new use case, a rule, a judge, `aot-evals status` names the change and the short path back.
@@ -146,6 +147,8 @@ aot-evals allocate --write                       # C5
 aot-evals screen; aot-evals screen --read-by NAME --case ID           # C7
 aot-evals run --purpose baseline --k 5           # C12 (judges run with their primary backend)
 aot-evals run ... --pause-every 20 --pause-seconds 900   # pace a rate-limited runtime
+aot-evals serve --open                           # the grader application: label, rule, triage, rules, judges
+aot-evals agreement label queue --changed        # label only what the last change moved
 aot-evals label queue --judge J --open; aot-evals label import --judge J --csv ...  # C9, on a page
 aot-evals calibrate --judge J                    # C10 / E3 / E5
 aot-evals reliability --judge J --backend A --backend B   # C11 / E4

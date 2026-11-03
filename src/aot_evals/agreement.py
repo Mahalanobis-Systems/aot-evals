@@ -82,12 +82,91 @@ def item_key(run_id: str, case_id: str, trial: int, attempt: int) -> str:
     return f"{run_id}/{case_id}.t{trial}.a{attempt}"
 
 
-def load_labels(ev: Evals) -> list[dict]:
-    """The latest label per run (a re-label replaces the earlier one)."""
-    latest: dict[str, dict] = {}
+def rulings_path(ev: Evals) -> Path:
+    return ev.p("labels", "rulings.jsonl")
+
+
+def per_labeller(ev: Evals) -> dict[str, dict[str, dict]]:
+    """item_id -> labeller -> that labeller's latest label (a re-label by the same person replaces
+    their earlier one; another person's label sits beside it)."""
+    out: dict[str, dict[str, dict]] = defaultdict(dict)
     for rec in read_jsonl(labels_path(ev)):
+        out[rec["item_id"]][rec.get("labeller") or ""] = rec
+    return out
+
+
+def load_rulings(ev: Evals) -> dict[str, dict]:
+    """item_id -> the latest ruling: the verdict a person settled on where labellers differed."""
+    latest: dict[str, dict] = {}
+    for rec in read_jsonl(rulings_path(ev)):
         latest[rec["item_id"]] = rec
-    return list(latest.values())
+    return latest
+
+
+def add_ruling(ev: Evals, item: str, label: bool, by: str, note: str = "", rule: str | None = None) -> dict:
+    if not by:
+        raise ValueError("a ruling needs the name of the person making it")
+    rec = {"item_id": item, "label": bool(label), "by": by, "note": (note or "").strip(),
+           "rule": rule or None, "at": now_iso()}
+    rulings_path(ev).parent.mkdir(parents=True, exist_ok=True)
+    append_jsonl(rulings_path(ev), rec)
+    return rec
+
+
+def disputes(ev: Evals) -> list[dict]:
+    """Runs whose labellers disagree and that have no ruling yet."""
+    ruled = load_rulings(ev)
+    out = []
+    for iid, by in per_labeller(ev).items():
+        if iid in ruled or len({bool(r["label"]) for r in by.values()}) < 2:
+            continue
+        first = next(iter(by.values()))
+        out.append({"item_id": iid, "case_id": first.get("case_id"), "run": first.get("run"),
+                    "labels": [{"labeller": k, "label": bool(r["label"]), "note": r.get("note") or ""}
+                               for k, r in sorted(by.items())]})
+    return out
+
+
+def load_labels(ev: Evals) -> list[dict]:
+    """The verdict per labelled run: a ruling where there is one; otherwise the labellers' label when
+    they all agree (the latest record, with every labeller listed). A run the labellers disagree on
+    has no verdict until someone rules (`disputes`), so it counts toward nothing."""
+    ruled = load_rulings(ev)
+    out = []
+    for iid, by in per_labeller(ev).items():
+        latest = max(by.values(), key=lambda r: r.get("at") or "")
+        if iid in ruled:
+            r = ruled[iid]
+            out.append({**latest, "label": r["label"], "labeller": r["by"], "note": r["note"] or latest.get("note", ""),
+                        "ruled": True, "labellers": sorted(by)})
+        elif len({bool(r["label"]) for r in by.values()}) == 1:
+            out.append({**latest, "labellers": sorted(by)})
+    return out
+
+
+def labeller_agreement(ev: Evals) -> list[dict]:
+    """For each pair of labellers: the runs both labelled, how often they agreed, and Cohen's κ."""
+    by_person: dict[str, dict[str, bool]] = defaultdict(dict)
+    for iid, by in per_labeller(ev).items():
+        for who, r in by.items():
+            by_person[who][iid] = bool(r["label"])
+    people = sorted(by_person)
+    out = []
+    for i, a in enumerate(people):
+        for b in people[i + 1:]:
+            both = sorted(set(by_person[a]) & set(by_person[b]))
+            if not both:
+                continue
+            pairs = [(by_person[a][x], by_person[b][x]) for x in both]
+            agree = sum(x == y for x, y in pairs)
+            n = len(pairs)
+            pa, pb = sum(x for x, _ in pairs) / n, sum(y for _, y in pairs) / n
+            pe = pa * pb + (1 - pa) * (1 - pb)
+            kappa = (agree / n - pe) / (1 - pe) if pe < 1 else None
+            out.append({"labellers": [a, b], "n": n, "agree": agree, "rate": agree / n,
+                        "ci95": stats.wilson(agree, n), "kappa": kappa,
+                        "differ": [x for x in both if by_person[a][x] != by_person[b][x]]})
+    return out
 
 
 def labels_sha(labels: list[dict]) -> str:
@@ -146,16 +225,19 @@ def run_view(ev: Evals, run_id: str, a: dict, case: dict) -> dict:
 
 
 def make_queue(ev: Evals, run_ids: list[str], per_case: int = 1, n: int | None = None,
-               seed: int = 0) -> tuple[Path, list[dict]]:
-    """Runs not yet labelled, `per_case` per case (cases with fewest labels first), shuffled."""
+               seed: int = 0, only_cases: set[str] | None = None) -> tuple[Path, list[dict]]:
+    """Runs not yet labelled, `per_case` per case (cases with fewest labels first), shuffled. With
+    `only_cases`, only those cases (after a change: the ones whose verdict moved)."""
     cases = {c["id"]: c for c in ev.cases() if c.get("id")}
-    labelled = load_labels(ev)
-    done = {r["item_id"] for r in labelled}
+    labelled = per_labeller(ev)  # a run anyone labelled, agreed or disputed, is not queued again
+    done = set(labelled)
     count = defaultdict(int)
-    for r in labelled:
-        count[r.get("case_id")] += 1
+    for by in labelled.values():
+        count[next(iter(by.values())).get("case_id")] += 1
     by_case: dict[str, list[dict]] = defaultdict(list)
     for a in finals(ev, run_ids):
+        if only_cases is not None and a["case_id"] not in only_cases:
+            continue
         key = item_key(a["run_id"], a["case_id"], a["trial"], a["attempt"])
         if key not in done:
             by_case[a["case_id"]].append(a)
@@ -480,6 +562,10 @@ def gate_problems(ev: Evals, result: dict | None, labels: list[dict] | None = No
     if len(labels) < f["min_runs"] or min(n_fail, n_pass) < f["min_each"]:
         problems.append(f"{len(labels)} whole runs labelled ({n_fail} fail, {n_pass} pass); needs "
                         f"{f['min_runs']} with at least {f['min_each']} of each (aot-evals agreement label queue)")
+    open_disputes = disputes(ev)
+    if open_disputes:
+        problems.append(f"{len(open_disputes)} labelled run(s) where labellers disagree and nobody has "
+                        f"ruled, e.g. {open_disputes[0]['item_id']} (aot-evals serve, or aot-evals agreement rule)")
     if result is None:
         problems.append("agreement not measured (aot-evals agreement)")
         return problems

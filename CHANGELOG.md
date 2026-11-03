@@ -24,6 +24,22 @@ reached and read.
   holdout, which is what makes a category `validated`.
 - The run manifest records `standard_sha`, so a change to the labelling standard is detected.
 - Checkpoint pages group the roadmap by phase (Build, Judge, Report) instead of five stages.
+- **`aot-evals serve`, the grader application.** A local web page for the Judge phase, so
+  graders can work without an engineer: label whole runs (blind, with a warm-up on settled runs
+  and an overlap in every four for agreement between people), rule on runs labellers disagree on,
+  re-grade the labelled runs offline, give each disagreement with the suite a cause, accept an
+  answer as another correct wording (the case is screened again), propose rules for the owner to
+  accept into the standard, label and recalibrate judges, draft new cases, and see what is
+  waiting on engineering. Localhost by default, with a session token in the link; `&labeller=NAME`
+  gives each grader their own link. Everything it writes is a suite file (docs/method.md §4.2).
+- **Several labellers per run.** `labels/runs.jsonl` keeps each person's latest label beside the
+  others' instead of replacing them. A run whose labellers disagree has no verdict until a ruling
+  (`labels/rulings.jsonl`, or `aot-evals agreement rule`), and C19 stays open while one is unruled.
+  `agreement label status` reports agreement between each pair of labellers, with κ.
+- `aot-evals agreement label queue --changed` queues only the cases whose verdict moved between
+  the baseline and the latest compared candidate.
+- `status` names an agent change already run as a candidate and compared as a decision to make
+  (label what moved, then adopt it as the baseline or put it back), not a run to repeat.
 
 ## 0.4.2 — 2026-11-03
 
