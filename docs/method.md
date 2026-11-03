@@ -35,14 +35,14 @@ have one. When a number cannot be defended, aot-evals refuses to print it and na
 ## 1. Principles
 
 1. **Cases come from the agent's real traffic and real failures**, not from generic benchmarks.
-   Public benchmarks are a source of grading designs, not of cases. Phase 1 matches the agent to
+   Public benchmarks are a source of grading designs, not of cases. Assess matches the agent to
    a local catalog of them (`aot-evals benchmarks`, [references/benchmarks.md](../references/benchmarks.md))
-   without searching; Phase 2 may search for newer ones. What the catalog does contribute is the
+   without searching; Build may search for newer ones. What the catalog does contribute is the
    **situations** ([references/situations.yaml](../references/situations.yaml)): the conditions a
    request can put an agent in (unanswerable, ambiguous, forbidden, confidential, multi-turn,
    tool error, …) that benchmarks were built to test and that an agent's own task types never
    name. The discovery report lays the agent's task types (rows, from its traffic) against the
-   situations (columns) as a grid of cases that exist against targets; in Phase 2 each situation
+   situations (columns) as a grid of cases that exist against targets; in Build each situation
    is a taxonomy entry, so coverage (C14) reports the grid's empty cells.
 2. **Understand the agent before measuring it**: inventory, infrastructure, volume and usage first.
 3. **Grade outcomes, with code first.** Check what changed in the world. Use a judge only where
@@ -132,11 +132,12 @@ prompt rewrite, so the discriminating set is re-derived after every prompt chang
 
 Each agent's suite lives in `evals/agents/<agent>/`, beside its discovery report. A repository
 with one agent may keep the suite in `evals/` itself. Pass `--agent NAME` to the CLI when there
-are several.
+are several. Suites made before that layout live in `evals/<agent>/`; they are read as they are,
+and `aot-evals migrate` moves them.
 
 ```
 evals/agents/<agent>/
-  discovery.md               # Phase 1: the discovery report
+  discovery.md               # Assess: the discovery report
   agent.yaml                 # identity, triggers, tools, model per call site, stable window,
                              #   and how to invoke it (references/agent-contract.md)
   taxonomy.yaml              # the coverage list (§2.4): entries, the source document, the date read
@@ -147,7 +148,10 @@ evals/agents/<agent>/
   cases/<category>/<case-id>.json   # frozen inputs, start state, trigger, expected end state, set, provenance,
                                     #   requirements (what a correct run must do, each with its checks)
   labels/standard.md         # the labelling standard: rules a person applies, with the categories each applies to
-  labels/runs.jsonl          # C19: whole-run human labels (label and note; no agent output)
+  labels/runs.jsonl          # C19: whole-run human labels, one line per (run, labeller); no agent output
+  labels/rulings.jsonl       # §4.2: the verdict on a run its labellers disagreed on
+  labels/proposals.yaml      # §4.2: rules proposed from rulings, accepted or declined by the owner
+  labels/drafts/             # §4.2: cases a grader drafted, waiting for an engineer
   labels/triage.yaml         # C19: a cause for each disagreement between the suite and a person
   labels/floors.yaml         # optional: C19's floors (min_catch, min_clean, min_runs, min_each)
   checks/
@@ -161,7 +165,7 @@ evals/agents/<agent>/
   runs/<run-id>/manifest.json       # the condition record
   runs/<run-id>/outcomes.jsonl      # one line per attempt and per check verdict
   report/report.json                # §8
-  report/agreement.json             # C19: catch and clean pass rates on whole runs, dev and holdout
+  report/agreement.json             # C19: catch and clean pass rates on whole runs, dev and holdout, per category
   report/report-<date>.html         # §9
   report/checkpoints/               # §9: one page per owner checkpoint
   journal/                          # §9: the activity log; ignores itself
@@ -198,9 +202,12 @@ Rules:
 
 ## 4. Commands
 
-Each command has an exit gate. The CLI will not run a command whose predecessor's gate is unmet;
-it names the gate and the command that clears it (`--force` runs past it, and the run manifest
-records that it did). `aot-evals status` shows every gate and the next unmet one.
+Each command has an exit gate. A gate is a trust upgrade, not a lock: no command refuses to run
+because an earlier gate is unmet. The run manifest records the gates that were unmet when a run
+started (`unmet_gates`), and the report gates (§10) grey what each one covers rather than hide
+it. `aot-evals status` says which phase the work is in, how far each category can be trusted,
+what changed since the baseline, and the one next step; `aot-evals status --gates` shows every
+gate and the first unmet one.
 
 | # | Command | Does | Exit gate |
 |---|---|---|---|
@@ -225,8 +232,8 @@ records that it did). `aot-evals status` shows every gate and the next unmet one
 | C17 | `online` | Set up the online regime: shadow → canary → online judging; behavioural signals; fingerprints. | Guidance only; not yet automated. |
 | C18 | `report` | Write `report.json` (§8), then the HTML report (§9). | Every gate's status is in the report. |
 
-C3–C18 repeat as a loop. A prompt rewrite re-derives the hard-case set, and a shift in category
-mix re-opens C3 and C5.
+C3–C18 repeat as a loop; §4.1 says what each kind of change re-opens. A prompt rewrite
+re-derives the hard-case set, and a shift in category mix re-opens C3 and C5.
 
 **How runs work.**
 
@@ -266,6 +273,110 @@ rate-limited runtime) count as one side: their case sets, checks and judges are 
 repeats of one build never look like two versions. The prune proposal never prunes
 quality-estimate cases, sends always-fail cases to review, keeps regression guards for coverage
 cells and categories, and re-runs the pairwise tests to show the detectable effect is unchanged.
+
+### 4.1 Phases, trust and iteration
+
+The work has three phases, each ending in something handed to the next group of people:
+
+| Phase | Who | Ends with |
+|---|---|---|
+| **Assess** | the owner and tech lead, with Claude | the discovery report: why the agent is being tested, how it is built, where it can run safely, and the golden test case grid |
+| **Build** | engineering | the loop running: the agent wired to the contract, cases seeded from real runs with a check on each, a baseline, and the grader application started |
+| **Judge** | graders (product owners, experts, end users) | each category validated: a person's verdicts on whole runs, the suite held to them, judges calibrated, rulings folded into the standard |
+
+**The lightest Build** (`aot-evals build`, then `aot-evals build --run`) is the one that gets the loop running: an agent that runs from a command
+(or recorded runs replayed, C1), 10 to 20 cases from real runs in the largest categories (C6), a
+side-effect check and one code check per category (C8), and a baseline (C12). Every other
+command is an upgrade that raises trust in a number: provenance (C0), the coverage list (C2),
+shares and the cost matrix (C3), budgets (C4), allocation (C5), screens (C7), judge labels,
+calibration and reliability (C9 to C11), whole-run agreement (C19), coverage (C14) and
+redundancy (C15). The report shows which upgrades are missing and greys what they cover.
+`aot-evals build` drafts what it can from the discovery report: categories from its task types,
+the coverage list from its situations (to be committed before the first case), and one failure
+mode on every case checked by a generic code check, `end-state-matches` (the world ends as the
+case expects), so a first pass needs no check code. Each draft is marked for the owner to confirm.
+
+**Trust per category.** A category is `untested` until a finished baseline covers it,
+`provisional` once it has numbers, and `validated` when the suite agrees with a person on its
+runs: C19's floors met suite-wide, and the category's own dev catch rate and clean pass rate at
+or above the floors (85% by default). `report/agreement.json` carries the per-category rates.
+Provisional numbers print, labelled provisional (G14).
+
+**The baseline** is, for each current case, the newest finished baseline run that covers it: a
+re-run of one category replaces that category's baseline and leaves the others'. The agent has
+changed only when its files outside `evals/` differ from the baseline's, not merely its commit id.
+
+**What a change invalidates.** `status` compares the suite and the agent with the baseline and
+names each change with its short path back:
+
+| Change since the baseline | Invalidates | The short path |
+|---|---|---|
+| The agent (commit, model, prompt, tools, harness) | the baseline; after a prompt rewrite, the hard-case set | a candidate run with one declared variable, then `compare`; a person labels only the runs whose verdict changed, and the provisional categories |
+| A new category (a new use case) | nothing else; the new category is untested | checks for its failure modes, a baseline that includes it, labels until it clears the floors |
+| Cases added or changed | nothing until they run | screen them; include them in the next baseline (unscreened cases stay out of gated numbers, G8) |
+| A check changed or added | the measured agreement | re-grade the labelled runs offline (`agreement`); no agent runs |
+| A judge changed (its version) | that judge's calibration | recalibrate from cached judgements, then re-grade |
+| The labelling standard changed (a ruling became a rule) | the labels the rule could flip | recheck those labels, then re-grade |
+| Labels added | the measured agreement | measure it again |
+
+An uncommitted agent is named too: a run of it can't be compared (G7). When the agent's
+current version has already run as a candidate and been compared, the step is to decide: have
+a person label only the runs whose verdict moved, then run it as the new baseline if it ships.
+
+### 4.2 The bench of graders and the grader application
+
+`aot-evals serve` starts the grader application: a local web page, served from the suite, for
+the Judge phase. It binds to 127.0.0.1 and needs the session token in the link it prints;
+`&labeller=NAME` on that link gives each grader their own. Everything it does writes the suite's
+own files, which are reviewed and committed like any other change:
+
+| What a grader does | Where it is written |
+|---|---|
+| Labels whole runs pass or fail, with a note, blind to the checks, the expected state and other people's labels | `labels/runs.jsonl`, one line per (run, labeller) |
+| Settles a run two labellers disagree on | `labels/rulings.jsonl` |
+| Gives a cause to a disagreement between the suite and a person | `labels/triage.yaml` |
+| Accepts an answer the suite failed as another correct wording | the case's `expected_end_state.output_variants`; the case is screened again |
+| Proposes a rule from a pattern of rulings; the owner accepts or declines it | `labels/proposals.yaml`; an accepted rule joins `labels/standard.md` |
+| Labels items for a judge, and recalibrates it (confirming the cost of any new calls) | `checks/judge/<id>.labels.jsonl`, `<id>.calibration.json` |
+| Drafts a new case in the shape of an existing one | `labels/drafts/<id>.json`, until an engineer finishes it |
+
+Rules:
+
+- **Several people label the same run, blind.** Each labeller's latest label is kept. Where all
+  of a run's labellers agree, that is its verdict; where they differ, it has no verdict until
+  someone rules, and C19 stays open while any such run is unruled. Agreement between each pair of
+  labellers (share agreed and Cohen's κ) is reported beside the suite's agreement with people.
+- **Queues are per labeller.** A new labeller starts with up to five runs whose answer is
+  settled (a ruling, or two people agreeing) and sees the settled answer after each label. After
+  that, one run in four is one someone else labelled, so agreement between people can be measured,
+  and the rest are runs nobody has labelled, one per case first. After a change, the queue can be
+  limited to the cases whose verdict moved (`aot-evals agreement label queue --changed`).
+- **Re-grading is offline.** The application re-grades the labelled runs from their recorded raw
+  records with the suite as it is now: no agent runs and no judge calls.
+- **An accepted wording is screened.** Every accepted wording must pass every check (C7). If a
+  check still rejects it, the disagreement is triaged as a check bug for an engineer.
+- **The engineering inbox** lists what only engineering can do: triaged disagreements whose cause
+  is a fix to a case or check, drafted cases, and changes that need the agent run.
+
+### 4.3 The components
+
+An optimization loop around an agent has the same parts whatever the agent does. `aot-evals
+components` lists them, each with the phase that builds it and its state read from the suite
+(done, partly, not yet, not automated yet, or doesn't apply). The discovery report may record a
+component's state before a suite exists (`components:` in its front matter); the suite's own
+reading wins once it says more.
+
+| Area | Components |
+|---|---|
+| Agent eval infrastructure | harness and sandbox runtime; mock services, staging accounts, a safe database; record and replay; seeded, realistic, anonymized data |
+| Golden test cases | cases by category; deterministic checks first; private holdouts |
+| Grader UI | each problem graded like a test, with the reason (`aot-evals serve`) |
+| Bench of graders | a calibration set first; two blind labels per run; graders from customer and expert pools |
+| LLM judges | calibrated on human labels; qualitative dimensions |
+| Synthetic test cases | generated from golden cases, validated by graders |
+| Evaluation engine | golden test and judge evals; change scoping against the test sets; A/B tests; trace monitoring |
+| Objective monitoring | value and traffic weighting; business alignment; distribution change detection |
+| Agent testing and modeling | significance testing; noise floor and k; misclassification analysis; test runner and isolated compute |
 
 ---
 

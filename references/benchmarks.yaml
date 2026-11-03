@@ -1,4 +1,4 @@
-# Public agent benchmarks: the local catalog Phase 1 matches an agent against.
+# Public agent benchmarks: the local catalog Assess matches an agent against.
 # Fields and vocabularies: references/benchmarks.md. Validated by tests/test_benchmarks.py.
 # Add an entry with every field filled; `null` for a number nobody has published.
 

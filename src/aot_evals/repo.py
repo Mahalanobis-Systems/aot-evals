@@ -22,9 +22,27 @@ def _is_suite_dir(d: Path) -> bool:
     return d.parent.name == "agents" and d.parent.parent.name == "evals"
 
 
+def _is_old_suite_dir(d: Path) -> bool:
+    """evals/<agent>/ with its own agent.yaml: the layout suites had before evals/agents/."""
+    return d.parent.name == "evals" and d.name != "agents" and (d / "agent.yaml").exists()
+
+
 def agent_suites(evals_dir: Path) -> list[Path]:
     d = evals_dir / "agents"
     return sorted(p for p in d.iterdir() if p.is_dir()) if d.is_dir() else []
+
+
+def old_suites(evals_dir: Path) -> list[Path]:
+    """Suites in the old layout, evals/<agent>/ (`aot-evals migrate` moves them)."""
+    if not evals_dir.is_dir() or (evals_dir / "agent.yaml").exists():
+        return []
+    return sorted(p for p in evals_dir.iterdir() if p.is_dir() and _is_old_suite_dir(p))
+
+
+def is_evals_root(d: Path) -> bool:
+    """A repository's top-level evals/ folder rather than one agent's suite."""
+    return d.name == "evals" and not (d / "agent.yaml").exists() and (
+        (d / "agents").is_dir() or bool(old_suites(d)))
 
 
 @dataclass
@@ -37,10 +55,13 @@ class Evals:
         discovery report; with several agents, `agent` names one. A repository whose evals/
         holds agent.yaml directly is a one-agent suite."""
         if explicit:
-            return cls(Path(explicit).expanduser().resolve())
+            path = Path(explicit).expanduser().resolve()
+            if is_evals_root(path):  # --evals evals/ names the folder of suites, not one suite
+                return cls.in_evals_dir(path, agent)
+            return cls(path)
         here = Path.cwd().resolve()
         for d in (here, *here.parents):
-            if _is_suite_dir(d) and (agent is None or d.name == agent):
+            if (_is_suite_dir(d) or _is_old_suite_dir(d)) and (agent is None or d.name == agent):
                 return cls(d)
             if (d / "evals").is_dir():
                 return cls.in_evals_dir(d / "evals", agent)
@@ -50,17 +71,22 @@ class Evals:
 
     @classmethod
     def in_evals_dir(cls, evals_dir: Path, agent: str | None = None) -> Evals:
+        old = {p.name: p for p in old_suites(evals_dir)}
         if agent:
-            return cls(evals_dir / "agents" / agent)
+            new = evals_dir / "agents" / agent
+            # an old-layout suite wins over a new folder that holds nothing but a discovery report
+            if agent in old and not (new / "agent.yaml").exists():
+                return cls(old[agent])
+            return cls(new)
         if (evals_dir / "agent.yaml").exists():
             return cls(evals_dir)
-        suites = agent_suites(evals_dir)
+        suites = [s for s in agent_suites(evals_dir) if (s / "agent.yaml").exists() or s.name not in old]
+        suites = sorted({s.name: s for s in [*suites, *old.values()]}.values())
         if len(suites) == 1:
             return cls(suites[0])
         if suites:
             names = ", ".join(s.name for s in suites)
-            raise ContractError(f"{evals_dir / 'agents'} holds several agents ({names}); "
-                                "pass --agent NAME")
+            raise ContractError(f"{evals_dir} holds several agents ({names}); pass --agent NAME")
         raise ContractError(f"no agent suite under {evals_dir}; run /aot-evals:start first, or "
                             "`aot-evals --agent NAME init` to create evals/agents/NAME/")
 
@@ -69,7 +95,15 @@ class Evals:
     @property
     def evals_dir(self) -> Path:
         """The repository's top-level evals/ directory (every agent's suite is inside it)."""
-        return self.root.parent.parent if _is_suite_dir(self.root) else self.root
+        if _is_suite_dir(self.root):
+            return self.root.parent.parent
+        if _is_old_suite_dir(self.root):
+            return self.root.parent
+        return self.root
+
+    @property
+    def old_layout(self) -> bool:
+        return _is_old_suite_dir(self.root)
 
     @property
     def repo_root(self) -> Path:
@@ -78,11 +112,20 @@ class Evals:
 
     @property
     def agent_name(self) -> str:
-        return (self.agent().get("id") or (self.root.name if _is_suite_dir(self.root)
+        return (self.agent().get("id") or (self.root.name if _is_suite_dir(self.root) or self.old_layout
                                            else self.repo_root.name))
 
     def p(self, *parts: str) -> Path:
         return self.root.joinpath(*parts)
+
+    def discovery_path(self) -> Path:
+        """The discovery report: in the suite, or, for an old-layout suite, where an assessment
+        made after it put one (evals/agents/<agent>/discovery.md) until `migrate` joins them."""
+        own = self.p("discovery.md")
+        if own.exists() or not self.old_layout:
+            return own
+        beside = self.evals_dir / "agents" / self.root.name / "discovery.md"
+        return beside if beside.exists() else own
 
     def exists(self) -> bool:
         return self.root.is_dir()
@@ -209,6 +252,29 @@ class Evals:
             if purpose is None or m.get("purpose") == purpose:
                 out.append(m)
         return out
+
+    def baseline_runs(self) -> list[dict]:
+        """The effective baseline (docs/method.md §4.1): for each current case, the newest finished
+        baseline run that covers it, oldest first. A re-run of one category leaves the baseline of
+        the others in place; a full re-run replaces them all."""
+        runs = [m for m in self.runs("baseline") if m.get("finished")]
+        if not runs:
+            return []
+        try:
+            ids = {c.get("id") for c in self.cases(include_dropped=False)}
+        except ContractError:
+            ids = set()
+        covered: set = set()
+        picked = []
+        for m in reversed(runs):
+            cs = set((m.get("case_set") or {}).get("ids") or [])
+            if not picked or (cs & ids) - covered:
+                picked.append(m)
+                covered |= cs
+        return list(reversed(picked))
+
+    def baseline_ids(self) -> list[str]:
+        return [m["run_id"] for m in self.baseline_runs()]
 
     def latest_run(self, purpose: str | None = None) -> dict | None:
         runs = [r for r in self.runs(purpose) if r.get("finished")]

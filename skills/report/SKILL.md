@@ -1,6 +1,6 @@
 ---
 name: report
-description: Command C18 of aot-evals - regenerate <suite>/report/report.json (fixed schema) and write one self-contained local HTML diagnostic from it, shaped around the user's question (why did the candidate regress? is this suite any good? what does it cost?). Use when someone asks for an eval report, dashboard, scorecard or diagnostic for an agent that has an evals/ directory.
+description: The report for any phase of aot-evals - regenerate <suite>/report/report.json (fixed schema) and write one self-contained local HTML diagnostic from it, shaped around the user's question (why did the candidate regress? is this suite any good? what does it cost?). Use when someone asks for an eval report, dashboard, scorecard or diagnostic for an agent that has an evals/ directory.
 user-invocable: false
 ---
 
@@ -116,4 +116,4 @@ aot-evals log "Report ready: <suite>/report/report-<date>.html" --kind question 
 ```
 
 Give the user the path, the headline in two sentences, and the first item from P13. Log your
-steps as you write the panels, as in `status` ("Work in checkpoints").
+steps as you write the panels (`${CLAUDE_PLUGIN_ROOT}/references/working-in-checkpoints.md`).

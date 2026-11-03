@@ -6,8 +6,9 @@ Each gate returns a status:
 - `not_implemented`: the command is guidance only for now (C16, C17; docs/method.md §4). These
   never block a later command.
 
-A command refuses to run while a predecessor's gate is unmet (`require`), naming the gate and
-the command that clears it.
+No command refuses to run because an earlier gate is unmet: a gate is a trust upgrade, and the
+report gates (G1-G14) grey what an unmet gate covers rather than hide it. `unmet_before` lists the
+unmet gates a command runs past, so the run manifest can record them (docs/method.md §4.1).
 """
 
 from __future__ import annotations
@@ -32,27 +33,27 @@ from .util import (
 
 COMMANDS = [
     # id, command, skill, what clears it
-    ("C0", "import", "scope"),
-    ("C1", "inventory", "scope"),
-    ("C2", "taxonomy", "scope"),
-    ("C3", "categorize", "scope"),
-    ("C4", "decompose", "scope"),
+    ("C0", "import", "build"),
+    ("C1", "inventory", "build"),
+    ("C2", "taxonomy", "build"),
+    ("C3", "categorize", "build"),
+    ("C4", "decompose", "build"),
     ("C5", "allocate", "build"),
     ("C6", "author", "build"),
     ("C7", "screen", "build"),
     ("C8", "checks", "build"),
-    ("C9", "label", "calibrate"),
-    ("C10", "calibrate", "calibrate"),
-    ("C11", "reliability", "calibrate"),
-    ("C12", "baseline", "run"),
+    ("C9", "label", "judge"),
+    ("C10", "calibrate", "judge"),
+    ("C11", "reliability", "judge"),
+    ("C12", "baseline", "build"),
     # C19 runs after the baseline (it grades the baseline's runs) and before any comparison; it is
     # numbered last so the numbers teams already use stay stable.
-    ("C19", "agreement", "run"),
-    ("C13", "compare", "run"),
-    ("C14", "coverage", "run"),
-    ("C15", "redundancy", "run"),
-    ("C16", "drift", "run"),
-    ("C17", "online", "run"),
+    ("C19", "agreement", "judge"),
+    ("C13", "compare", "build"),
+    ("C14", "coverage", "build"),
+    ("C15", "redundancy", "build"),
+    ("C16", "drift", "judge"),
+    ("C17", "online", "judge"),
     ("C18", "report", "report"),
 ]
 COMMAND_BY_ID = {c[0]: c for c in COMMANDS}
@@ -182,7 +183,9 @@ def taxonomy_problems(ev: Evals) -> list[str]:
         else:
             added = git_adding_commits(ev.repo_root, str(ev.p("cases").relative_to(ev.repo_root)))
             case_commits = {added.get(str(p.relative_to(ev.repo_root))) for p in ev.case_paths()} - {None}
-            early = [c for c in case_commits if not git_strictly_before(ev.repo_root, tax_commit, c)]
+            # The same commit counts: a squash merge folds "taxonomy first, then cases" into one.
+            early = [c for c in case_commits
+                     if c != tax_commit and not git_strictly_before(ev.repo_root, tax_commit, c)]
             if early:
                 problems.append(f"taxonomy.yaml was not committed before the first case (cases added "
                                 f"in {sorted(c[:8] for c in early)}, taxonomy in {tax_commit[:8]})")
@@ -497,6 +500,10 @@ def c10(ev: Evals) -> Gate:
             problems.append(f"judge {spec.id}: primary backend {spec.primary} not measured")
         elif cal.get("labels", 0) < 60:
             problems.append(f"judge {spec.id}: calibrated on {cal.get('labels')} labels; needs >= 60")
+        elif cal.get("status") != "calibrated":
+            why = "; ".join(cal.get("status_reasons") or []) or cal.get("status") or "below its floors"
+            problems.append(f"judge {spec.id}: calibration failed ({why}); iterate it on its dev errors "
+                            "and recalibrate")
         else:
             m = cal["backends"][spec.primary]
             info.append(f"{spec.id}: {cal['status']} — TPR {_pct(m['tpr'])}, TNR {_pct(m['tnr'])} "
@@ -562,17 +569,24 @@ def trial_completeness(ev: Evals, m: dict) -> list[str]:
 
 
 def c12(ev: Evals) -> Gate:
-    base = ev.latest_run("baseline")
-    if not base:
+    runs = ev.baseline_runs()
+    if not runs:
         return _gate("C12", ["no finished baseline run (aot-evals run --purpose baseline --k 5)"])
-    problems = manifest_problems(base)
-    if (base.get("k") or 0) < 3:
-        problems.append(f"baseline k={base.get('k')}; k must be 3-5 to see variance")
-    problems += trial_completeness(ev, base)
+    problems = []
+    for base in runs:
+        problems += manifest_problems(base)
+        if (base.get("k") or 0) < 3:
+            problems.append(f"baseline {base['run_id']} k={base.get('k')}; k must be 3-5 to see variance")
+        problems += trial_completeness(ev, base)
+    covered = {c for m in runs for c in (m.get("case_set") or {}).get("ids") or []}
+    missing = sorted({c.get("category") for c in ev.cases(include_dropped=False)
+                      if c.get("id") not in covered} - {None})
+    if missing:
+        problems.append(f"no baseline run covers the cases of {', '.join(missing)}")
     for cid in ev.category_ids():
         if ev.budget_for(cid) is None:
             problems.append(f"no plane-B budget for category {cid}")
-    return _gate("C12", problems, [f"baseline {base['run_id']}"])
+    return _gate("C12", problems, ["baseline " + " + ".join(m["run_id"] for m in runs)])
 
 
 def c19(ev: Evals) -> Gate:
@@ -589,16 +603,16 @@ def c19(ev: Evals) -> Gate:
 def c13(ev: Evals) -> Gate:
     from .compare import comparison_path, latest_for
 
-    base = ev.latest_run("baseline")
+    base = ev.baseline_ids()
     cands = [m for m in ev.runs("candidate") if m.get("finished")]
     if not base or not cands:
         return Gate("C13", "not_applicable", info=["no candidate run yet (aot-evals run --purpose candidate "
                                                   "--k 5 --variable KIND=VALUE)"])
     latest = cands[-1]["run_id"]
-    comp = latest_for(ev, [base["run_id"]])
+    comp = latest_for(ev, base)
     if not comp or latest not in comp.get("candidate_runs", []):
-        return _gate("C13", [f"candidate {latest} has not been compared with baseline {base['run_id']} "
-                             f"(aot-evals compare --candidate {latest})"])
+        return _gate("C13", [f"candidate {latest} has not been compared with the baseline "
+                             f"({' + '.join(base)}) (aot-evals compare --candidate {latest})"])
     if comp.get("refused"):
         return _gate("C13", [f"comparison refused: {comp['refused']}"])
     info = [f"{latest}: {comp['verdict']} (+{len(comp['gains'])}/-{len(comp['losses'])}, "
@@ -631,12 +645,17 @@ def c15(ev: Evals) -> Gate:
     if red is None:
         return Gate("C15", "not_applicable", info=["needs at least two agent versions; run a candidate"])
     f = red["discriminating_fraction"]
-    info = [f"discriminating fraction {'-' if f is None else f'{100 * f:.0f}%'} "
-            f"(threshold {100 * red['threshold']:.0f}%) over {len(red['candidates'])} versions"]
+    if f is None:
+        info = [f"discriminating fraction can't be computed yet: no case has a verdict on every one of the "
+                f"{len(red['candidates'])} versions"]
+    else:
+        info = [f"discriminating fraction {100 * f:.0f}% over {len(red['candidates'])} versions; "
+                f"{'below' if red['below_threshold'] else 'above'} the {100 * red['threshold']:.0f}% "
+                "point where a prune proposal is made"]
     if red["below_threshold"]:
         p = red["proposal"]
-        info.append(f"prune/extend proposal: {p['suite_size']['before']} -> {p['suite_size']['after']} cases "
-                    "(aot-evals redundancy)")
+        info.append(f"prune/extend proposal ready: {p['suite_size']['before']} -> {p['suite_size']['after']} "
+                    "cases, for the owner to decide case by case (aot-evals redundancy)")
     return _gate("C15", [], info)
 
 
@@ -680,12 +699,17 @@ def next_unmet(gates: list[Gate]) -> Gate | None:
     return None
 
 
-def require(ev: Evals, upto: str) -> list[Gate]:
-    """Unmet blocking gates strictly before command `upto` (e.g. 'C12')."""
+def unmet_before(ev: Evals, upto: str) -> list[Gate]:
+    """Unmet gates strictly before command `upto` (e.g. 'C12'). Informational: nothing blocks."""
     order = [c[0] for c in COMMANDS]
     before = set(order[: order.index(upto)])
     return [g for g in evaluate(ev) if g.id in before and g.id not in NON_BLOCKING
             and g.status == "unmet"]
+
+
+def require(ev: Evals, upto: str) -> list[Gate]:
+    """Kept for callers of the pre-1.0 API: nothing blocks any more, so this is always empty."""
+    return []
 
 
 def untracked_cases(ev: Evals) -> list[str]:

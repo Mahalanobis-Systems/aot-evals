@@ -179,9 +179,10 @@ def judge_states(ev: Evals) -> dict[str, dict]:
 
 
 def default_runs(ev: Evals) -> list[str]:
-    base = ev.latest_run("baseline")
+    """The effective baseline (every category's newest baseline run), else the latest finished run."""
+    base = ev.baseline_ids()
     if base:
-        return [base["run_id"]]
+        return base
     others = [m for m in ev.runs() if m.get("finished") and m.get("purpose") != "smoke"]
     return [others[-1]["run_id"]] if others else []
 

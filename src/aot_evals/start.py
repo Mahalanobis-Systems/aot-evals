@@ -22,17 +22,21 @@ by Mahal Systems
 """
 
 PHASES = """\
-I'll build tests for one of your agents in two phases.
+I'll build tests for one of your agents in three phases.
 
-Phase 1 (about 5 minutes): discovery and a first report.
+Assess (about 5 minutes): what the agent is for, and a first report.
   I'll scan this repository to find your agents and ask which one to test.
   Then I'll ask three questions about it, and read its code, tools, records
   and data. You'll get a report with what I found and the likely ways forward.
 
-Phase 2 (an afternoon): building the evals.
-  I'll build a safe place to run it, turn real runs into examples, write the
-  checks, and run the first full test. I'll only stop for things that could
-  touch real people, data or money.
+Build (half a day for the first pass): get the loop running.
+  I'll wire up a safe place to run it, turn real runs into test cases with a
+  check on each, and run the first full test. I'll only stop for things that
+  could touch real people, data or money.
+
+Judge (ongoing): the people who know what good looks like take over.
+  They label runs in the grader application, the tests are held to their
+  verdicts, and each kind of task earns trust on its own.
 """
 
 
@@ -94,7 +98,7 @@ def _i(s) -> str:
 
 def _overview(fm: dict, agent: str) -> str:
     minutes = fm.get("minutes")
-    kicker = "Phase 1 complete" + (f" · {minutes} minutes" if minutes else "")
+    kicker = "Assess complete" + (f" · {minutes} minutes" if minutes else "")
     stats = "".join(f'<div class="stat"><span class="n">{_i(x.get("value"))}</span>'
                     f'<span class="l">{_i(x.get("label"))}</span></div>'
                     for x in (fm.get("stats") or [])[:3] if isinstance(x, dict))
@@ -116,7 +120,7 @@ def _overview(fm: dict, agent: str) -> str:
     return f"""<section class="hero">
   <div>
     <p class="kicker">{kicker}</p>
-    <p class="hero-title">Congrats! You just finished Phase 1 of your evals assessment.</p>
+    <p class="hero-title">Congrats! You just finished the assessment.</p>
     <p class="value">{VALUE}</p>
     {bottom}
   </div>
@@ -136,7 +140,7 @@ def _next(fm: dict) -> str:
     for st in nx.get("steps") or []:
         you = st.get("who") == "you"
         steps.append(f'<li class="{"you" if you else "us"}"><div><span class="t">{_i(st.get("title"))}</span>'
-                     f'<span class="who">{"You" if you else "Phase 2"}</span>'
+                     f'<span class="who">{"You" if you else "Build"}</span>'
                      f'<div class="d">{_i(st.get("detail"))}</div></div>'
                      f'<div class="when">{_i(st.get("when"))}</div></li>')
     alts = "".join(f'<p><b>{_i(a.get("name"))}.</b> {_i(a.get("why"))}</p>'
@@ -148,7 +152,7 @@ def _next(fm: dict) -> str:
   <p class="path">{_i(nx.get("why"))}</p>
   <ol class="steps">{"".join(steps)}</ol>
   <div class="cta"><code>/aot-evals:start</code>
-    <span>Run it again to begin Phase 2. It takes about an afternoon.</span></div>
+    <span>Run it again to start Build. The first pass takes about half a day.</span></div>
   {alts}
 </section>"""
 
@@ -253,9 +257,37 @@ def discovery_body(fm: dict, text: str, agent: str) -> str:
             group = after if head in AFTER_NEXT else before
             group.append(f'<section class="detail-group" id="{slug(head)}"><h2>{markdown.inline(head)}</h2>'
                          f"{markdown.render(body)}</section>")
+    comp = components_html(fm.get("components"))
+    if comp:
+        before.append(comp)
     details = ('<p class="kicker details-head">The details</p>' + "".join(before)) if before else ""
     return (_overview(fm, agent) + (markdown.render(lead) if lead.strip() else "") + details
             + _next(fm) + "".join(after))
+
+
+def components_html(found) -> str:
+    """The component checklist (components.py) as the assessment found it: front matter
+    `components: {<id>: {state, note}}`. Components the report says nothing about are left out."""
+    if not isinstance(found, dict) or not found:
+        return ""
+    from .components import COMPONENTS
+
+    word = {"done": "In place", "partial": "Partly", "todo": "To build", "later": "Later", "n/a": "Doesn't apply"}
+    rows = []
+    for group, cid, name, phase, _ in COMPONENTS:
+        f = found.get(cid)
+        if not isinstance(f, dict):
+            continue
+        st = f.get("state") if f.get("state") in word else "todo"
+        rows.append(f"<tr><td>{_i(group)}</td><td>{_i(name)}</td><td>{_i(phase.capitalize())}</td>"
+                    f"<td>{word[st]}</td><td>{_i(f.get('note'))}</td></tr>")
+    if not rows:
+        return ""
+    return ('<section class="detail-group" id="components"><h2>The components to build</h2>'
+            '<p>The parts an optimization loop needs around this agent, what exists today, and which phase '
+            'builds the rest. <code>aot-evals components</code> keeps this list current as the work goes on.</p>'
+            '<div class="wrap"><table class="full"><thead><tr><th>Area</th><th>Component</th><th>Phase</th>'
+            f'<th>Today</th><th>Found</th></tr></thead><tbody>{"".join(rows)}</tbody></table></div></section>')
 
 
 def write_discovery_page(markdown_path: Path, agent: str, out_dir: Path) -> Path:
@@ -271,7 +303,7 @@ def write_discovery_page(markdown_path: Path, agent: str, out_dir: Path) -> Path
     parts = markdown_path.resolve().parts
     repo = parts[-5] if len(parts) >= 5 and parts[-4:-2] == ("evals", "agents") else ""
     sub = " · ".join(x for x in (brand.human_date(date.today().isoformat()), repo) if x)
-    html = brand.page(title=title, eyebrow="AOT EVALS · PHASE 1 · DISCOVERY", sub=sub, body=body)
+    html = brand.page(title=title, eyebrow="AOT EVALS · ASSESS · DISCOVERY REPORT", sub=sub, body=body)
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / "discovery.html"
     out.write_text(html)

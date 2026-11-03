@@ -1,6 +1,6 @@
 """Pseudonymous milestone telemetry: how many teams use aot-evals, and how far they get.
 
-One event per milestone (Phase 1 started, discovery report written, a checkpoint at a gate, a
+One event per milestone (the assessment started, discovery report written, a checkpoint at a gate, a
 report built, the demo run), keyed by a random install id stored locally. It follows Claude
 Code's own telemetry choice: anything that turns Claude Code's telemetry off turns this off too.
 Nothing about the agent, the repository, the cases or the answers is ever sent; the payload is
@@ -46,7 +46,7 @@ _CLOUD_PROVIDER_VARS = ("CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CL
 
 DISCLOSURE = (
     "aot-evals sends pseudonymous usage telemetry: a random install id, the milestone reached "
-    "(Phase 1 started, discovery written, a checkpoint at a gate, a report built), the gate id, "
+    "(the assessment started, discovery written, a checkpoint at a gate, a report built), the gate id, "
     "the aot-evals version, your OS name and a timestamp. Never your code, agent, repository, "
     "cases, answers, file paths or IP address. It is off whenever Claude Code's telemetry is off. "
     "See it with `aot-evals telemetry show`; turn it off with `aot-evals telemetry off`, "

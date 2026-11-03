@@ -119,8 +119,14 @@ def cells(line: str) -> list[str]:
 
 
 def table(md: str, where: str) -> list[dict]:
-    """The first Markdown table in `md`, one dict per row keyed by its snake_case header."""
-    lines = [ln for ln in md.splitlines() if ln.startswith("|")]
+    """The first Markdown table in `md`, one dict per row keyed by its snake_case header. The
+    table ends at the first line that is not a row, so a later table in the section is ignored."""
+    lines: list[str] = []
+    for ln in md.splitlines():
+        if ln.startswith("|"):
+            lines.append(ln)
+        elif lines:
+            break
     if len(lines) < 3:
         raise ValueError(f"{where}: no table")
     header = [("id" if h in ("#", "") else h.lower().replace(" ", "_")) for h in cells(lines[0])]

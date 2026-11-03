@@ -158,6 +158,6 @@ Public benchmarks are a source of grading designs, case templates and situations
 
 ## How this run went
 
-A toy, so the whole of Phase 1 took about 2 minutes: scan, three questions, report. Nothing should change.
+A toy, so the whole assessment took about 2 minutes: scan, three questions, report. Nothing should change.
 
 **Sources:** `README.md`, `docs/product-spec.md`, `agent/agent.py`, `traces.jsonl`, `evals/cases/`.

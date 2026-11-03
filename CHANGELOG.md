@@ -6,6 +6,109 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+Towards 1.0.0: three phases (Assess, Build, Judge), trust per category, and iteration as the
+organizing idea. The method's commands, gates and ids are unchanged; what changes is how they are
+reached and read.
+
+- **No command refuses to run because an earlier gate is unmet.** A gate is a trust upgrade: the
+  run goes ahead, the note names the unmet gates, the manifest records them (`unmet_gates`; the
+  old `forced_past_gates` is kept with the same value), and the report greys what they cover, as
+  it already did. `--force` is accepted and does nothing. The lightest Build (an agent that runs,
+  a few cases with a check each, a baseline) now reaches a number in one pass (docs/method.md §4.1).
+- **`aot-evals status` reads like a team would:** the phase (Assess, Build or Judge), trust per
+  category (untested, provisional, validated, with the reason), what changed since the baseline
+  with the short path back for each kind of change (agent, new use case, cases, checks, judge,
+  standard, labels, an uncompared candidate), and the one next step. `--gates` prints the gate
+  table it used to print; `--json` carries both.
+- `report/agreement.json` gains `categories`: catch and clean pass rates per category, dev and
+  holdout, which is what makes a category `validated`.
+- The run manifest records `standard_sha`, so a change to the labelling standard is detected.
+- Checkpoint pages group the roadmap by phase (Build, Judge, Report) instead of five stages.
+- **`aot-evals serve`, the grader application.** A local web page for the Judge phase, so
+  graders can work without an engineer: label whole runs (blind, with a warm-up on settled runs
+  and an overlap in every four for agreement between people), rule on runs labellers disagree on,
+  re-grade the labelled runs offline, give each disagreement with the suite a cause, accept an
+  answer as another correct wording (the case is screened again), propose rules for the owner to
+  accept into the standard, label and recalibrate judges, draft new cases, and see what is
+  waiting on engineering. Localhost by default, with a session token in the link; `&labeller=NAME`
+  gives each grader their own link. Everything it writes is a suite file (docs/method.md §4.2).
+- **Several labellers per run.** `labels/runs.jsonl` keeps each person's latest label beside the
+  others' instead of replacing them. A run whose labellers disagree has no verdict until a ruling
+  (`labels/rulings.jsonl`, or `aot-evals agreement rule`), and C19 stays open while one is unruled.
+  `agreement label status` reports agreement between each pair of labellers, with κ.
+- `aot-evals agreement label queue --changed` queues only the cases whose verdict moved between
+  the baseline and the latest compared candidate.
+- `status` names an agent change already run as a candidate and compared as a decision to make
+  (label what moved, then adopt it as the baseline or put it back), not a run to repeat.
+- **`aot-evals build`, the lightest Build.** It drafts categories from the discovery report's task
+  types and the coverage list from its situations, adds one failure mode on every case checked by
+  a generic end-state check (`checks/code/end-state-matches.py`), and prints the Build checklist.
+  `aot-evals build --run` then does the smoke run, a k = 3 baseline and the report, and points at
+  the grader application. A first pass no longer needs check code of its own.
+- **`aot-evals components`**: the optimization loop's components as a checklist (sandbox, fakes,
+  replay, golden cases, deterministic checks, holdouts, the grader application, the bench, judges,
+  synthetic cases, the evaluation engine, monitoring, significance, the noise floor), each with the
+  phase that builds it and its state read from the suite. The discovery report may record their
+  state (`components:` in its front matter) and the page lists them. `status --json` carries it.
+- **Five skills instead of eight.** `start` (where things stand, and the next step), `assess`
+  (was `discover`), `build` (was `scope`, `build`, and the baseline and comparison half of `run`),
+  `judge` (was `calibrate` and the agreement half of `run`) and `report`. `status`, `scope`,
+  `calibrate` and `run` are gone: use `/aot-evals:start`. The shared pacing rules live once, in
+  `references/working-in-checkpoints.md`. The gate table's skill column names the new skills.
+- The banner, the discovery page and the docs speak of Assess, Build and Judge instead of Phase 1
+  and Phase 2.
+
+- **Suites made by earlier versions are found and read right.** A suite in the old layout,
+  `evals/<agent>/`, is found from the repository, from inside it, and with `--evals evals
+  --agent NAME` (which no longer treats `evals/` itself as a suite), with its repository root and
+  discovery report resolved; a note offers `aot-evals migrate`, which moves it to
+  `evals/agents/<agent>/` with `git mv`, beside a discovery report a later assessment put there.
+- **The baseline is every category's newest baseline run**, not the single newest run: a re-run of
+  one category no longer marks the others untested. `status`, the gates, `compare`, `report`,
+  `judge apply` and the labelling queues all use it, and `status` says when its runs used
+  different builds of the agent.
+- **"The agent changed" means its files changed.** Two commits with the same files outside
+  `evals/` are one agent, however many commits to the suite (or to an earlier layout) lie between.
+- `status` groups judges whose fingerprint differs from the baseline's, says when one was edited
+  without a version bump, and gives the step that fits its calibration (re-judge, recalibrate,
+  iterate, or label first). Lists of changed checks and cases show every name or `+N more`, and a
+  baseline recorded without check fingerprints no longer reports every check as new.
+- C10 fails a judge whose calibration is below its floors (it passed before). The coverage list
+  committed in the same commit as the first cases, as a squash merge leaves it, passes C2. C15
+  says whether the discriminating fraction is above or below the point where a prune proposal is
+  made, and why it can't be computed when it can't. C19 says when per-judge labels exist and
+  whole-run labels don't yet. `components` takes each state from the same facts as the gates.
+- Two runs started in the same second (category by category, on a fast agent) no longer share a
+  run folder; the second gets `-2`.
+- `validate` groups problems that differ only by case (`62 cases: no requirements (…, +57 more)`);
+  `--all` prints one line each.
+
+### Upgrading from 0.4
+
+Existing suites keep working: no suite file needs to change, and every report, run and label
+written by 0.4 reads as before. What does change:
+
+- **Skills.** `/aot-evals:discover` is now `/aot-evals:assess`; `/aot-evals:status` is gone, use
+  `/aot-evals:start`. The step skills `scope`, `calibrate` and `run` are folded into `build` and
+  `judge`.
+- **Nothing refuses on an unmet gate.** A script that relied on `aot-evals run` exiting non-zero
+  until earlier gates were met should read `aot-evals status --json` instead.
+- **`status` output.** The plain output is the phase summary; `--gates` prints the old table. In
+  `--json`, `next` is now the next step (`what`, `how`, `phase`); the first unmet gate moved to
+  `next_gate`. `gates` is unchanged.
+- **A suite in `evals/<agent>/`** (made before 0.2) works as it is. `aot-evals migrate --dry-run`
+  says what would move to `evals/agents/<agent>/`, and `aot-evals migrate` moves it.
+- **Pages and helper scripts from earlier versions.** `report/case-review.html`, the
+  `*.label.html` labelling pages and old `report/report-*.html` files can go: `aot-evals serve`
+  replaces the labelling pages and `aot-evals report` writes reports fresh. `journal/activity.html`
+  is rewritten on the next command. Helper scripts a team wrote beside its suite for labelling
+  pages, paired comparisons or a judge of its own are now covered by `serve`, `compare` and the
+  `command` judge backend; check them against those before deleting.
+- **A second labeller no longer replaces the first.** In `labels/runs.jsonl`, a later label by
+  another person sits beside the earlier one. Where two people disagree, the run counts toward
+  nothing until a ruling: run `aot-evals agreement label status` to find any such runs in an
+  existing suite, and rule on them in `aot-evals serve` or with `aot-evals agreement rule`.
+
 ## 0.4.2 — 2026-11-03
 
 - **`aot-evals run --model <id>`** pins the agent's model for one run: it overrides

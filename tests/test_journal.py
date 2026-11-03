@@ -31,16 +31,16 @@ def test_every_command_logs_itself_and_reads_do_not(make_repo):
     assert len(journal.entries(ev)) == n  # reads leave no trace
 
 
-def test_refusals_are_logged_with_their_reason(make_repo):
+def test_unmet_gates_are_noted_not_refused(make_repo, capsys):
+    """Nothing blocks a run on an unmet gate (method §4.1): the run goes ahead, the note names the
+    gates, the manifest records them, and the command logs itself with exit 0."""
     repo = make_repo()
     ev = Evals(repo.evals)
-    try:
-        repo.cli("run", "--purpose", "baseline", "--k", "3")  # C1 is unmet: refused
-    except SystemExit:
-        pass
+    assert repo.cli("run", "--purpose", "baseline", "--k", "3") == 0  # C1 is unmet: noted
+    assert "C1 inventory" in capsys.readouterr().err
+    assert ev.latest_run("baseline")["unmet_gates"] == ["C1"]
     last = journal.entries(ev)[-1]
-    assert last["kind"] == "command" and last["exit"] == 1 and last["gate"] == "C12"
-    assert last["detail"].startswith("refused: C12 baseline needs C1")
+    assert last["kind"] == "command" and last["exit"] == 0 and last["gate"] == "C12"
 
 
 def test_a_run_streams_progress_and_collapses_it(make_repo):

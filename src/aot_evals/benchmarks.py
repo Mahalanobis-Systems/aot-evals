@@ -1,8 +1,8 @@
-"""The public benchmark catalog (references/benchmarks.yaml) and how Phase 1 matches an agent to it.
+"""The public benchmark catalog (references/benchmarks.yaml) and how Assess matches an agent to it.
 
-Phase 1 runs from this local copy: no web search, no model call. `match()` scores every catalog
+Assess runs from this local copy: no web search, no model call. `match()` scores every catalog
 entry against the agent's workloads and task types and returns the best fits with the reason each
-might fit. Phase 2 may search the web for newer benchmarks and propose additions to the catalog
+might fit. Build may search the web for newer benchmarks and propose additions to the catalog
 (references/benchmarks.md says how). The catalog's fields and vocabularies are in
 references/benchmarks.md; `validate()` enforces them, and tests/test_benchmarks.py runs it.
 """

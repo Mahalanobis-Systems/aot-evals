@@ -57,15 +57,21 @@ def test_good_agent_clears_every_phase1_gate(make_repo):
     assert r["coverage"]["cells"][0]["n"] == 0  # empty cells listed first
 
 
-def test_baseline_refused_until_cases_are_screened(make_repo, capsys):
+def test_baseline_runs_on_unscreened_cases_and_the_report_excludes_them(make_repo, capsys):
+    """Nothing blocks a run on an unmet gate (method §4.1); the manifest records the gates that
+    were unmet, and the report greys what they cover (G8 keeps unscreened cases out of gated
+    numbers)."""
     repo = make_repo(screen=False)
     repo.cli("run", "--purpose", "smoke", "--question", "hello")
-    try:
-        repo.cli("run", "--purpose", "baseline", "--k", "3")
-    except SystemExit as e:
-        assert "C7 screen" in str(e)
-    else:
-        raise AssertionError("baseline ran with unscreened cases")
+    assert repo.cli("run", "--purpose", "baseline", "--k", "3") == 0
+    assert "unmet gate(s)" in capsys.readouterr().err
+    ev = Evals(repo.evals)
+    m = ev.latest_run("baseline")
+    assert "C7" in m["unmet_gates"] and m["unmet_gates"] == m["forced_past_gates"]
+    assert repo.cli("report") == 0
+    r = repo.report()
+    assert repo.gate(r, "G8")["status"] == "fail"
+    assert all(row["pass_rate"] is None and row["excluded"]["n_cases"] > 0 for row in r["categories"])
 
 
 def test_k1_baseline_is_refused_by_the_cli(make_repo):
@@ -168,11 +174,29 @@ def test_taxonomy_derived_from_cases_is_refused_by_g5(make_repo):
 
 
 def test_taxonomy_committed_after_cases_is_refused_by_g5(make_repo):
+    import shutil
+
+    from conftest import git
+
     repo = make_repo(taxonomy_first=False)
+    # a history where the coverage list really arrives after the cases
+    shutil.rmtree(repo.root / ".git")
+    git(repo.root, "init", "-q")
+    tax = str((repo.evals / "taxonomy.yaml").relative_to(repo.root))
+    git(repo.root, "add", "-A")
+    git(repo.root, "reset", "-q", "--", tax)
+    git(repo.root, "commit", "-q", "-m", "cases first")
+    repo.commit("the list, after the cases", tax)
     repo.cli("run", "--purpose", "baseline", "--k", "3", "--force")
     repo.cli("report")
     r = repo.report()
     assert "G5" in failing(r)
+
+
+def test_taxonomy_in_the_same_commit_as_the_cases_passes_g5(make_repo):
+    """A squash merge folds "taxonomy first, then cases" into one commit; that counts."""
+    repo = make_repo(taxonomy_first=False)
+    assert gates.taxonomy_problems(Evals(repo.evals)) == []
 
 
 def test_k1_baseline_refused_and_g2_fails(make_repo):

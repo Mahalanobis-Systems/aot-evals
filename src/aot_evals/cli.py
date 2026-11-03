@@ -3,12 +3,16 @@
     aot-evals demo [DIR]                a toy agent with a finished suite, to try it in minutes
     aot-evals doctor                    check the environment (paste into bug reports)
     aot-evals init                      create the agent's suite, evals/agents/<agent>/, with templates
-    aot-evals status [--json]           every command gate (C0-C19); the next unmet one
+    aot-evals status [--gates|--json]   the phase, trust per category, what changed, the next step
     aot-evals validate                  every problem and warning, across all gates
     aot-evals import FILE ...           C0: copy an export into evals/data/, record provenance
     aot-evals allocate [--write]        C5: size both case sets, print the arithmetic
     aot-evals screen [--read-by NAME]   C7: reference / do-nothing / claim screens per case
     aot-evals run --purpose P --k N     C1 smoke, C12 baseline, candidate runs
+    aot-evals build [--run]             the lightest Build: drafts, the checklist, then the baseline
+    aot-evals serve [--open]            the grader application: label runs, rule, triage, rules, judges
+    aot-evals components [--json]       the optimization loop's components as a checklist
+    aot-evals migrate [--dry-run]       move suites from evals/<agent>/ to evals/agents/<agent>/
     aot-evals label queue|page|import|add|status   C9: human labels per judge (page: label in a browser)
     aot-evals calibrate --judge ID      C10 / E3 / E5: TPR/TNR per backend on the labels
     aot-evals reliability --judge ID    C11 / E4: self-consistency and cross-family agreement
@@ -53,28 +57,29 @@ def _evals(args) -> Evals:
         ev = Evals.find(args.evals, args.agent)
     except ContractError as e:
         sys.exit(str(e))
-    if args.cmd not in ("init",) and not ev.exists():
+    from .repo import old_suites
+
+    old = old_suites(ev.evals_dir)
+    if old and args.cmd != "migrate":
+        names = ", ".join(f"{p.parent.name}/{p.name}/" for p in old)
+        where = "this suite is" if ev.old_layout else f"found suite(s) in the old layout: {names};"
+        print(f"note: {where} in the old layout (evals/<agent>/). It works as it is; `aot-evals migrate` "
+              "moves it to evals/agents/<agent>/, beside its discovery report.", file=sys.stderr)
+    if args.cmd not in ("init", "build") and not ev.exists():
         sys.exit(f"no suite at {ev.root}; run `aot-evals --agent NAME init` in the repository "
                  "root, or pass --evals PATH")
     return ev
 
 
-def _refuse_unless(ev: Evals, upto: str, force: bool) -> list[str]:
-    blocked = gates_mod.require(ev, upto)
-    if not blocked:
-        return []
-    names = ", ".join(f"{g.id} {g.command}" for g in blocked)
-    if force:
-        print(f"warning: running past unmet gate(s) {names}; recorded in the run manifest",
-              file=sys.stderr)
-        return [g.id for g in blocked]
-    first = blocked[0]
-    lines = [f"refused: {upto} {gates_mod.COMMAND_BY_ID[upto][1]} needs {first.id} "
-             f"{first.command} to be met (skill: {first.skill}):"]
-    lines += [f"  - {p}" for p in first.problems[:10]]
-    if len(blocked) > 1:
-        lines.append(f"  also unmet: {', '.join(g.id for g in blocked[1:])}")
-    sys.exit("\n".join(lines))
+def _unmet_before(ev: Evals, upto: str) -> list[str]:
+    """Gates unmet before this command. Nothing refuses: the report greys what they cover. The
+    ids are recorded in the run manifest; `--force` is accepted for compatibility and does nothing."""
+    unmet = gates_mod.unmet_before(ev, upto)
+    if unmet:
+        names = ", ".join(f"{g.id} {g.command}" for g in unmet)
+        print(f"note: running with unmet gate(s) {names}; the report greys what they cover "
+              "(aot-evals status --gates)", file=sys.stderr)
+    return [g.id for g in unmet]
 
 
 def cmd_init(args) -> int:
@@ -85,30 +90,65 @@ def cmd_init(args) -> int:
         print(f"  created {c}")
     if not created:
         print("  nothing to create; every file already exists")
-    print("next: C0 import an export, then C1 fill agent.yaml (skill: scope)")
+    print("next: aot-evals build, for the checklist of the lightest Build")
     return 0
 
 
 def cmd_status(args) -> int:
+    from . import trust as trust_mod
+
     ev = _evals(args)
     gs = gates_mod.evaluate(ev)
     nxt = gates_mod.next_unmet(gs)
     if args.json:
-        print(json.dumps({"evals": str(ev.root), "gates": [g.as_dict() for g in gs],
-                          "next": nxt.as_dict() if nxt else None}, indent=2))
+        from . import components as comp
+
+        print(json.dumps({"evals": str(ev.root), **trust_mod.summary(ev, gs),
+                          "components": comp.checklist(ev),
+                          "gates": [g.as_dict() for g in gs],
+                          "next_gate": nxt.as_dict() if nxt else None}, indent=2))
         return 0
     print(f"suite at {ev.root}")
-    for g in gs:
-        note = (g.problems[0] if g.problems else (g.info[0] if g.info else ""))
-        more = f" (+{len(g.problems) - 1} more)" if len(g.problems) > 1 else ""
-        print(f"  {g.id:<4} {g.command:<12} {g.skill:<12} {GLYPH[g.status]:<6} {note}{more}")
-    if nxt:
-        print(f"\nnext: {nxt.id} {nxt.command} (skill: {nxt.skill})")
-        for p in nxt.problems[:15]:
-            print(f"  - {p}")
-    else:
-        print("\nevery implemented gate is met")
+    if args.gates:
+        for g in gs:
+            note = (g.problems[0] if g.problems else (g.info[0] if g.info else ""))
+            more = f" (+{len(g.problems) - 1} more)" if len(g.problems) > 1 else ""
+            print(f"  {g.id:<4} {g.command:<12} {g.skill:<12} {GLYPH[g.status]:<6} {note}{more}")
+        if nxt:
+            print(f"\nfirst unmet gate: {nxt.id} {nxt.command} (skill: {nxt.skill})")
+            for p in nxt.problems[:15]:
+                print(f"  - {p}")
+        else:
+            print("\nevery implemented gate is met")
+        return 0
+    print(trust_mod.render(trust_mod.summary(ev, gs)))
+    open_gates = [g.id for g in gs if g.status == "unmet"]
+    if open_gates:
+        print(f"\nUpgrades still open: {', '.join(open_gates)} (aot-evals status --gates for each)")
     return 0
+
+
+def _grouped(problems: list[str], show: int = 5) -> list[str]:
+    """Problems that differ only by case id, as one line: `N cases: <problem> (a, b, c, +N more)`."""
+    import re
+
+    groups: dict[str, list[str]] = {}
+    order: list[str] = []
+    for p in problems:
+        m = re.match(r"case (\S+): (.*)$", p)
+        key = m.group(2) if m else p
+        if key not in groups:
+            order.append(key)
+        groups.setdefault(key, []).append(m.group(1) if m else "")
+    out = []
+    for key in order:
+        ids = [i for i in groups[key] if i]
+        if len(ids) > 1:
+            more = f", +{len(ids) - show} more" if len(ids) > show else ""
+            out.append(f"{len(ids)} cases: {key} ({', '.join(ids[:show])}{more})")
+        else:
+            out.append(f"case {ids[0]}: {key}" if ids else key)
+    return out
 
 
 def cmd_validate(args) -> int:
@@ -118,7 +158,7 @@ def cmd_validate(args) -> int:
         if not g.problems and not (args.warnings and g.info):
             continue
         print(f"{g.id} {g.command} [{GLYPH[g.status]}]")
-        for p in g.problems:
+        for p in (g.problems if args.all else _grouped(g.problems)):
             print(f"  error: {p}")
         n_problems += len(g.problems)
         for i in g.info:
@@ -143,7 +183,7 @@ def cmd_import(args) -> int:
 
 def cmd_allocate(args) -> int:
     ev = _evals(args)
-    _refuse_unless(ev, "C5", args.force)
+    _unmet_before(ev, "C5")
     p = allocate_mod.plan(ev, halfwidth=args.halfwidth, assumed_rate=args.assumed_rate, k=args.k)
     if args.mark_short:
         if not args.reason:
@@ -160,7 +200,7 @@ def cmd_allocate(args) -> int:
 
 def cmd_screen(args) -> int:
     ev = _evals(args)
-    _refuse_unless(ev, "C7", args.force)
+    _unmet_before(ev, "C7")
     if args.read_by and not (args.case or args.all):
         sys.exit("--read-by records a human read: name the cases read with --case (repeatable), "
                  "or pass --all if NAME really read every case")
@@ -209,7 +249,7 @@ def cmd_run(args) -> int:
         sys.exit("aot-evals run: --purpose is required (or --resume RUN_ID)")
     args.k = 1 if args.k is None else args.k
     upto = "C1" if args.purpose == "smoke" else "C12"
-    forced = _refuse_unless(ev, upto, args.force)
+    forced = _unmet_before(ev, upto)
     if args.model and args.purpose == "candidate" and not args.variable:
         args.variable = f"model={args.model}"
     if args.purpose == "candidate" and not args.variable and not args.force:
@@ -309,6 +349,61 @@ def cmd_label(args) -> int:
     return 1 if res["refused"] else 0
 
 
+def cmd_migrate(args) -> int:
+    from pathlib import Path
+
+    from . import migrate as migrate_mod
+    from .repo import is_evals_root
+
+    if args.evals:
+        evals_dir = Path(args.evals).expanduser().resolve()
+        if not is_evals_root(evals_dir):
+            evals_dir = evals_dir.parent if evals_dir.parent.name == "evals" else evals_dir
+    else:
+        here = Path.cwd().resolve()
+        evals_dir = next((d / "evals" for d in (here, *here.parents) if (d / "evals").is_dir()),
+                         next((d for d in (here, *here.parents) if d.name == "evals"), here / "evals"))
+    migrate_mod.run(evals_dir, dry_run=args.dry_run)
+    return 0
+
+
+def cmd_components(args) -> int:
+    from . import components as comp
+
+    ev = _evals(args)
+    items = comp.checklist(ev)
+    if args.json:
+        print(json.dumps(items, indent=2))
+        return 0
+    print(comp.render(items))
+    return 0
+
+
+def cmd_build(args) -> int:
+    from . import build as build_mod
+
+    ev = _evals(args)
+    done = build_mod.prepare(ev)
+    items = build_mod.checklist(ev)
+    print(build_mod.render(done, items))
+    if args.run:
+        return build_mod.run(ev, main, k=args.k)
+    from . import trust as trust_mod
+
+    print(f"\nNext: {trust_mod.next_step(ev)['what']}")
+    if not build_mod.ready_to_run(items) and not items[5]["done"]:
+        print("  $ aot-evals build --run    # the smoke run, the baseline and the report")
+    return 0
+
+
+def cmd_serve(args) -> int:
+    from . import serve as serve_mod
+
+    ev = _evals(args)
+    serve_mod.serve(ev, host=args.host, port=args.port, open_browser=args.open)
+    return 0
+
+
 def cmd_agreement(args) -> int:
     from pathlib import Path
 
@@ -319,10 +414,26 @@ def cmd_agreement(args) -> int:
     if what[0] == "label":
         action = what[1] if len(what) > 1 else "status"
         if action == "queue":
-            runs = args.run or report_mod.default_runs(ev)
+            only = None
+            if args.changed:
+                from . import bench
+
+                cand = [bench.candidate_run(ev)] if bench.candidate_run(ev) else []
+                if not cand:
+                    sys.exit("--changed needs a candidate run after the baseline, compared with it "
+                             "(aot-evals run --purpose candidate ...; aot-evals compare)")
+                only = set(bench.changed_cases(ev))
+                if not only:
+                    sys.exit("no case's verdict moved in the latest comparison: nothing to label "
+                             "(or run aot-evals compare first)")
+                runs = args.run or cand
+                print(f"{len(only)} case(s) whose verdict moved: {', '.join(sorted(only)[:10])}")
+            else:
+                runs = args.run or report_mod.default_runs(ev)
             if not runs:
                 sys.exit("no runs to sample from; run a baseline first (aot-evals run --purpose baseline)")
-            path, items = ag.make_queue(ev, runs, per_case=args.per_case, n=args.n, seed=args.seed)
+            path, items = ag.make_queue(ev, runs, per_case=args.per_case, n=args.n, seed=args.seed,
+                                        only_cases=only)
             page = ag.write_page(ev)
             print(f"wrote {len(items)} runs to {path} (git-ignored)")
             print(f"label them on the page {page} (git-ignored); then: aot-evals agreement label import --csv FILE")
@@ -351,9 +462,28 @@ def cmd_agreement(args) -> int:
         if action == "status":
             labels = ag.load_labels(ev)
             n_fail = sum(not r["label"] for r in labels)
-            print(f"{len(labels)} whole runs labelled: {n_fail} fail, {len(labels) - n_fail} pass")
+            print(f"{len(labels)} whole runs with a verdict: {n_fail} fail, {len(labels) - n_fail} pass")
+            for pair in ag.labeller_agreement(ev):
+                k = "n/a" if pair["kappa"] is None else f"{pair['kappa']:.2f}"
+                print(f"  {' & '.join(pair['labellers'])}: {pair['agree']}/{pair['n']} agreed, κ {k}")
+            dis = ag.disputes(ev)
+            if dis:
+                print(f"{len(dis)} run(s) where labellers disagree, waiting for a ruling "
+                      "(aot-evals agreement rule --item ID --label pass|fail --by NAME --note WHY):")
+                for d in dis[:10]:
+                    who = ", ".join(f"{x['labeller']} {'pass' if x['label'] else 'fail'}" for x in d["labels"])
+                    print(f"  {d['item_id']}: {who}")
             return 0
         sys.exit(f"unknown: agreement label {action} (queue, page, import, add, status)")
+    if what[0] == "rule":
+        from .labels import parse_label
+
+        lab = parse_label(args.label or "")
+        if not (args.item and lab is not None and args.by):
+            sys.exit("agreement rule needs --item RUN/CASE.tN.aM, --label pass|fail and --by NAME")
+        rec = ag.add_ruling(ev, args.item, lab, args.by, args.note or "")
+        print(f"ruled {rec['item_id']} {'pass' if rec['label'] else 'fail'} ({rec['by']})")
+        return 0
     if what[0] == "regrade":
         if not args.run:
             sys.exit("agreement regrade needs --run RUN_ID")
@@ -638,8 +768,9 @@ _MILESTONES = {"start": "phase1_started", "discovery-page": "discovery_written",
                "report": "report_built"}
 
 # Commands that never log themselves: reads, and the commands that write the log.
-_UNLOGGED = {"replay", "status", "validate", "log", "activity", "checkpoint", "start", "discovery-page", "snapshot",
-             "doctor", "demo", "telemetry", "benchmarks"}
+_UNLOGGED = {"replay", "status", "components", "migrate", "validate", "log", "activity", "checkpoint", "start",
+             "discovery-page", "snapshot",
+             "doctor", "demo", "telemetry", "benchmarks", "serve"}
 # Commands long enough to log their start, so the activity page shows them in progress.
 _LOG_START = {"run", "calibrate", "reliability", "judge"}
 
@@ -677,8 +808,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="aot-evals", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--version", action="version", version=f"aot-evals {__version__}")
-    ap.add_argument("--evals", help="path to the agent's suite directory (default: found from "
-                    "evals/ upward; see --agent)")
+    ap.add_argument("--evals", help="one agent's suite (evals/agents/AGENT/), or the evals/ folder "
+                    "with --agent (default: found from evals/ upward)")
     ap.add_argument("--agent", help="the agent's suite, evals/agents/AGENT/ (needed when the "
                     "repository holds several)")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -703,12 +834,14 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("init", help="create the agent's suite (evals/agents/AGENT/) with templates"
                    ).set_defaults(fn=cmd_init)
 
-    s = sub.add_parser("status", help="command gates C0-C19 and the next unmet one")
+    s = sub.add_parser("status", help="the phase, trust per category, what changed, and the next step")
+    s.add_argument("--gates", action="store_true", help="the gate table (C0-C19) instead")
     s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_status)
 
     s = sub.add_parser("validate", help="every problem across all gates")
     s.add_argument("--warnings", action="store_true", help="also print warnings and info")
+    s.add_argument("--all", action="store_true", help="one line per problem, instead of grouping cases")
     s.set_defaults(fn=cmd_validate)
 
     s = sub.add_parser("import", help="C0: import an export with its provenance")
@@ -766,7 +899,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--stop-after", type=int, default=5, metavar="N",
                    help="stop after N cases in a row end in an operational failure such as a "
                    "timeout (default 5; 0 never stops)")
-    s.add_argument("--force", action="store_true", help="run past unmet gates (recorded)")
+    s.add_argument("--force", action="store_true", help="accepted for compatibility; nothing blocks a run")
     s.set_defaults(fn=cmd_run)
 
     s = sub.add_parser("label", help="C9: human labels per judge")
@@ -784,7 +917,7 @@ def main(argv: list[str] | None = None) -> int:
     s.set_defaults(fn=cmd_label)
 
     s = sub.add_parser("agreement", help="C19: the suite's verdict on whole runs against a person's")
-    s.add_argument("what", nargs="*", help="(nothing): measure; label queue|page|import|add|status; regrade")
+    s.add_argument("what", nargs="*", help="(nothing): measure; label queue|page|import|add|status; rule; regrade")
     s.add_argument("--run", action="append",
                    help="label queue, regrade: these runs (default: latest baseline); label import: attach "
                    "rows that give only case_id and trial to this run")
@@ -801,7 +934,30 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--reproduces", action="store_true",
                    help="regrade: check that code checks give the run's recorded verdicts on its raw records")
     s.add_argument("--open", action="store_true", help="label queue, page: open the page")
+    s.add_argument("--changed", action="store_true",
+                   help="label queue: only cases whose verdict moved between the baseline and the latest "
+                   "compared candidate, from the candidate run")
     s.set_defaults(fn=cmd_agreement)
+
+    s = sub.add_parser("build", help="the lightest Build: draft what's missing, the checklist, then --run the baseline")
+    s.add_argument("--run", action="store_true", help="then run the agent once, the baseline and the report")
+    s.add_argument("--k", type=int, default=3, help="--run: trials per case for the baseline (3-5)")
+    s.set_defaults(fn=cmd_build)
+
+    s = sub.add_parser("migrate", help="move suites from evals/<agent>/ to evals/agents/<agent>/")
+    s.add_argument("--dry-run", action="store_true", help="say what would move, and move nothing")
+    s.set_defaults(fn=cmd_migrate)
+
+    s = sub.add_parser("components", help="the optimization loop's components as a checklist, read from the suite")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_components)
+
+    s = sub.add_parser("serve", help="the grader application: label runs, rulings, triage, rules, judges")
+    s.add_argument("--host", default="127.0.0.1",
+                   help="address to listen on (default 127.0.0.1; 0.0.0.0 lets others on the network in)")
+    s.add_argument("--port", type=int, default=8765, help="port (default 8765; 0 picks a free one)")
+    s.add_argument("--open", action="store_true", help="open it in the default browser")
+    s.set_defaults(fn=cmd_serve)
 
     s = sub.add_parser("replay", help="act as the agent and its hooks by replaying recorded runs (offline grading)")
     s.add_argument("action", choices=["run", "seed", "observe"])
@@ -825,7 +981,7 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("judge", help="apply a judge to past runs")
     s.add_argument("action", choices=["apply"])
     s.add_argument("--judge", required=True)
-    s.add_argument("--run", action="append", help="default: the latest baseline")
+    s.add_argument("--run", action="append", help="default: the baseline (every category's newest baseline run)")
     s.add_argument("--backend", help="default: the judge's primary backend")
     s.set_defaults(fn=cmd_judge)
 
