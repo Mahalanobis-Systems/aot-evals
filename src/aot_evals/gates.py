@@ -6,8 +6,9 @@ Each gate returns a status:
 - `not_implemented`: the command is guidance only for now (C16, C17; docs/method.md §4). These
   never block a later command.
 
-A command refuses to run while a predecessor's gate is unmet (`require`), naming the gate and
-the command that clears it.
+No command refuses to run because an earlier gate is unmet: a gate is a trust upgrade, and the
+report gates (G1-G14) grey what an unmet gate covers rather than hide it. `unmet_before` lists the
+unmet gates a command runs past, so the run manifest can record them (docs/method.md §4.1).
 """
 
 from __future__ import annotations
@@ -680,12 +681,17 @@ def next_unmet(gates: list[Gate]) -> Gate | None:
     return None
 
 
-def require(ev: Evals, upto: str) -> list[Gate]:
-    """Unmet blocking gates strictly before command `upto` (e.g. 'C12')."""
+def unmet_before(ev: Evals, upto: str) -> list[Gate]:
+    """Unmet gates strictly before command `upto` (e.g. 'C12'). Informational: nothing blocks."""
     order = [c[0] for c in COMMANDS]
     before = set(order[: order.index(upto)])
     return [g for g in evaluate(ev) if g.id in before and g.id not in NON_BLOCKING
             and g.status == "unmet"]
+
+
+def require(ev: Evals, upto: str) -> list[Gate]:
+    """Kept for callers of the pre-1.0 API: nothing blocks any more, so this is always empty."""
+    return []
 
 
 def untracked_cases(ev: Evals) -> list[str]:

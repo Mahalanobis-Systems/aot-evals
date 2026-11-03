@@ -447,6 +447,7 @@ def measure(ev: Evals, call_judges: bool = False, log=print) -> dict:
         res = g.grade(run_id, a)
         human = "pass" if lab["label"] else "fail"
         rows.append({"item": lab["item_id"], "case_id": lab["case_id"],
+                     "category": (g.cases.get(lab["case_id"]) or {}).get("category"),
                      "split": lab.get("split") or split_for(lab["item_id"]),
                      "human": human, "suite": res["verdict"], "note": lab.get("note") or "",
                      "failing": [f"{c['check_id']}: {c['detail'][:200]}" for c in res["checks"]
@@ -454,8 +455,15 @@ def measure(ev: Evals, call_judges: bool = False, log=print) -> dict:
     dev = [r for r in rows if r["split"] == "dev"]
     hold = [r for r in rows if r["split"] == "holdout"]
     disagreements = [{**r, "triage": triage.get(r["item"])} for r in rows if r["suite"] != r["human"]]
+    by_cat = {}
+    for r in rows:
+        by_cat.setdefault(r["category"], []).append(r)
+    categories = {cat: {"dev": _rates([r for r in rs if r["split"] == "dev"]),
+                        "holdout": _rates([r for r in rs if r["split"] == "holdout"])}
+                  for cat, rs in sorted(by_cat.items(), key=lambda kv: str(kv[0]))}
     result = {"measured_at": now_iso(), "suite_sha": suite_sha(ev), "labels_sha": labels_sha(labels),
               "floors": floors(ev), "dev": _rates(dev), "holdout": _rates(hold), "all": _rates(rows),
+              "categories": categories,
               "judge_calls": g.calls, "labels_without_a_run": missing,
               "disagreements": sorted(disagreements, key=lambda d: (d["split"], d["human"], d["case_id"]))}
     result["problems"] = gate_problems(ev, result, labels)

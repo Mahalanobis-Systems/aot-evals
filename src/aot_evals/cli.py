@@ -3,7 +3,7 @@
     aot-evals demo [DIR]                a toy agent with a finished suite, to try it in minutes
     aot-evals doctor                    check the environment (paste into bug reports)
     aot-evals init                      create the agent's suite, evals/agents/<agent>/, with templates
-    aot-evals status [--json]           every command gate (C0-C19); the next unmet one
+    aot-evals status [--gates|--json]   the phase, trust per category, what changed, the next step
     aot-evals validate                  every problem and warning, across all gates
     aot-evals import FILE ...           C0: copy an export into evals/data/, record provenance
     aot-evals allocate [--write]        C5: size both case sets, print the arithmetic
@@ -59,22 +59,15 @@ def _evals(args) -> Evals:
     return ev
 
 
-def _refuse_unless(ev: Evals, upto: str, force: bool) -> list[str]:
-    blocked = gates_mod.require(ev, upto)
-    if not blocked:
-        return []
-    names = ", ".join(f"{g.id} {g.command}" for g in blocked)
-    if force:
-        print(f"warning: running past unmet gate(s) {names}; recorded in the run manifest",
-              file=sys.stderr)
-        return [g.id for g in blocked]
-    first = blocked[0]
-    lines = [f"refused: {upto} {gates_mod.COMMAND_BY_ID[upto][1]} needs {first.id} "
-             f"{first.command} to be met (skill: {first.skill}):"]
-    lines += [f"  - {p}" for p in first.problems[:10]]
-    if len(blocked) > 1:
-        lines.append(f"  also unmet: {', '.join(g.id for g in blocked[1:])}")
-    sys.exit("\n".join(lines))
+def _unmet_before(ev: Evals, upto: str) -> list[str]:
+    """Gates unmet before this command. Nothing refuses: the report greys what they cover. The
+    ids are recorded in the run manifest; `--force` is accepted for compatibility and does nothing."""
+    unmet = gates_mod.unmet_before(ev, upto)
+    if unmet:
+        names = ", ".join(f"{g.id} {g.command}" for g in unmet)
+        print(f"note: running with unmet gate(s) {names}; the report greys what they cover "
+              "(aot-evals status --gates)", file=sys.stderr)
+    return [g.id for g in unmet]
 
 
 def cmd_init(args) -> int:
@@ -90,24 +83,33 @@ def cmd_init(args) -> int:
 
 
 def cmd_status(args) -> int:
+    from . import trust as trust_mod
+
     ev = _evals(args)
     gs = gates_mod.evaluate(ev)
     nxt = gates_mod.next_unmet(gs)
     if args.json:
-        print(json.dumps({"evals": str(ev.root), "gates": [g.as_dict() for g in gs],
-                          "next": nxt.as_dict() if nxt else None}, indent=2))
+        print(json.dumps({"evals": str(ev.root), **trust_mod.summary(ev, gs),
+                          "gates": [g.as_dict() for g in gs],
+                          "next_gate": nxt.as_dict() if nxt else None}, indent=2))
         return 0
     print(f"suite at {ev.root}")
-    for g in gs:
-        note = (g.problems[0] if g.problems else (g.info[0] if g.info else ""))
-        more = f" (+{len(g.problems) - 1} more)" if len(g.problems) > 1 else ""
-        print(f"  {g.id:<4} {g.command:<12} {g.skill:<12} {GLYPH[g.status]:<6} {note}{more}")
-    if nxt:
-        print(f"\nnext: {nxt.id} {nxt.command} (skill: {nxt.skill})")
-        for p in nxt.problems[:15]:
-            print(f"  - {p}")
-    else:
-        print("\nevery implemented gate is met")
+    if args.gates:
+        for g in gs:
+            note = (g.problems[0] if g.problems else (g.info[0] if g.info else ""))
+            more = f" (+{len(g.problems) - 1} more)" if len(g.problems) > 1 else ""
+            print(f"  {g.id:<4} {g.command:<12} {g.skill:<12} {GLYPH[g.status]:<6} {note}{more}")
+        if nxt:
+            print(f"\nfirst unmet gate: {nxt.id} {nxt.command} (skill: {nxt.skill})")
+            for p in nxt.problems[:15]:
+                print(f"  - {p}")
+        else:
+            print("\nevery implemented gate is met")
+        return 0
+    print(trust_mod.render(trust_mod.summary(ev, gs)))
+    open_gates = [g.id for g in gs if g.status == "unmet"]
+    if open_gates:
+        print(f"\nUpgrades still open: {', '.join(open_gates)} (aot-evals status --gates for each)")
     return 0
 
 
@@ -143,7 +145,7 @@ def cmd_import(args) -> int:
 
 def cmd_allocate(args) -> int:
     ev = _evals(args)
-    _refuse_unless(ev, "C5", args.force)
+    _unmet_before(ev, "C5")
     p = allocate_mod.plan(ev, halfwidth=args.halfwidth, assumed_rate=args.assumed_rate, k=args.k)
     if args.mark_short:
         if not args.reason:
@@ -160,7 +162,7 @@ def cmd_allocate(args) -> int:
 
 def cmd_screen(args) -> int:
     ev = _evals(args)
-    _refuse_unless(ev, "C7", args.force)
+    _unmet_before(ev, "C7")
     if args.read_by and not (args.case or args.all):
         sys.exit("--read-by records a human read: name the cases read with --case (repeatable), "
                  "or pass --all if NAME really read every case")
@@ -209,7 +211,7 @@ def cmd_run(args) -> int:
         sys.exit("aot-evals run: --purpose is required (or --resume RUN_ID)")
     args.k = 1 if args.k is None else args.k
     upto = "C1" if args.purpose == "smoke" else "C12"
-    forced = _refuse_unless(ev, upto, args.force)
+    forced = _unmet_before(ev, upto)
     if args.model and args.purpose == "candidate" and not args.variable:
         args.variable = f"model={args.model}"
     if args.purpose == "candidate" and not args.variable and not args.force:
@@ -703,7 +705,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("init", help="create the agent's suite (evals/agents/AGENT/) with templates"
                    ).set_defaults(fn=cmd_init)
 
-    s = sub.add_parser("status", help="command gates C0-C19 and the next unmet one")
+    s = sub.add_parser("status", help="the phase, trust per category, what changed, and the next step")
+    s.add_argument("--gates", action="store_true", help="the gate table (C0-C19) instead")
     s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_status)
 
@@ -766,7 +769,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--stop-after", type=int, default=5, metavar="N",
                    help="stop after N cases in a row end in an operational failure such as a "
                    "timeout (default 5; 0 never stops)")
-    s.add_argument("--force", action="store_true", help="run past unmet gates (recorded)")
+    s.add_argument("--force", action="store_true", help="accepted for compatibility; nothing blocks a run")
     s.set_defaults(fn=cmd_run)
 
     s = sub.add_parser("label", help="C9: human labels per judge")

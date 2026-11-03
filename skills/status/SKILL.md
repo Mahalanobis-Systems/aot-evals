@@ -20,9 +20,15 @@ team's project.
 ## 1. Read the state, publish it, and stop
 
 ```bash
-aot-evals status            # each gate C0–C19 and the next unmet one
+aot-evals status            # the phase, trust per category, what changed since the baseline, the next step
+aot-evals status --gates    # each gate C0–C19 and the first unmet one
 aot-evals validate          # every problem across all gates
 ```
+
+The phases are Assess (the discovery report), Build (the agent runs, cases with checks, a
+baseline, the grader application) and Judge (people label runs, the suite is held to them, each
+category earns trust). The lightest Build gets the loop running; everything else is an upgrade
+(docs/method.md §4.1). Lead with `status`'s next step, in its words.
 
 Each agent's suite lives in `evals/agents/<agent>/`, beside its discovery report; `<suite>/`
 below means that folder. If it has no `agent.yaml` yet, confirm the repository root with the user,
@@ -86,10 +92,11 @@ Every skill below follows this pattern. Each one lists its own checkpoints.
 | C12, C19, C13–C17 | `run` | baseline, agreement (C19 comes right after the baseline), compare, coverage, redundancy, drift, online (C16–C17 are guidance only for now) |
 | C18 | `report` | the report |
 
-Once the person replies to the first checkpoint, load the skill that clears the next unmet gate
-and continue. A command does not run while a predecessor's gate is unmet. The CLI refuses and names
-the gate. `--force` exists for debugging; it is recorded in the run manifest, so never
-use it to hide a gate from the user.
+Once the person replies to the first checkpoint, load the skill for `status`'s next step and
+continue. No command refuses to run because an earlier gate is unmet: a gate is a trust upgrade.
+The run goes ahead, the note names the unmet gates, the manifest records them, and the report
+greys what they cover. Say so plainly when it happens ("the baseline ran; the cases aren't
+screened yet, so the report leaves their numbers greyed until they are").
 
 Two exceptions to the order:
 - **E14, the operational sweep** (`aot-evals ops`), can run in week one, before any eval exists.
@@ -117,13 +124,14 @@ Two exceptions to the order:
 
 ## 4. The loop
 
-C3–C19 repeat. Two events force re-entry:
-- a **prompt rewrite**: most of the hardest cases can change, so re-derive the hard set and
-  re-run the baseline;
-- a **shift in category mix**: re-open C3 (shares) and C5 (allocation).
-
-When the user changes the agent's prompt, skills, tools, model or harness, say that the baseline
-no longer describes the agent, and route to `run`.
+`status` compares the suite and the agent with the latest baseline and names each change with
+its short path back (docs/method.md §4.1): the agent changed (a candidate run, then label only
+what changed), a new category (checks, a baseline that includes it, labels until it clears the
+floors), cases or checks changed (screen; re-grade offline), a judge or the standard changed
+(recalibrate or recheck, then re-grade), labels added (measure again). Follow that path rather
+than starting from the top. Two further events: a **prompt rewrite** re-derives the hard set
+(C15 after the next comparison), and a **shift in category mix** re-opens C3 (shares) and C5
+(allocation).
 
 ## 5. Choosing the strategy per category
 

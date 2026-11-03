@@ -117,6 +117,8 @@ def build_manifest(ev: Evals, run_id: str, purpose: str, k: int, cases: list[dic
                      "files": {c.get("id"): sha256_file(ev.p(c["_path"]))[:16] for c in cases if "_path" in c},
                      "sha256": _hash_files(case_files, ev.root)},
         "checks": checks,
+        "standard_sha": (sha256_file(ev.p("labels", "standard.md"))[:16]
+                         if ev.p("labels", "standard.md").exists() else None),
         "invoke": {**{key: executor.invoke.get(key) for key in
                       ("command", "cwd", "timeout", "setup", "reset", "reset_scope", "seed",
                        "observe", "max_attempts", "isolate")},
@@ -246,7 +248,9 @@ def _run(ev: Evals, agent: dict, isolated: Path | None, *, purpose: str, k: int,
     manifest["judges_enabled"] = judges
     if isolated:
         log(f"  isolated: the agent runs from {isolated}, a copy without evals/")
-    manifest["forced_past_gates"] = forced or []
+    # gates that were unmet when the run started; the report greys what they cover (§10)
+    manifest["unmet_gates"] = forced or []
+    manifest["forced_past_gates"] = forced or []  # the name manifests before 1.0 used
     write_json(run_dir / "manifest.json", manifest)
     (run_dir / "outcomes.jsonl").touch()
 

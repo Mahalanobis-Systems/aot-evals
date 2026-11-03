@@ -6,6 +6,25 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+Towards 1.0.0: three phases (Assess, Build, Judge), trust per category, and iteration as the
+organizing idea. The method's commands, gates and ids are unchanged; what changes is how they are
+reached and read.
+
+- **No command refuses to run because an earlier gate is unmet.** A gate is a trust upgrade: the
+  run goes ahead, the note names the unmet gates, the manifest records them (`unmet_gates`; the
+  old `forced_past_gates` is kept with the same value), and the report greys what they cover, as
+  it already did. `--force` is accepted and does nothing. The lightest Build (an agent that runs,
+  a few cases with a check each, a baseline) now reaches a number in one pass (docs/method.md §4.1).
+- **`aot-evals status` reads like a team would:** the phase (Assess, Build or Judge), trust per
+  category (untested, provisional, validated, with the reason), what changed since the baseline
+  with the short path back for each kind of change (agent, new use case, cases, checks, judge,
+  standard, labels, an uncompared candidate), and the one next step. `--gates` prints the gate
+  table it used to print; `--json` carries both.
+- `report/agreement.json` gains `categories`: catch and clean pass rates per category, dev and
+  holdout, which is what makes a category `validated`.
+- The run manifest records `standard_sha`, so a change to the labelling standard is detected.
+- Checkpoint pages group the roadmap by phase (Build, Judge, Report) instead of five stages.
+
 ## 0.4.2 — 2026-11-03
 
 - **`aot-evals run --model <id>`** pins the agent's model for one run: it overrides

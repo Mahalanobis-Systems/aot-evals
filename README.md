@@ -72,27 +72,33 @@ fix next. They rest on four things, and AOT Evals checks each one for your agent
 
 ## How it works
 
-**Phase 1: discovery (about 5 minutes).** AOT Evals scans your repository for agents and asks
-which one to test. It asks three questions: why you're testing it now, what the goals around it
-are, and what you'll use the tests for. Then four reads run side by side: how the agent works,
-its tools and where it could be tested safely, its traffic and the kinds of tasks it handles,
-and what data it touches and how private it is. You get a plain-English discovery report: an
-overview of the four pillars, the details behind each, and the next steps.
+Three phases, each ending in something handed to the next group of people.
 
-**Phase 2: building the evals (about an afternoon).** It builds a safe place to run the agent,
-turns real runs into cleaned test cases grouped by task type, writes the checks (code first, AI
-graders only where code can't decide, tuned against your own labels), then runs the suite
-several times and reports quality, cost and speed with how sure each number is. It stops only for
-things that could touch real people, data or money, and leaves a checkpoint page for your review
-at each step.
+**Assess (about 5 minutes).** AOT Evals scans your repository for agents and asks which one to
+test. It asks three questions: why you're testing it now, what the goals around it are, and what
+you'll use the tests for. Then four reads run side by side: how the agent works, its tools and
+where it could be tested safely, its traffic and the kinds of tasks it handles, and what data it
+touches and how private it is. You get a plain-English discovery report: an overview of the four
+pillars, the details behind each, and the next steps.
+
+**Build (half a day for the first pass).** Engineering wires the agent to the contract, seeds
+cases from real runs with a check on each, runs the baseline, and hands the grader application to
+the people who will label. Everything else the method knows how to do (a coverage list, shares and
+budgets, screens, judge calibration) is an upgrade that raises trust in a number, and the report
+says which upgrades are still missing rather than refusing to run.
+
+**Judge (ongoing).** Product owners, experts or end users label whole runs pass or fail, the suite
+is held to their verdicts, judges are calibrated on their labels, and their rulings become rules.
+Each category moves from provisional to validated on its own. When something changes, the agent,
+a new use case, a rule, a judge, `aot-evals status` names the change and the short path back.
 
 Under the hood:
 
 - **Three planes, reported separately:** correctness, operational cost, and trust in the
   instruments.
 - **Two case sets:** one for finding errors, one for estimating quality.
-- **Commands C0–C19, each with an exit gate.** Refusal gates G1–G14 mean a number that can't be
-  defended isn't printed.
+- **Commands C0–C19, each with an exit gate.** A gate is a trust upgrade, never a lock. Refusal
+  gates G1–G14 mean a number that can't be defended isn't printed.
 - **A fixed `report.json` schema**, which Claude renders into a local HTML report written for the
   question being asked.
 - **A local catalog of over 350 public agent benchmarks** ([references/benchmarks.md](references/benchmarks.md)).
@@ -131,7 +137,8 @@ several agents in one repository, pass `--agent NAME` to every command.
 aot-evals demo [DIR]                             # a toy agent with a finished suite
 aot-evals doctor                                 # check the environment
 aot-evals --agent NAME init                      # create evals/agents/NAME/
-aot-evals status                                 # gates C0–C19, and what's next
+aot-evals status                                 # the phase, trust per category, what changed, what's next
+aot-evals status --gates                         # the gate table, C0–C19
 aot-evals import traces.jsonl --source ... --query ... --window ...   # C0
 aot-evals ops --export <id> --field cost_usd=... # E14: operational costs in week one
 aot-evals run --purpose smoke --question "..."   # C1: the agent runs end to end

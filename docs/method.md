@@ -161,7 +161,7 @@ evals/agents/<agent>/
   runs/<run-id>/manifest.json       # the condition record
   runs/<run-id>/outcomes.jsonl      # one line per attempt and per check verdict
   report/report.json                # §8
-  report/agreement.json             # C19: catch and clean pass rates on whole runs, dev and holdout
+  report/agreement.json             # C19: catch and clean pass rates on whole runs, dev and holdout, per category
   report/report-<date>.html         # §9
   report/checkpoints/               # §9: one page per owner checkpoint
   journal/                          # §9: the activity log; ignores itself
@@ -198,9 +198,12 @@ Rules:
 
 ## 4. Commands
 
-Each command has an exit gate. The CLI will not run a command whose predecessor's gate is unmet;
-it names the gate and the command that clears it (`--force` runs past it, and the run manifest
-records that it did). `aot-evals status` shows every gate and the next unmet one.
+Each command has an exit gate. A gate is a trust upgrade, not a lock: no command refuses to run
+because an earlier gate is unmet. The run manifest records the gates that were unmet when a run
+started (`unmet_gates`), and the report gates (§10) grey what each one covers rather than hide
+it. `aot-evals status` says which phase the work is in, how far each category can be trusted,
+what changed since the baseline, and the one next step; `aot-evals status --gates` shows every
+gate and the first unmet one.
 
 | # | Command | Does | Exit gate |
 |---|---|---|---|
@@ -225,8 +228,8 @@ records that it did). `aot-evals status` shows every gate and the next unmet one
 | C17 | `online` | Set up the online regime: shadow → canary → online judging; behavioural signals; fingerprints. | Guidance only; not yet automated. |
 | C18 | `report` | Write `report.json` (§8), then the HTML report (§9). | Every gate's status is in the report. |
 
-C3–C18 repeat as a loop. A prompt rewrite re-derives the hard-case set, and a shift in category
-mix re-opens C3 and C5.
+C3–C18 repeat as a loop; §4.1 says what each kind of change re-opens. A prompt rewrite
+re-derives the hard-case set, and a shift in category mix re-opens C3 and C5.
 
 **How runs work.**
 
@@ -266,6 +269,45 @@ rate-limited runtime) count as one side: their case sets, checks and judges are 
 repeats of one build never look like two versions. The prune proposal never prunes
 quality-estimate cases, sends always-fail cases to review, keeps regression guards for coverage
 cells and categories, and re-runs the pairwise tests to show the detectable effect is unchanged.
+
+### 4.1 Phases, trust and iteration
+
+The work has three phases, each ending in something handed to the next group of people:
+
+| Phase | Who | Ends with |
+|---|---|---|
+| **Assess** | the owner and tech lead, with Claude | the discovery report: why the agent is being tested, how it is built, where it can run safely, and the golden test case grid |
+| **Build** | engineering | the loop running: the agent wired to the contract, cases seeded from real runs with a check on each, a baseline, and the grader application started |
+| **Judge** | graders (product owners, experts, end users) | each category validated: a person's verdicts on whole runs, the suite held to them, judges calibrated, rulings folded into the standard |
+
+**The lightest Build** is the one that gets the loop running: an agent that runs from a command
+(or recorded runs replayed, C1), 10 to 20 cases from real runs in the largest categories (C6), a
+side-effect check and one code check per category (C8), and a baseline (C12). Every other
+command is an upgrade that raises trust in a number: provenance (C0), the coverage list (C2),
+shares and the cost matrix (C3), budgets (C4), allocation (C5), screens (C7), judge labels,
+calibration and reliability (C9 to C11), whole-run agreement (C19), coverage (C14) and
+redundancy (C15). The report shows which upgrades are missing and greys what they cover.
+
+**Trust per category.** A category is `untested` until a finished baseline covers it,
+`provisional` once it has numbers, and `validated` when the suite agrees with a person on its
+runs: C19's floors met suite-wide, and the category's own dev catch rate and clean pass rate at
+or above the floors (85% by default). `report/agreement.json` carries the per-category rates.
+Provisional numbers print, labelled provisional (G14).
+
+**What a change invalidates.** `status` compares the suite and the agent with the latest
+finished baseline and names each change with its short path back:
+
+| Change since the baseline | Invalidates | The short path |
+|---|---|---|
+| The agent (commit, model, prompt, tools, harness) | the baseline; after a prompt rewrite, the hard-case set | a candidate run with one declared variable, then `compare`; a person labels only the runs whose verdict changed, and the provisional categories |
+| A new category (a new use case) | nothing else; the new category is untested | checks for its failure modes, a baseline that includes it, labels until it clears the floors |
+| Cases added or changed | nothing until they run | screen them; include them in the next baseline (unscreened cases stay out of gated numbers, G8) |
+| A check changed or added | the measured agreement | re-grade the labelled runs offline (`agreement`); no agent runs |
+| A judge changed (its version) | that judge's calibration | recalibrate from cached judgements, then re-grade |
+| The labelling standard changed (a ruling became a rule) | the labels the rule could flip | recheck those labels, then re-grade |
+| Labels added | the measured agreement | measure it again |
+
+An uncommitted agent is named too: a run of it can't be compared (G7).
 
 ---
 

@@ -57,15 +57,21 @@ def test_good_agent_clears_every_phase1_gate(make_repo):
     assert r["coverage"]["cells"][0]["n"] == 0  # empty cells listed first
 
 
-def test_baseline_refused_until_cases_are_screened(make_repo, capsys):
+def test_baseline_runs_on_unscreened_cases_and_the_report_excludes_them(make_repo, capsys):
+    """Nothing blocks a run on an unmet gate (method §4.1); the manifest records the gates that
+    were unmet, and the report greys what they cover (G8 keeps unscreened cases out of gated
+    numbers)."""
     repo = make_repo(screen=False)
     repo.cli("run", "--purpose", "smoke", "--question", "hello")
-    try:
-        repo.cli("run", "--purpose", "baseline", "--k", "3")
-    except SystemExit as e:
-        assert "C7 screen" in str(e)
-    else:
-        raise AssertionError("baseline ran with unscreened cases")
+    assert repo.cli("run", "--purpose", "baseline", "--k", "3") == 0
+    assert "unmet gate(s)" in capsys.readouterr().err
+    ev = Evals(repo.evals)
+    m = ev.latest_run("baseline")
+    assert "C7" in m["unmet_gates"] and m["unmet_gates"] == m["forced_past_gates"]
+    assert repo.cli("report") == 0
+    r = repo.report()
+    assert repo.gate(r, "G8")["status"] == "fail"
+    assert all(row["pass_rate"] is None and row["excluded"]["n_cases"] > 0 for row in r["categories"])
 
 
 def test_k1_baseline_is_refused_by_the_cli(make_repo):
