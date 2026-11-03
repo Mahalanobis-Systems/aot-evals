@@ -157,6 +157,7 @@ provisional.
 
 ```bash
 aot-evals run --purpose candidate --k 5 --variable model=claude-haiku-4-5   # one declared variable
+aot-evals run --purpose candidate --k 5 --model claude-haiku-4-5   # same, and passes the model to the agent
 aot-evals compare                         # latest candidate vs latest baseline
 aot-evals report --candidate <run-id>     # the same comparison inside report.json (P7)
 ```

@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from aot_evals import gates
+from aot_evals.executor import Executor
 from aot_evals.repo import Evals
 
 BOOKING = ["book-001", "book-002", "book-003", "book-004", "book-005", "book-q01", "book-q02"]
@@ -263,3 +266,29 @@ def test_pass_pow_k_says_why_it_is_null(make_repo):
     assert repo.cli("report") == 0
     rows = [r for r in repo.report()["categories"] if r["pass_rate"]]
     assert rows and all(r["pass_pow_k"] is None and r["pass_pow_k_reason"].startswith("k = 1") for r in rows)
+
+
+def test_run_model_pins_the_model_for_one_run(make_repo, monkeypatch):
+    """--model reaches the agent, is recorded in the manifest and declares a candidate's variable;
+    agent.yaml is untouched, and a run without it records nothing, so old manifests still compare."""
+    repo = make_repo()
+    seen, real = [], Executor.run
+
+    def spy(self, payload):
+        seen.append((payload["model"], self.model))
+        return real(self, payload)
+
+    monkeypatch.setattr(Executor, "run", spy)
+    before = (repo.evals / "agent.yaml").read_text()
+    assert repo.cli("run", "--purpose", "candidate", "--k", "1", "--case", "book-001", "--force",
+                    "--model", "toy-model-2") == 0
+    m = Evals(repo.evals).latest_run("candidate")
+    assert m["declared_variable"] == "model=toy-model-2"
+    assert m["invoke"]["model"] == "toy-model-2"
+    assert seen and set(seen) == {("toy-model-2", "toy-model-2")}
+    assert (repo.evals / "agent.yaml").read_text() == before
+
+    assert repo.cli("run", "--purpose", "smoke", "--case", "book-001") == 0
+    assert "model" not in Evals(repo.evals).latest_run("smoke")["invoke"]
+    with pytest.raises(SystemExit, match="--model"):
+        repo.cli("run", "--resume", m["run_id"], "--model", "toy-model-3")

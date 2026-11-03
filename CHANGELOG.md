@@ -6,6 +6,12 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+- **`aot-evals run --model <id>`** pins the agent's model for one run: it overrides
+  `agent.yaml`'s `invoke.model`, reaches the agent as stdin `model` and the `{model}` placeholder,
+  and is recorded in the manifest as `invoke.model`. A candidate run with no `--variable` declares
+  `model=<id>`, and `--resume` keeps the run's model. Comparing a cheaper, local or fine-tuned
+  model on the same suite no longer means editing `agent.yaml` between runs.
+
 ## 0.4.1 — 2026-10-30
 
 - **The method as a download.** Each release now attaches `aot-evals-method-<version>.zip`, the
