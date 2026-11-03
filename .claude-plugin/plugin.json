@@ -1,7 +1,7 @@
 {
   "name": "aot-evals",
   "displayName": "AOT Evals",
-  "version": "0.4.2",
+  "version": "1.0.0",
   "description": "Part of AOT, the Agent Optimization Toolkit, a Mahal Systems offering. Build and iterate the evals for a production agent in three phases: Assess (a discovery report), Build (the agent wired up, cases from real runs, a baseline) and Judge (a local grader application where the people who know what good looks like label runs and the suite is held to them). A stdlib CLI records every attempt, and a fixed report.json schema renders into a local HTML diagnostic.",
   "author": {
     "name": "Mahal Systems",

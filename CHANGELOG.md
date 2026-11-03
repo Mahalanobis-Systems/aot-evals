@@ -6,8 +6,10 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
-Towards 1.0.0: three phases (Assess, Build, Judge), trust per category, and iteration as the
-organizing idea. The method's commands, gates and ids are unchanged; what changes is how they are
+## 1.0.0 — 2026-11-03
+
+The first major release: three phases (Assess, Build, Judge), trust per category, a grader
+application, and iteration as the organizing idea. The method's commands, gates and ids are unchanged; what changes is how they are
 reached and read.
 
 - **No command refuses to run because an earlier gate is unmet.** A gate is a trust upgrade: the
