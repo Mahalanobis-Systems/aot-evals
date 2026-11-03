@@ -33,27 +33,27 @@ from .util import (
 
 COMMANDS = [
     # id, command, skill, what clears it
-    ("C0", "import", "scope"),
-    ("C1", "inventory", "scope"),
-    ("C2", "taxonomy", "scope"),
-    ("C3", "categorize", "scope"),
-    ("C4", "decompose", "scope"),
+    ("C0", "import", "build"),
+    ("C1", "inventory", "build"),
+    ("C2", "taxonomy", "build"),
+    ("C3", "categorize", "build"),
+    ("C4", "decompose", "build"),
     ("C5", "allocate", "build"),
     ("C6", "author", "build"),
     ("C7", "screen", "build"),
     ("C8", "checks", "build"),
-    ("C9", "label", "calibrate"),
-    ("C10", "calibrate", "calibrate"),
-    ("C11", "reliability", "calibrate"),
-    ("C12", "baseline", "run"),
+    ("C9", "label", "judge"),
+    ("C10", "calibrate", "judge"),
+    ("C11", "reliability", "judge"),
+    ("C12", "baseline", "build"),
     # C19 runs after the baseline (it grades the baseline's runs) and before any comparison; it is
     # numbered last so the numbers teams already use stay stable.
-    ("C19", "agreement", "run"),
-    ("C13", "compare", "run"),
-    ("C14", "coverage", "run"),
-    ("C15", "redundancy", "run"),
-    ("C16", "drift", "run"),
-    ("C17", "online", "run"),
+    ("C19", "agreement", "judge"),
+    ("C13", "compare", "build"),
+    ("C14", "coverage", "build"),
+    ("C15", "redundancy", "build"),
+    ("C16", "drift", "judge"),
+    ("C17", "online", "judge"),
     ("C18", "report", "report"),
 ]
 COMMAND_BY_ID = {c[0]: c for c in COMMANDS}

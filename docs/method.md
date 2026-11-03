@@ -35,14 +35,14 @@ have one. When a number cannot be defended, aot-evals refuses to print it and na
 ## 1. Principles
 
 1. **Cases come from the agent's real traffic and real failures**, not from generic benchmarks.
-   Public benchmarks are a source of grading designs, not of cases. Phase 1 matches the agent to
+   Public benchmarks are a source of grading designs, not of cases. Assess matches the agent to
    a local catalog of them (`aot-evals benchmarks`, [references/benchmarks.md](../references/benchmarks.md))
-   without searching; Phase 2 may search for newer ones. What the catalog does contribute is the
+   without searching; Build may search for newer ones. What the catalog does contribute is the
    **situations** ([references/situations.yaml](../references/situations.yaml)): the conditions a
    request can put an agent in (unanswerable, ambiguous, forbidden, confidential, multi-turn,
    tool error, …) that benchmarks were built to test and that an agent's own task types never
    name. The discovery report lays the agent's task types (rows, from its traffic) against the
-   situations (columns) as a grid of cases that exist against targets; in Phase 2 each situation
+   situations (columns) as a grid of cases that exist against targets; in Build each situation
    is a taxonomy entry, so coverage (C14) reports the grid's empty cells.
 2. **Understand the agent before measuring it**: inventory, infrastructure, volume and usage first.
 3. **Grade outcomes, with code first.** Check what changed in the world. Use a judge only where
@@ -136,7 +136,7 @@ are several.
 
 ```
 evals/agents/<agent>/
-  discovery.md               # Phase 1: the discovery report
+  discovery.md               # Assess: the discovery report
   agent.yaml                 # identity, triggers, tools, model per call site, stable window,
                              #   and how to invoke it (references/agent-contract.md)
   taxonomy.yaml              # the coverage list (§2.4): entries, the source document, the date read
@@ -283,13 +283,17 @@ The work has three phases, each ending in something handed to the next group of 
 | **Build** | engineering | the loop running: the agent wired to the contract, cases seeded from real runs with a check on each, a baseline, and the grader application started |
 | **Judge** | graders (product owners, experts, end users) | each category validated: a person's verdicts on whole runs, the suite held to them, judges calibrated, rulings folded into the standard |
 
-**The lightest Build** is the one that gets the loop running: an agent that runs from a command
+**The lightest Build** (`aot-evals build`, then `aot-evals build --run`) is the one that gets the loop running: an agent that runs from a command
 (or recorded runs replayed, C1), 10 to 20 cases from real runs in the largest categories (C6), a
 side-effect check and one code check per category (C8), and a baseline (C12). Every other
 command is an upgrade that raises trust in a number: provenance (C0), the coverage list (C2),
 shares and the cost matrix (C3), budgets (C4), allocation (C5), screens (C7), judge labels,
 calibration and reliability (C9 to C11), whole-run agreement (C19), coverage (C14) and
 redundancy (C15). The report shows which upgrades are missing and greys what they cover.
+`aot-evals build` drafts what it can from the discovery report: categories from its task types,
+the coverage list from its situations (to be committed before the first case), and one failure
+mode on every case checked by a generic code check, `end-state-matches` (the world ends as the
+case expects), so a first pass needs no check code. Each draft is marked for the owner to confirm.
 
 **Trust per category.** A category is `untested` until a finished baseline covers it,
 `provisional` once it has numbers, and `validated` when the suite agrees with a person on its
@@ -348,6 +352,26 @@ Rules:
   check still rejects it, the disagreement is triaged as a check bug for an engineer.
 - **The engineering inbox** lists what only engineering can do: triaged disagreements whose cause
   is a fix to a case or check, drafted cases, and changes that need the agent run.
+
+### 4.3 The components
+
+An optimization loop around an agent has the same parts whatever the agent does. `aot-evals
+components` lists them, each with the phase that builds it and its state read from the suite
+(done, partly, not yet, not automated yet, or doesn't apply). The discovery report may record a
+component's state before a suite exists (`components:` in its front matter); the suite's own
+reading wins once it says more.
+
+| Area | Components |
+|---|---|
+| Agent eval infrastructure | harness and sandbox runtime; mock services, staging accounts, a safe database; record and replay; seeded, realistic, anonymized data |
+| Golden test cases | cases by category; deterministic checks first; private holdouts |
+| Grader UI | each problem graded like a test, with the reason (`aot-evals serve`) |
+| Bench of graders | a calibration set first; two blind labels per run; graders from customer and expert pools |
+| LLM judges | calibrated on human labels; qualitative dimensions |
+| Synthetic test cases | generated from golden cases, validated by graders |
+| Evaluation engine | golden test and judge evals; change scoping against the test sets; A/B tests; trace monitoring |
+| Objective monitoring | value and traffic weighting; business alignment; distribution change detection |
+| Agent testing and modeling | significance testing; noise floor and k; misclassification analysis; test runner and isolated compute |
 
 ---
 

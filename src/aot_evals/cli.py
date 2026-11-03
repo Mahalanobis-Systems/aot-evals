@@ -9,7 +9,9 @@
     aot-evals allocate [--write]        C5: size both case sets, print the arithmetic
     aot-evals screen [--read-by NAME]   C7: reference / do-nothing / claim screens per case
     aot-evals run --purpose P --k N     C1 smoke, C12 baseline, candidate runs
+    aot-evals build [--run]             the lightest Build: drafts, the checklist, then the baseline
     aot-evals serve [--open]            the grader application: label runs, rule, triage, rules, judges
+    aot-evals components [--json]       the optimization loop's components as a checklist
     aot-evals label queue|page|import|add|status   C9: human labels per judge (page: label in a browser)
     aot-evals calibrate --judge ID      C10 / E3 / E5: TPR/TNR per backend on the labels
     aot-evals reliability --judge ID    C11 / E4: self-consistency and cross-family agreement
@@ -54,7 +56,7 @@ def _evals(args) -> Evals:
         ev = Evals.find(args.evals, args.agent)
     except ContractError as e:
         sys.exit(str(e))
-    if args.cmd not in ("init",) and not ev.exists():
+    if args.cmd not in ("init", "build") and not ev.exists():
         sys.exit(f"no suite at {ev.root}; run `aot-evals --agent NAME init` in the repository "
                  "root, or pass --evals PATH")
     return ev
@@ -79,7 +81,7 @@ def cmd_init(args) -> int:
         print(f"  created {c}")
     if not created:
         print("  nothing to create; every file already exists")
-    print("next: C0 import an export, then C1 fill agent.yaml (skill: scope)")
+    print("next: aot-evals build, for the checklist of the lightest Build")
     return 0
 
 
@@ -90,7 +92,10 @@ def cmd_status(args) -> int:
     gs = gates_mod.evaluate(ev)
     nxt = gates_mod.next_unmet(gs)
     if args.json:
+        from . import components as comp
+
         print(json.dumps({"evals": str(ev.root), **trust_mod.summary(ev, gs),
+                          "components": comp.checklist(ev),
                           "gates": [g.as_dict() for g in gs],
                           "next_gate": nxt.as_dict() if nxt else None}, indent=2))
         return 0
@@ -310,6 +315,35 @@ def cmd_label(args) -> int:
         print(f"  {line}")
     print(labels_mod.render_status(labels_mod.status(ev, spec)))
     return 1 if res["refused"] else 0
+
+
+def cmd_components(args) -> int:
+    from . import components as comp
+
+    ev = _evals(args)
+    items = comp.checklist(ev)
+    if args.json:
+        print(json.dumps(items, indent=2))
+        return 0
+    print(comp.render(items))
+    return 0
+
+
+def cmd_build(args) -> int:
+    from . import build as build_mod
+
+    ev = _evals(args)
+    done = build_mod.prepare(ev)
+    items = build_mod.checklist(ev)
+    print(build_mod.render(done, items))
+    if args.run:
+        return build_mod.run(ev, main, k=args.k)
+    from . import trust as trust_mod
+
+    print(f"\nNext: {trust_mod.next_step(ev)['what']}")
+    if not build_mod.ready_to_run(items) and not items[5]["done"]:
+        print("  $ aot-evals build --run    # the smoke run, the baseline and the report")
+    return 0
 
 
 def cmd_serve(args) -> int:
@@ -684,7 +718,8 @@ _MILESTONES = {"start": "phase1_started", "discovery-page": "discovery_written",
                "report": "report_built"}
 
 # Commands that never log themselves: reads, and the commands that write the log.
-_UNLOGGED = {"replay", "status", "validate", "log", "activity", "checkpoint", "start", "discovery-page", "snapshot",
+_UNLOGGED = {"replay", "status", "components", "validate", "log", "activity", "checkpoint", "start",
+             "discovery-page", "snapshot",
              "doctor", "demo", "telemetry", "benchmarks", "serve"}
 # Commands long enough to log their start, so the activity page shows them in progress.
 _LOG_START = {"run", "calibrate", "reliability", "judge"}
@@ -852,6 +887,15 @@ def main(argv: list[str] | None = None) -> int:
                    help="label queue: only cases whose verdict moved between the baseline and the latest "
                    "compared candidate, from the candidate run")
     s.set_defaults(fn=cmd_agreement)
+
+    s = sub.add_parser("build", help="the lightest Build: draft what's missing, the checklist, then --run the baseline")
+    s.add_argument("--run", action="store_true", help="then run the agent once, the baseline and the report")
+    s.add_argument("--k", type=int, default=3, help="--run: trials per case for the baseline (3-5)")
+    s.set_defaults(fn=cmd_build)
+
+    s = sub.add_parser("components", help="the optimization loop's components as a checklist, read from the suite")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_components)
 
     s = sub.add_parser("serve", help="the grader application: label runs, rulings, triage, rules, judges")
     s.add_argument("--host", default="127.0.0.1",

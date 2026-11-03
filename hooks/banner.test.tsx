@@ -6,7 +6,7 @@ const BANNER = `    ___   ____  ______
 
 by Mahal Systems
 
-I'll build tests for one of your agents in two phases.`
+I'll build tests for one of your agents in three phases.`
 
 const row = (stdout: string) => ({
   component: 'ToolResult' as const,
@@ -25,7 +25,7 @@ test('draws the whole banner when aot-evals start prints it', async ($, on) => {
     const ui = await $.ui.mount({ plugin: 'aot-evals', surface, ...row(BANNER) })
     expect(await ui.find({ type: 'Text', text: /\/_\/  \|_/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /by Mahal Systems/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /two phases/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /three phases/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /folded by the engine/ })).toBeUndefined()
     await ui.unmount()
   }

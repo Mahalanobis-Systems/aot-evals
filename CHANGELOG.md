@@ -40,6 +40,23 @@ reached and read.
   the baseline and the latest compared candidate.
 - `status` names an agent change already run as a candidate and compared as a decision to make
   (label what moved, then adopt it as the baseline or put it back), not a run to repeat.
+- **`aot-evals build`, the lightest Build.** It drafts categories from the discovery report's task
+  types and the coverage list from its situations, adds one failure mode on every case checked by
+  a generic end-state check (`checks/code/end-state-matches.py`), and prints the Build checklist.
+  `aot-evals build --run` then does the smoke run, a k = 3 baseline and the report, and points at
+  the grader application. A first pass no longer needs check code of its own.
+- **`aot-evals components`**: the optimization loop's components as a checklist (sandbox, fakes,
+  replay, golden cases, deterministic checks, holdouts, the grader application, the bench, judges,
+  synthetic cases, the evaluation engine, monitoring, significance, the noise floor), each with the
+  phase that builds it and its state read from the suite. The discovery report may record their
+  state (`components:` in its front matter) and the page lists them. `status --json` carries it.
+- **Five skills instead of eight.** `start` (where things stand, and the next step), `assess`
+  (was `discover`), `build` (was `scope`, `build`, and the baseline and comparison half of `run`),
+  `judge` (was `calibrate` and the agreement half of `run`) and `report`. `status`, `scope`,
+  `calibrate` and `run` are gone: use `/aot-evals:start`. The shared pacing rules live once, in
+  `references/working-in-checkpoints.md`. The gate table's skill column names the new skills.
+- The banner, the discovery page and the docs speak of Assess, Build and Judge instead of Phase 1
+  and Phase 2.
 
 ## 0.4.2 — 2026-11-03
 

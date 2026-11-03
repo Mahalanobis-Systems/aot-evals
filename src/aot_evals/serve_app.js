@@ -94,6 +94,12 @@
     if (st.changes.length) {
       h += `<section class="panel"><h2>Since the baseline</h2>` + st.changes.map((c) => `<div class="ga-item"><strong>${esc(c.what)}</strong><ul>${c.path.map((p) => `<li>${esc(p)}</li>`).join("")}</ul></div>`).join("") + `</section>`;
     }
+    const word = { done: "In place", partial: "Partly", todo: "Not yet", later: "Not automated yet", "n/a": "Doesn't apply" };
+    let group = null;
+    h += `<section class="panel"><h2>The components</h2><p class="muted">The parts an optimization loop needs around the agent, read from the suite.</p><div class="ga-wrap"><table><tbody>` +
+      st.components.map((c) => { const g = c.group !== group ? `<tr><th colspan="3">${esc((group = c.group))}</th></tr>` : "";
+        return g + `<tr><td>${esc(c.name)}</td><td><span class="ga-tag ${c.state === "done" ? "validated" : c.state === "partial" ? "provisional" : "untested"}">${word[c.state]}</span></td><td class="muted">${esc(c.why)}</td></tr>`; }).join("") +
+      `</tbody></table></div></section>`;
     h += `<section class="panel"><h2>The bench</h2><p>${st.labelled} runs labelled by ${st.labellers.length} ${st.labellers.length === 1 ? "person" : "people"}${st.labellers.length ? ": " + esc(st.labellers.join(", ")) : ""}. ${st.disputes.length} disagreement(s) between people waiting for a ruling.</p></section>`;
     return h;
   }

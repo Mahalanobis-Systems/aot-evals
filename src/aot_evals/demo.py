@@ -1,6 +1,6 @@
 """`aot-evals demo [DIR]`: a toy agent with a finished suite, to try aot-evals in a few minutes.
 
-It copies examples/calendar (a toy calendar agent, its product spec, exported traces, a Phase 1
+It copies examples/calendar (a toy calendar agent, its product spec, exported traces, an Assess
 discovery report and a reviewed suite) into a new git repository, renders the discovery page,
 then runs the loop a team runs on its own agent: import, screen, allocate, a smoke run, a
 k = 3 baseline, a candidate that breaks two cases, the paired comparison, and the report. Nothing
@@ -65,7 +65,7 @@ def run(dest: Path, cli_main, log=print) -> int:
         if code not in (0, None):
             raise RuntimeError(f"`aot-evals {' '.join(args)}` exited {code}")
 
-    step("Phase 1: the discovery report, as a page", "discovery-page", str(suite / "discovery.md"),
+    step("Assess: the discovery report, as a page", "discovery-page", str(suite / "discovery.md"),
          "--agent", "Meeting scheduler (toy-calendar)")
     step("C0: import the exported traces, with their provenance",
          "import", str(dest / "traces.jsonl"), "--id", "traces", "--source", "toy calendar traces",

@@ -33,13 +33,14 @@ Then open Claude Code in your agent's repository and run the one command to reme
 /aot-evals:start
 ```
 
-The first time, it runs Phase 1: it finds your agents, asks which one to test and three
+The first time, it runs Assess: it finds your agents, asks which one to test and three
 questions about it, and writes a discovery report like the one above in about five minutes.
-Run `/aot-evals:start` again for Phase 2: it says where things stand and builds the suite step
-by step, stopping for your review at each checkpoint.
+Run `/aot-evals:start` again whenever you want to know where things stand: it names the phase
+(Assess, Build or Judge), how far each kind of task can be trusted, what changed since the last
+baseline, and carries on with the next step, stopping for your review at each checkpoint.
 
 **Try it on a toy agent first (about a minute).** In Claude Code, in any empty folder, ask:
-*"Run `aot-evals demo` and show me what it made."* It builds a toy calendar agent with a Phase 1
+*"Run `aot-evals demo` and show me what it made."* It builds a toy calendar agent with a discovery
 report and a finished suite, runs a baseline and a candidate that breaks two cases, and compares
 them. Nothing calls a model or a network service.
 
@@ -103,7 +104,7 @@ Under the hood:
 - **A fixed `report.json` schema**, which Claude renders into a local HTML report written for the
   question being asked.
 - **A local catalog of over 350 public agent benchmarks** ([references/benchmarks.md](references/benchmarks.md)).
-  Phase 1 matches your agent against it without a web search, and says what each fit is good for:
+  Assess matches your agent against it without a web search, and says what each fit is good for:
   a grading design, a case template, a user simulator, a sandbox design or a baseline number.
   The matches also set the columns of the report's golden test case grid: the situations
   (unanswerable, ambiguous, forbidden, multi-turn, …) that benchmarks were built to test, laid
@@ -117,11 +118,12 @@ The method, with every command, measurement and gate, is in [docs/method.md](doc
 
 | Part | Where |
 |---|---|
-| Skills: `start` (the entry point: runs Phase 1 or Phase 2, whichever is next), `discover` (Phase 1), `status` (router for Phase 2), `scope` (C0–C4), `build` (C5–C8), `calibrate` (C9–C11), `run` (C12–C17), `report` (C18). Only `start`, `discover` and `status` appear in the `/` menu; Claude loads the step skills when it reaches them | [skills/](skills/) |
+| Skills: `start` (the one to remember: says where things stand and carries on), `assess` (the first phase), `build` (engineering: the lightest Build, then upgrades), `judge` (graders: the grader application, agreement, judges), `report`. All but `report` appear in the `/` menu | [skills/](skills/) |
 | `aot-evals` CLI: the deterministic half (gates, import, allocation, screening, runs, judge labelling, calibration and reliability, operational counters, `report.json`, checkpoints) | [bin/aot-evals](bin/aot-evals), [src/aot_evals/](src/aot_evals/) |
 | The suite the plugin keeps in your repository, `evals/agents/<agent>/` | [docs/method.md §3](docs/method.md#3-repository-contract); templates in [src/aot_evals/templates/evals/](src/aot_evals/templates/evals/) |
 | Case, code-check and judge templates | [templates/](templates/) |
 | Reference material: the eval-creation process, the agent-properties framework, sourced literature findings, the agent contract, judge backends | [references/](references/) |
+| The grader application (`aot-evals serve`) | [src/aot_evals/serve.py](src/aot_evals/serve.py) |
 | A toy agent with a finished suite (`aot-evals demo`) | [examples/calendar/](examples/calendar/) |
 | Banner mod: draws the AOT EVALS banner in the terminal when `aot-evals start` runs | [hooks/](hooks/) |
 | Brand: the AOT logo, the embedded fonts (SIL OFL 1.1), and the rules every HTML report follows | [brand/](brand/) |
@@ -168,7 +170,7 @@ automated.
 ## Telemetry
 
 AOT Evals sends pseudonymous usage telemetry so we can see how many teams use it and how far they
-get: a random local install id, the milestone reached (Phase 1 started, discovery report written,
+get: a random local install id, the milestone reached (the assessment started, discovery report written,
 a checkpoint at a gate, a report built), the gate id, the version, your OS name and a timestamp.
 It **never** sends your code, agent, repository, cases, answers, file paths or IP address. A
 notice is shown before the first event, and it's off whenever Claude Code's own telemetry is off,

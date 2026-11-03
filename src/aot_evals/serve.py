@@ -25,7 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import agreement, bench, journal, trust
+from . import agreement, bench, components, journal, trust
 from . import gates as gates_mod
 from .brand import page
 from .repo import Evals
@@ -100,6 +100,7 @@ def state(ev: Evals) -> dict:
             "suite": res, "causes": agreement.CAUSES, "floors": agreement.floors(ev),
             "standard": {"rules": std["rules"], "body": std["body"]},
             "proposals": bench.proposals(ev), "drafts": bench.drafts(ev), "inbox": bench.inbox(ev),
+            "components": components.checklist(ev),
             "judges": _judges(ev), "cases": [{"id": c["id"], "category": c.get("category")}
                                              for c in ev.cases(include_dropped=False)]}
 

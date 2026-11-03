@@ -1,7 +1,7 @@
 # The public benchmark catalog
 
-`references/benchmarks.yaml` is a local catalog of public agent benchmarks. Phase 1 (the
-`discover` skill) matches an agent against it with `aot-evals benchmarks`, from this copy alone:
+`references/benchmarks.yaml` is a local catalog of public agent benchmarks. Assess (the
+`assess` skill) matches an agent against it with `aot-evals benchmarks`, from this copy alone:
 no web search, no model call, so it costs no time or tokens. The point is not to run these
 benchmarks. In this method, public benchmarks are a source of grading designs, case templates,
 user simulators, sandbox designs and baseline numbers; the cases themselves come from the
@@ -60,8 +60,8 @@ tags the situation back.
 
 ## Keeping it current
 
-- **Phase 1 never searches.** It reads this file.
-- **Phase 2 may search.** When the `scope` skill builds the taxonomy (C2) it can look for
+- **Assess never searches.** It reads this file.
+- **Build may search.** When the `build` skill builds the taxonomy (C2) it can look for
   benchmarks newer than the catalog for the agent's workload. Anything found goes into the report
   marked "not in the catalog", and into a pull request that adds it here with every field filled.
 - **`python3 scripts/benchmarks_refresh.py`** prints the names in Berkeley RDI's list that the

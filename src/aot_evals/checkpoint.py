@@ -29,12 +29,12 @@ from .util import now_iso
 # The roadmap strip groups the gates by phase (docs/method.md §4.1): Build is what engineering does
 # to get the loop running; Judge is every trust upgrade on top of it.
 STAGES = [
-    {"name": "Build", "skill": "build", "gates": ["C0", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C12", "C13"],
+    {"name": "Build", "skill": "build",
+     "gates": ["C0", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C12", "C13", "C14", "C15"],
      "about": "Wire the agent, describe it, seed cases from real runs, write the checks, run the "
-              "baseline, and compare candidates."},
-    {"name": "Judge", "skill": "calibrate", "gates": ["C19", "C9", "C10", "C11", "C14", "C15", "C16", "C17"],
-     "about": "People label runs, the suite is held to them, judges are calibrated, and the suite "
-              "itself is measured."},
+              "baseline, compare candidates, and measure the suite's coverage."},
+    {"name": "Judge", "skill": "judge", "gates": ["C19", "C9", "C10", "C11", "C16", "C17"],
+     "about": "People label runs, the suite is held to them, and judges are calibrated on their labels."},
     {"name": "Report", "skill": "report", "gates": ["C18"],
      "about": "A diagnostic report shaped around the question you are asking."},
 ]

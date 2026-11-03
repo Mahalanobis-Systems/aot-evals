@@ -1,19 +1,20 @@
 ---
-name: discover
-description: Phase 1 of aot-evals, usually reached through start. Runs when a team wants evals for an agent and no discovery report exists yet (evals/agents/<agent>/discovery.md), about 5 minutes. Shows the AOT EVALS banner and the two phases, scans the repository for every agent (each skill of a multi-skill system counts as its own agent), asks which agent to test, asks three questions about it, runs discovery in parallel, and writes a plain-English discovery report: an overview of the four things good evals rest on, the details, and next steps. Use for "set up evals", "build evals for my agent", "start aot-evals", or when status finds no discovery report.
+name: assess
+description: Assess, the first of aot-evals' three phases, usually reached through start. Runs when a team wants evals for an agent and no discovery report exists yet (evals/agents/<agent>/discovery.md), about 5 minutes. Shows the AOT EVALS banner and the three phases, scans the repository for every agent (each skill of a multi-skill system counts as its own agent), asks which agent to test, asks three questions about it, runs discovery in parallel, and writes a plain-English discovery report: an overview of the four things good evals rest on, the details, and the components the optimization loop needs, and next steps. Use for "set up evals", "build evals for my agent", "assess my agent", or when start finds no discovery report.
 ---
 
-# discover: Phase 1
+# assess: the first phase
 
-You run Phase 1 of building evals for **one** agent: discovery and a first report, in about 5
-minutes of work. Phase 2 (building the evals) comes later and takes an afternoon.
+You run Assess for **one** agent: discovery and a first report, in about 5 minutes of work.
+Build (engineering gets the loop running, about half a day for the first pass) and Judge (the
+people who know what good looks like take over, in the grader application) come after it.
 
 CLI: `"${CLAUDE_PLUGIN_ROOT}/bin/aot-evals"` (also `aot-evals` on PATH while the plugin is on).
 
 ## Rules for everything you write to the owner
 
-- Plain English a ninth grader can follow. No step codes (no C0–C19, gate ids, "Part 3",
-  "Build 2"), no jargon a new engineer wouldn't know.
+- Plain English a ninth grader can follow. No step codes (no C0–C19, gate ids, "Part 3"),
+  no jargon a new engineer wouldn't know. The phases are Assess, Build and Judge.
 - Say what a thing is, not its label: "three booking bugs found on Mar 3", not "BK-101 to
   BK-103"; "look up records", not "read-lookup"; "the reply stopped partway", not "stall";
   "put deleted records back", not "reseed"; "how much results move by chance", not "noise
@@ -23,7 +24,7 @@ CLI: `"${CLAUDE_PLUGIN_ROOT}/bin/aot-evals"` (also `aot-evals` on PATH while the
   message text, secrets): counts and kinds only.
 - Read only. Never contact live services, run the agent, or copy raw traces into `evals/`.
 
-## Step 1. Show the banner and the two phases, on their own, first
+## Step 1. Show the banner and the three phases, on their own, first
 
 Before any other command, and before any question, run this command **by itself**, with no
 other command in the same message:
@@ -105,8 +106,8 @@ point, and where the records are.
    one informs. The command also prints the **situations to cover**: the columns of the golden
    test case grid, each with which matched benchmark tests it. Keep that list. Then map every
    existing case file into the grid: for each task type, how many cases are plain requests and
-   how many sit in each situation (a case with no situation is a plain request). Phase 2 may
-   look for newer benchmarks on the web; Phase 1 does not.
+   how many sit in each situation (a case with no situation is a plain request). Build may
+   look for newer benchmarks on the web; Assess does not.
 
 Then ask these three questions about the chosen agent, in these words. Offer a suggestion
 for each, drawn from the quick scan, but nothing is built until the owner answers.
@@ -141,7 +142,7 @@ markdown allowed: `**bold**`, `code`, links). Use real numbers from discovery, n
 
 ```yaml
 ---
-minutes: 8                       # how long Phase 1 took
+minutes: 8                       # how long Assess took
 bottom_line: >-                  # 2 or 3 sentences: is it understood, and what stands in the way
   ...
 stats:                           # exactly 3 numbers that matter most for this agent
@@ -158,6 +159,15 @@ overview:                        # one entry per pillar, all four, these keys
   agent_architecture: {...}      # code, prompts, models, tools, production setup, traces
   safe_testing_env: {...}        # can runs touch real people, data or money; cost and speed
   golden_use_cases: {...}        # task types found, cases that exist, how many are needed; name the empty grid cells
+components:                      # the optimization loop's parts that exist today (method §4.3); only
+                                 #   those discovery found evidence for, keyed by id
+  sandbox: {state: partial, note: "runs from `make agent`; no isolation from the repository"}
+  replay: {state: done, note: "a week of recorded tool calls in `fixtures/`"}
+                                 # state: done | partial | todo | n/a; ids: sandbox, fakes, replay, seeded,
+                                 #   golden, deterministic, holdouts, grader-ui, calibration-set, two-blind,
+                                 #   pool, judges, qualitative, synthetic, engine, change-scoping, ab,
+                                 #   trace-monitoring, weighting, business, distribution, significance,
+                                 #   noise-floor, misclassification, runner
 grid:                            # the golden test case grid: task types (rows) by situations (columns)
   note: ...                      # one sentence on how the targets were set (optional)
   columns:                       # from the situations `aot-evals benchmarks` printed; order as printed
@@ -183,6 +193,12 @@ next:
     - {name: ..., why: ...}      # what it gets, and its catch, in one sentence
 ---
 ```
+
+**The components.** Fill `components` from what the four reads found: the test space and its
+fakes, record and replay, seeded or anonymized data (reads 2 and 4); earlier eval work, golden
+cases, judges and CI runs (read 2); traces and monitoring (read 3). Name only what discovery saw,
+with where it saw it. The page lists them under "The components to build", and from Build on
+`aot-evals components` reads the rest from the suite.
 
 Use `risk` only when something could touch real people, data or money today. Link to a
 section from a step with its heading as an anchor, e.g. `[Read the plan](#safe-testing-environment)`.
@@ -247,5 +263,5 @@ aot-evals discovery-page evals/agents/<agent-slug>/discovery.md --agent "<agent 
 ## Step 5. Hand off
 
 Reply in a few lines: where the report is, which required questions are still open, and the
-next step. Phase 2 starts only once the three required questions are answered and the privacy
-plan has a yes. Then load `status`.
+next step. Build starts only once the three required questions are answered and the privacy
+plan has a yes. Then load `build`.
