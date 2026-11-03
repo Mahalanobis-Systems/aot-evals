@@ -1,5 +1,8 @@
 # Working in checkpoints
 
+`aot-evals` below means the plugin's own CLI, `"${CLAUDE_PLUGIN_ROOT}/bin/aot-evals"`. Call it by
+that full path: a bare `aot-evals` on PATH can be an older install.
+
 Every aot-evals skill paces its work the same way. The person follows it in a browser, not the
 terminal: `<suite>/journal/activity.html` shows everything done so far and reloads itself, and
 each checkpoint page shows what the work has produced. Work so those pages tell the story, and

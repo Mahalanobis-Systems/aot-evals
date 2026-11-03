@@ -9,9 +9,10 @@ The single entry point. Work out where the evals stand, say so in plain words, a
 the skill for the next step. The method is `${CLAUDE_PLUGIN_ROOT}/docs/method.md`; §4.1 is the
 part this skill follows. Pacing and wording: `${CLAUDE_PLUGIN_ROOT}/references/working-in-checkpoints.md`.
 
-CLI: `"${CLAUDE_PLUGIN_ROOT}/bin/aot-evals"`, on PATH as `aot-evals` while the plugin is on. It
-needs `uv`, or Python ≥ 3.11 with PyYAML, and installs nothing into the team's project. With
-several agents in the repository, pass `--agent <agent>` to every command.
+CLI: `"${CLAUDE_PLUGIN_ROOT}/bin/aot-evals"`. Call it by that full path: a bare `aot-evals` on
+PATH can be an older install of the plugin, and its `status` speaks of gates only. It needs `uv`,
+or Python ≥ 3.11 with PyYAML, and installs nothing into the team's project. With several agents in
+the repository, pass `--agent <agent>` to every command. Below, `aot-evals` means that full path.
 
 ## 1. Which phase
 
@@ -19,7 +20,7 @@ several agents in the repository, pass `--agent <agent>` to every command.
 2. Otherwise run:
 
    ```bash
-   aot-evals status
+   "${CLAUDE_PLUGIN_ROOT}/bin/aot-evals" status
    ```
 
    It prints the phase, trust per category (untested, provisional, validated, with why), what

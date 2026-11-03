@@ -111,7 +111,7 @@ def trust(ev: Evals) -> list[dict]:
             if not row["labelled_runs"]:
                 row["why"] = "no run in this category has been labelled by a person"
             elif suite_problems:
-                row["why"] = suite_problems[0]
+                row["why"] = f"across the whole suite, {suite_problems[0]}"
             elif row["catch"] is None or row["clean"] is None:
                 row["why"] = "its labelled runs are all one kind, so one rate can't be measured"
             elif row["catch"] < f["min_catch"]:

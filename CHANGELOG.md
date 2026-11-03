@@ -58,6 +58,24 @@ reached and read.
 - The banner, the discovery page and the docs speak of Assess, Build and Judge instead of Phase 1
   and Phase 2.
 
+### Upgrading from 0.4
+
+Existing suites keep working: no suite file needs to change, and every report, run and label
+written by 0.4 reads as before. What does change:
+
+- **Skills.** `/aot-evals:discover` is now `/aot-evals:assess`; `/aot-evals:status` is gone, use
+  `/aot-evals:start`. The step skills `scope`, `calibrate` and `run` are folded into `build` and
+  `judge`.
+- **Nothing refuses on an unmet gate.** A script that relied on `aot-evals run` exiting non-zero
+  until earlier gates were met should read `aot-evals status --json` instead.
+- **`status` output.** The plain output is the phase summary; `--gates` prints the old table. In
+  `--json`, `next` is now the next step (`what`, `how`, `phase`); the first unmet gate moved to
+  `next_gate`. `gates` is unchanged.
+- **A second labeller no longer replaces the first.** In `labels/runs.jsonl`, a later label by
+  another person sits beside the earlier one. Where two people disagree, the run counts toward
+  nothing until a ruling: run `aot-evals agreement label status` to find any such runs in an
+  existing suite, and rule on them in `aot-evals serve` or with `aot-evals agreement rule`.
+
 ## 0.4.2 — 2026-11-03
 
 - **`aot-evals run --model <id>`** pins the agent's model for one run: it overrides
