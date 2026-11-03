@@ -132,7 +132,8 @@ prompt rewrite, so the discriminating set is re-derived after every prompt chang
 
 Each agent's suite lives in `evals/agents/<agent>/`, beside its discovery report. A repository
 with one agent may keep the suite in `evals/` itself. Pass `--agent NAME` to the CLI when there
-are several.
+are several. Suites made before that layout live in `evals/<agent>/`; they are read as they are,
+and `aot-evals migrate` moves them.
 
 ```
 evals/agents/<agent>/
@@ -301,8 +302,12 @@ runs: C19's floors met suite-wide, and the category's own dev catch rate and cle
 or above the floors (85% by default). `report/agreement.json` carries the per-category rates.
 Provisional numbers print, labelled provisional (G14).
 
-**What a change invalidates.** `status` compares the suite and the agent with the latest
-finished baseline and names each change with its short path back:
+**The baseline** is, for each current case, the newest finished baseline run that covers it: a
+re-run of one category replaces that category's baseline and leaves the others'. The agent has
+changed only when its files outside `evals/` differ from the baseline's, not merely its commit id.
+
+**What a change invalidates.** `status` compares the suite and the agent with the baseline and
+names each change with its short path back:
 
 | Change since the baseline | Invalidates | The short path |
 |---|---|---|

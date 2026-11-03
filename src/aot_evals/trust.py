@@ -10,12 +10,13 @@ read the same data.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from . import agreement
 from . import gates as gates_mod
 from .repo import Evals
-from .util import git_commit_info, load_json, sha256_file
+from .util import git_commit_info, git_same_tree, load_json, sha256_file
 
 PHASES = {
     "assess": "Assess: understand the agent, its traffic and its risks, and write the report.",
@@ -44,6 +45,8 @@ PATHS = {
     "standard": ["Recheck the labels the changed rules could flip, then aot-evals agreement."],
     "labels": ["Measure agreement again: aot-evals agreement."],
     "candidate": ["Compare it with the baseline: aot-evals compare."],
+    "mixed-baseline": ["Run a full baseline on the current agent, so every category is measured on one "
+                       "build: aot-evals run --purpose baseline --k 5."],
     "adopt": ["Have a person label the runs whose verdict moved: aot-evals agreement label queue --changed "
               "(or Label runs › Only what the last change moved, in aot-evals serve).",
               "If the change ships, run it as the new baseline: aot-evals run --purpose baseline --k 5. "
@@ -54,16 +57,16 @@ PATHS = {
 # ---- phase ------------------------------------------------------------------------------------
 
 def discovery_path(ev: Evals) -> Path:
-    return ev.p("discovery.md")
+    return ev.discovery_path()
 
 
 def phase(ev: Evals) -> dict:
     """Which phase the work is in, and why."""
     discovered = discovery_path(ev).exists()
     cases = ev.cases(include_dropped=False)
-    base = ev.latest_run("baseline")
+    base = ev.baseline_ids()
     if base and cases:
-        pid, why = "judge", f"baseline {base['run_id']} exists; the loop is running"
+        pid, why = "judge", f"the baseline ({' + '.join(base)}) exists; the loop is running"
     elif discovered or cases or ev.agent():
         pid, why = "build", ("no finished baseline yet" if cases else "no cases yet")
     else:
@@ -82,14 +85,14 @@ def _rate(block: dict | None, key: str):
 def trust(ev: Evals) -> list[dict]:
     """Per category: untested (no baseline covers it), provisional (numbers print but are not held
     to a person's verdicts yet), or validated (the suite agrees with a person on its runs, C19)."""
-    base = ev.latest_run("baseline")
+    base = ev.baseline_runs()
     result = load_json(agreement.result_path(ev))
     labels = agreement.load_labels(ev)
     suite_problems = agreement.gate_problems(ev, result, labels) if base else []
     f = agreement.floors(ev)
     cases = ev.cases(include_dropped=False)
-    in_base = {c.get("category") for c in cases
-               if base and c.get("id") in set((base.get("case_set") or {}).get("ids") or [])}
+    covered = {c for m in base for c in (m.get("case_set") or {}).get("ids") or []}
+    in_base = {c.get("category") for c in cases if c.get("id") in covered}
     per_cat = (result or {}).get("categories") or {}
     labelled = {}
     for lab in labels:
@@ -126,10 +129,32 @@ def trust(ev: Evals) -> list[dict]:
 
 # ---- changes since the baseline ----------------------------------------------------------------
 
+def baseline_view(ev: Evals) -> dict | None:
+    """The effective baseline as one record: every case's file hash, every check's and judge's
+    fingerprint from the newest baseline run that covers it; the agent from the newest run."""
+    runs = ev.baseline_runs()
+    if not runs:
+        return None
+    newest = runs[-1]
+    view = {**newest, "run_ids": [m["run_id"] for m in runs], "runs": runs, "files": {}, "checks": {},
+            "judges": {}, "has_checks": any("checks" in m for m in runs),
+            "finished": max(m.get("finished") or "" for m in runs)}
+    for m in runs:  # oldest first, so newer runs overwrite
+        view["files"].update((m.get("case_set") or {}).get("files") or {})
+        view["checks"].update(m.get("checks") or {})
+        for jb in m.get("judge_backends") or []:
+            view["judges"][jb.get("check")] = {**jb, "run": m["run_id"]}
+    return view
+
+
+def _listed(names: list[str], n: int = 3) -> str:
+    return ", ".join(names[:n]) + (f", +{len(names) - n} more" if len(names) > n else "")
+
+
 def changes(ev: Evals) -> list[dict]:
-    """What differs between the suite and agent now and the latest finished baseline, as a list of
+    """What differs between the suite and agent now and the effective baseline, as a list of
     {kind, what, path}. Each kind names the short path back (PATHS)."""
-    base = ev.latest_run("baseline")
+    base = baseline_view(ev)
     if not base:
         return []
     out = []
@@ -137,25 +162,39 @@ def changes(ev: Evals) -> list[dict]:
     def add(kind: str, what: str) -> None:
         out.append({"kind": kind, "what": what, "path": PATHS[kind]})
 
+    from .compare import latest_for
+    from .report import BUILD_FIELDS, manifest_view
+
     agent_diff = _agent_diff(ev, base)
     if agent_diff["dirty"]:
         add("agent-uncommitted", "the agent has uncommitted changes")
     if agent_diff["what"]:
         # The current version may already have run as a candidate: then the step is to decide.
-        from .compare import latest_for
-
         cand = next((m for m in reversed(ev.runs("candidate")) if m.get("finished")
-                     and m["finished"] > base.get("finished", "") and not _agent_diff(ev, m)["what"]), None)
-        comp = latest_for(ev, [base["run_id"]]) if cand else None
+                     and m["finished"] > base["finished"] and not _agent_diff(ev, m)["what"]), None)
+        comp = latest_for(ev, base["run_ids"]) if cand else None
         if cand and comp and cand["run_id"] in comp.get("candidate_runs", []):
             add("adopt", f"the agent's current version ran as candidate {cand['run_id']} and was compared "
                          f"with the baseline: {comp.get('verdict')}, {len(comp.get('gains') or [])} gain(s), "
                          f"{len(comp.get('losses') or [])} loss(es)")
         elif not cand:
             add("agent", "; ".join(agent_diff["what"]))
+    if len(base["runs"]) > 1:
+        newest_commit = base["runs"][-1].get("agent_commit")
+
+        def build(m):
+            v = manifest_view(m)
+            if v.get("agent_commit") and newest_commit and git_same_tree(
+                    ev.repo_root, v["agent_commit"], newest_commit, exclude=ev.evals_dir):
+                v = {**v, "agent_commit": newest_commit}  # the same agent, recorded at another commit
+            return json.dumps({f: v[f] for f in BUILD_FIELDS}, sort_keys=True, default=str)
+        builds = {build(m) for m in base["runs"]}
+        if len(builds) > 1:
+            add("mixed-baseline", f"the baseline's runs ({_listed(base['run_ids'], 4)}) ran different builds "
+                                  "of the agent")
 
     cases = ev.cases(include_dropped=False)
-    base_files = (base.get("case_set") or {}).get("files") or {}
+    base_files = base["files"]
     base_cats = {c.get("category") for c in cases if c.get("id") in base_files}
     new_cats = sorted({c.get("category") for c in cases if c.get("category") not in base_cats} - {None})
     for cat in new_cats:
@@ -166,38 +205,68 @@ def changes(ev: Evals) -> list[dict]:
                and sha256_file(ev.p(c["_path"]))[:16] != base_files[c["id"]]]
     removed = [cid for cid in base_files if cid not in {c.get("id") for c in cases}]
     if added or changed or removed:
-        bits = [f"{len(x)} {w}" for x, w in ((added, "added"), (changed, "changed"), (removed, "dropped")) if x]
-        add("cases", "cases " + ", ".join(bits) + " since the baseline")
+        bits = [f"{len(x)} {w} ({_listed(x)})" for x, w in ((added, "added"), (changed, "changed"),
+                                                           (removed, "dropped")) if x]
+        add("cases", "cases since the baseline: " + "; ".join(bits))
 
-    base_checks = base.get("checks") or {}
+    known = {**base["checks"], **{k: None for k in base["judges"] if k not in base["checks"]}}
     now_checks = {}
     for c in cases:
         for cid, _ in ev.checks_for_case(c, check_type=None):
             for path in (ev.code_check_path(cid), ev.judge_check_path(cid)):
                 if path.exists():
                     now_checks[cid] = sha256_file(path)[:16]
-    diff = sorted(cid for cid in now_checks if cid in base_checks and now_checks[cid] != base_checks[cid])
-    new_checks = sorted(cid for cid in now_checks if cid not in base_checks)
+    diff = sorted(cid for cid in now_checks if base["checks"].get(cid) and now_checks[cid] != base["checks"][cid]
+                  and cid not in base["judges"])  # judges are compared by what they decide, below
+    # A baseline recorded without check hashes (an older aot-evals) can't say which checks are new.
+    new_checks = sorted(cid for cid in now_checks if cid not in known) if base["has_checks"] else []
     if diff or new_checks:
         what = []
         if diff:
-            what.append(f"{len(diff)} check(s) changed ({', '.join(diff[:3])})")
+            what.append(f"{len(diff)} code check(s) changed ({_listed(diff)})")
         if new_checks:
-            what.append(f"{len(new_checks)} new ({', '.join(new_checks[:3])})")
+            what.append(f"{len(new_checks)} new check(s) ({_listed(new_checks)})")
         add("checks", "; ".join(what))
 
+    from .calibrate import is_current, load_calibration
     from .judges import load_spec
 
-    for jb in base.get("judge_backends") or []:
-        path = ev.judge_check_path(jb.get("check", ""))
+    judged: dict[tuple, list[str]] = {}
+    for cid, jb in sorted(base["judges"].items()):
+        path = ev.judge_check_path(cid or "")
         if not path.exists():
             continue
         try:
             spec = load_spec(path)
         except Exception:
             continue
-        if jb.get("judge_sha") and spec.sha() != jb["judge_sha"]:
-            add("judge", f"judge {spec.id} changed (v{jb.get('version')} → v{spec.version})")
+        if not jb.get("judge_sha") or spec.sha() == jb["judge_sha"]:
+            continue
+        cal = load_calibration(ev, spec)
+        bumped = str(jb.get("version")) != str(spec.version)
+        if cal and is_current(ev, spec, cal):
+            state = "current" if cal.get("status") == "calibrated" else "failed"
+        else:
+            state = "stale" if cal else "none"
+        judged.setdefault((bumped, state), []).append(spec.id)
+    for (bumped, state), ids in sorted(judged.items(), key=lambda kv: (not kv[0][0], kv[0][1])):
+        one = len(ids) == 1
+        who = f"judge {ids[0]}" if one else f"{len(ids)} judges ({_listed(ids)})"
+        what = (f"{who} {'has' if one else 'have'} a new version since the baseline ran" if bumped else
+                f"{who} {'differs' if one else 'differ'} from what the baseline ran at the same version: "
+                f"{'its' if one else 'their'} question, inputs or backends were edited without a version bump "
+                "(bump `version` whenever you edit a judge)")
+        they, them, its = ("it", "it", "its") if one else ("they", "them", "their")
+        counts = "it counts" if one else "they count"
+        how = {"current": f"{its.capitalize()} calibration is current: re-judge the baseline's runs with {them} "
+                          "(aot-evals judge apply --judge ID; it judges every baseline run)",
+               "failed": f"{its.capitalize()} calibration is current but below the floors: iterate on {its} dev "
+                         f"errors and recalibrate (aot-evals calibrate --judge ID). Until then {counts} toward "
+                         "no number",
+               "stale": f"Recalibrate {them} from cached judgements (aot-evals calibrate --judge ID)",
+               "none": f"{they.capitalize()} {'has' if one else 'have'} no calibration yet: label and calibrate "
+                       f"(aot-evals label queue --judge ID). Until then {counts} toward no number"}[state]
+        out.append({"kind": "judge", "what": what, "path": [how, PATHS["judge"][1]], "judges": ids})
 
     std = ev.p("labels", "standard.md")
     if base.get("standard_sha") and std.exists() and sha256_file(std)[:16] != base["standard_sha"]:
@@ -210,11 +279,9 @@ def changes(ev: Evals) -> list[dict]:
         if not any(c["kind"] in ("checks", "judge", "cases") for c in out):
             add("labels", "labels were added since agreement was last measured")
 
-    from .compare import latest_for
-
-    cands = [m for m in ev.runs("candidate") if m.get("finished") and m["finished"] > base.get("finished", "")]
+    cands = [m for m in ev.runs("candidate") if m.get("finished") and m["finished"] > base["finished"]]
     if cands:
-        comp = latest_for(ev, [base["run_id"]])
+        comp = latest_for(ev, base["run_ids"])
         pending = [m["run_id"] for m in cands if not comp or m["run_id"] not in comp.get("candidate_runs", [])]
         if pending:
             add("candidate", f"candidate {pending[-1]} has not been compared with the baseline")
@@ -232,7 +299,10 @@ def _agent_diff(ev: Evals, m: dict) -> dict:
     cwd = (ev.repo_root / str(invoke.get("cwd", "."))).resolve()
     g = git_commit_info(cwd, exclude=ev.evals_dir) if cwd.is_dir() else {"commit": None, "dirty": None}
     what = []
-    if g["commit"] and m.get("agent_commit") and g["commit"] != m["agent_commit"]:
+    if g["commit"] and m.get("agent_commit") and g["commit"] != m["agent_commit"] \
+            and git_same_tree(cwd, m["agent_commit"], g["commit"], exclude=ev.evals_dir) is not True:
+        # Different commit ids alone aren't a change: older versions counted commits to other parts
+        # of the repository. The agent changed only when its files differ.
         what.append(f"the agent changed (commit {m['agent_commit'][:8]} → {g['commit'][:8]})")
     then_inv = m.get("invoke") or {}
     if (invoke.get("model") or None) != (then_inv.get("model") or None):

@@ -38,6 +38,12 @@ for it to finish, say one short line ("Starting the scan now."), then start Step
 
 ## Step 2. Quick scan: find the agents (under a minute, no subagents)
 
+First, look for suites that already exist: `evals/agents/*/agent.yaml`, and the older layout
+`evals/*/agent.yaml`. An agent that already has a suite has been assessed or built before: say
+so, and don't start a second suite for it. For one in the older layout, offer `aot-evals migrate
+--dry-run`, then `aot-evals migrate`, which moves it to `evals/agents/<agent>/`; write its
+discovery report there afterwards, so the two stay together.
+
 Look for every agent in the repository and anything it points to:
 
 - Skill packs: `skills/*/SKILL.md`, `.claude/skills/`, plugin folders. **Each skill of a

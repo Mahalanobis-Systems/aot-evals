@@ -135,6 +135,25 @@ def git_commit_info(cwd: Path, pathspec: str | None = None, exclude: Path | None
     return {"commit": commit, "dirty": bool(status) if status is not None else None}
 
 
+def git_same_tree(cwd: Path, a: str, b: str, exclude: Path | None = None) -> bool | None:
+    """Whether two commits hold the same files outside `exclude` (the evals/ folder): True, False,
+    or None when git can't say (a commit no longer exists, e.g. after a squash merge)."""
+    if a == b:
+        return True
+    spec = ["."]
+    if exclude is not None:
+        try:
+            spec.append(f":(exclude){exclude.resolve().relative_to(cwd.resolve())}")
+        except ValueError:
+            pass
+    try:
+        r = subprocess.run(["git", "diff", "--quiet", a, b, "--", *spec], cwd=str(cwd), capture_output=True,
+                           timeout=30)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    return {0: True, 1: False}.get(r.returncode)
+
+
 def git_adding_commit(cwd: Path, pathspec: str) -> str | None:
     """The earliest commit that added pathspec, or None if it was never committed."""
     out = git(["log", "--diff-filter=A", "--format=%H", "--", pathspec], cwd)

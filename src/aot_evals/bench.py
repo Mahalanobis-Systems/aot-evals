@@ -44,21 +44,30 @@ WORK_CAUSES = {     # triage causes that need an engineer, and what to do
 # ---- the runs people label ----------------------------------------------------------------------
 
 def label_runs(ev: Evals) -> list[str]:
-    """The runs whose results people label: the latest baseline and the latest candidate after it."""
-    base = ev.latest_run("baseline")
-    out = [base["run_id"]] if base else []
+    """The runs whose results people label: the baseline (every category's newest baseline run) and
+    the latest candidate after it, last."""
+    base = ev.baseline_runs()
+    out = [m["run_id"] for m in base]
+    newest = max((m.get("finished") or "" for m in base), default="")
     cands = [m for m in ev.runs("candidate") if m.get("finished")]
-    if cands and (not base or cands[-1]["finished"] > base.get("finished", "")):
+    if cands and cands[-1]["finished"] > newest:
         out.append(cands[-1]["run_id"])
     return out
+
+
+def candidate_run(ev: Evals) -> str | None:
+    """The latest candidate after the baseline, if any."""
+    runs = label_runs(ev)
+    base = set(ev.baseline_ids())
+    return runs[-1] if runs and runs[-1] not in base else None
 
 
 def changed_cases(ev: Evals) -> list[str]:
     """Cases whose verdict moved between the baseline and the latest compared candidate."""
     from .compare import latest_for
 
-    base = ev.latest_run("baseline")
-    comp = latest_for(ev, [base["run_id"]]) if base else None
+    base = ev.baseline_ids()
+    comp = latest_for(ev, base) if base else None
     if not comp:
         return []
     return sorted(set(comp.get("gains") or []) | set(comp.get("losses") or [])
@@ -98,7 +107,8 @@ def queue(ev: Evals, labeller: str, mode: str = "auto", n: int = 20) -> list[dic
     cases = {c["id"]: c for c in ev.cases() if c.get("id")}
     runs = label_runs(ev)
     if mode == "changed":
-        runs = runs[1:] or runs
+        cand = candidate_run(ev)
+        runs = [cand] if cand else []
     finals = [a for a in agreement.finals(ev, runs) if a["case_id"] in cases]
     if mode == "changed":
         moved = set(changed_cases(ev))

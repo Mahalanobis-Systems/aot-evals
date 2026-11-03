@@ -174,11 +174,29 @@ def test_taxonomy_derived_from_cases_is_refused_by_g5(make_repo):
 
 
 def test_taxonomy_committed_after_cases_is_refused_by_g5(make_repo):
+    import shutil
+
+    from conftest import git
+
     repo = make_repo(taxonomy_first=False)
+    # a history where the coverage list really arrives after the cases
+    shutil.rmtree(repo.root / ".git")
+    git(repo.root, "init", "-q")
+    tax = str((repo.evals / "taxonomy.yaml").relative_to(repo.root))
+    git(repo.root, "add", "-A")
+    git(repo.root, "reset", "-q", "--", tax)
+    git(repo.root, "commit", "-q", "-m", "cases first")
+    repo.commit("the list, after the cases", tax)
     repo.cli("run", "--purpose", "baseline", "--k", "3", "--force")
     repo.cli("report")
     r = repo.report()
     assert "G5" in failing(r)
+
+
+def test_taxonomy_in_the_same_commit_as_the_cases_passes_g5(make_repo):
+    """A squash merge folds "taxonomy first, then cases" into one commit; that counts."""
+    repo = make_repo(taxonomy_first=False)
+    assert gates.taxonomy_problems(Evals(repo.evals)) == []
 
 
 def test_k1_baseline_refused_and_g2_fails(make_repo):

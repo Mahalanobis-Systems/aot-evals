@@ -12,6 +12,7 @@
     aot-evals build [--run]             the lightest Build: drafts, the checklist, then the baseline
     aot-evals serve [--open]            the grader application: label runs, rule, triage, rules, judges
     aot-evals components [--json]       the optimization loop's components as a checklist
+    aot-evals migrate [--dry-run]       move suites from evals/<agent>/ to evals/agents/<agent>/
     aot-evals label queue|page|import|add|status   C9: human labels per judge (page: label in a browser)
     aot-evals calibrate --judge ID      C10 / E3 / E5: TPR/TNR per backend on the labels
     aot-evals reliability --judge ID    C11 / E4: self-consistency and cross-family agreement
@@ -56,6 +57,14 @@ def _evals(args) -> Evals:
         ev = Evals.find(args.evals, args.agent)
     except ContractError as e:
         sys.exit(str(e))
+    from .repo import old_suites
+
+    old = old_suites(ev.evals_dir)
+    if old and args.cmd != "migrate":
+        names = ", ".join(f"{p.parent.name}/{p.name}/" for p in old)
+        where = "this suite is" if ev.old_layout else f"found suite(s) in the old layout: {names};"
+        print(f"note: {where} in the old layout (evals/<agent>/). It works as it is; `aot-evals migrate` "
+              "moves it to evals/agents/<agent>/, beside its discovery report.", file=sys.stderr)
     if args.cmd not in ("init", "build") and not ev.exists():
         sys.exit(f"no suite at {ev.root}; run `aot-evals --agent NAME init` in the repository "
                  "root, or pass --evals PATH")
@@ -119,6 +128,29 @@ def cmd_status(args) -> int:
     return 0
 
 
+def _grouped(problems: list[str], show: int = 5) -> list[str]:
+    """Problems that differ only by case id, as one line: `N cases: <problem> (a, b, c, +N more)`."""
+    import re
+
+    groups: dict[str, list[str]] = {}
+    order: list[str] = []
+    for p in problems:
+        m = re.match(r"case (\S+): (.*)$", p)
+        key = m.group(2) if m else p
+        if key not in groups:
+            order.append(key)
+        groups.setdefault(key, []).append(m.group(1) if m else "")
+    out = []
+    for key in order:
+        ids = [i for i in groups[key] if i]
+        if len(ids) > 1:
+            more = f", +{len(ids) - show} more" if len(ids) > show else ""
+            out.append(f"{len(ids)} cases: {key} ({', '.join(ids[:show])}{more})")
+        else:
+            out.append(f"case {ids[0]}: {key}" if ids else key)
+    return out
+
+
 def cmd_validate(args) -> int:
     ev = _evals(args)
     n_problems = 0
@@ -126,7 +158,7 @@ def cmd_validate(args) -> int:
         if not g.problems and not (args.warnings and g.info):
             continue
         print(f"{g.id} {g.command} [{GLYPH[g.status]}]")
-        for p in g.problems:
+        for p in (g.problems if args.all else _grouped(g.problems)):
             print(f"  error: {p}")
         n_problems += len(g.problems)
         for i in g.info:
@@ -317,6 +349,24 @@ def cmd_label(args) -> int:
     return 1 if res["refused"] else 0
 
 
+def cmd_migrate(args) -> int:
+    from pathlib import Path
+
+    from . import migrate as migrate_mod
+    from .repo import is_evals_root
+
+    if args.evals:
+        evals_dir = Path(args.evals).expanduser().resolve()
+        if not is_evals_root(evals_dir):
+            evals_dir = evals_dir.parent if evals_dir.parent.name == "evals" else evals_dir
+    else:
+        here = Path.cwd().resolve()
+        evals_dir = next((d / "evals" for d in (here, *here.parents) if (d / "evals").is_dir()),
+                         next((d for d in (here, *here.parents) if d.name == "evals"), here / "evals"))
+    migrate_mod.run(evals_dir, dry_run=args.dry_run)
+    return 0
+
+
 def cmd_components(args) -> int:
     from . import components as comp
 
@@ -368,7 +418,7 @@ def cmd_agreement(args) -> int:
             if args.changed:
                 from . import bench
 
-                cand = bench.label_runs(ev)[1:]
+                cand = [bench.candidate_run(ev)] if bench.candidate_run(ev) else []
                 if not cand:
                     sys.exit("--changed needs a candidate run after the baseline, compared with it "
                              "(aot-evals run --purpose candidate ...; aot-evals compare)")
@@ -718,7 +768,7 @@ _MILESTONES = {"start": "phase1_started", "discovery-page": "discovery_written",
                "report": "report_built"}
 
 # Commands that never log themselves: reads, and the commands that write the log.
-_UNLOGGED = {"replay", "status", "components", "validate", "log", "activity", "checkpoint", "start",
+_UNLOGGED = {"replay", "status", "components", "migrate", "validate", "log", "activity", "checkpoint", "start",
              "discovery-page", "snapshot",
              "doctor", "demo", "telemetry", "benchmarks", "serve"}
 # Commands long enough to log their start, so the activity page shows them in progress.
@@ -758,8 +808,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="aot-evals", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--version", action="version", version=f"aot-evals {__version__}")
-    ap.add_argument("--evals", help="path to the agent's suite directory (default: found from "
-                    "evals/ upward; see --agent)")
+    ap.add_argument("--evals", help="one agent's suite (evals/agents/AGENT/), or the evals/ folder "
+                    "with --agent (default: found from evals/ upward)")
     ap.add_argument("--agent", help="the agent's suite, evals/agents/AGENT/ (needed when the "
                     "repository holds several)")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -791,6 +841,7 @@ def main(argv: list[str] | None = None) -> int:
 
     s = sub.add_parser("validate", help="every problem across all gates")
     s.add_argument("--warnings", action="store_true", help="also print warnings and info")
+    s.add_argument("--all", action="store_true", help="one line per problem, instead of grouping cases")
     s.set_defaults(fn=cmd_validate)
 
     s = sub.add_parser("import", help="C0: import an export with its provenance")
@@ -893,6 +944,10 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--k", type=int, default=3, help="--run: trials per case for the baseline (3-5)")
     s.set_defaults(fn=cmd_build)
 
+    s = sub.add_parser("migrate", help="move suites from evals/<agent>/ to evals/agents/<agent>/")
+    s.add_argument("--dry-run", action="store_true", help="say what would move, and move nothing")
+    s.set_defaults(fn=cmd_migrate)
+
     s = sub.add_parser("components", help="the optimization loop's components as a checklist, read from the suite")
     s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_components)
@@ -926,7 +981,7 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("judge", help="apply a judge to past runs")
     s.add_argument("action", choices=["apply"])
     s.add_argument("--judge", required=True)
-    s.add_argument("--run", action="append", help="default: the latest baseline")
+    s.add_argument("--run", action="append", help="default: the baseline (every category's newest baseline run)")
     s.add_argument("--backend", help="default: the judge's primary backend")
     s.set_defaults(fn=cmd_judge)
 

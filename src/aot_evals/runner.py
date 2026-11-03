@@ -240,9 +240,13 @@ def _run(ev: Evals, agent: dict, isolated: Path | None, *, purpose: str, k: int,
         raise ValueError("no cases to run (all dropped, filtered out, or none authored); "
                          "use --question for a smoke run before cases exist")
 
-    run_id = f"{run_id_stamp()}-{purpose}" + (f"-{label}" if label else "")
+    stem = f"{run_id_stamp()}-{purpose}" + (f"-{label}" if label else "")
+    run_id, n = stem, 1
+    while ev.p("runs", run_id).exists():  # two runs started in the same second never share a folder
+        n += 1
+        run_id = f"{stem}-{n}"
     run_dir = ev.p("runs", run_id)
-    (run_dir / "raw").mkdir(parents=True, exist_ok=True)
+    (run_dir / "raw").mkdir(parents=True)
     manifest = build_manifest(ev, run_id, purpose, k, [c for c in cases if "_path" in c],
                               variable, label, executor, agent_cwd)
     manifest["judges_enabled"] = judges

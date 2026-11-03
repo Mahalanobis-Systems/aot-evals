@@ -591,6 +591,11 @@ def status(ev: Evals) -> tuple[list[str], list[str]]:
     result = load_json(result_path(ev))
     problems = gate_problems(ev, result)
     info = []
+    judge_labels = sum(1 for p in ev.p("checks", "judge").glob("*.labels.jsonl") for _ in read_jsonl(p)) \
+        if ev.p("checks", "judge").exists() else 0
+    if judge_labels and not load_labels(ev):
+        info.append(f"{judge_labels} per-judge labels exist; those calibrate judges. Whole-run labels, which "
+                    "hold the suite as a whole to people, are separate and start from zero")
     if result:
         for split in ("dev", "holdout"):
             s = result.get(split) or {}

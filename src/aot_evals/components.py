@@ -69,12 +69,15 @@ def _from_suite(ev: Evals) -> dict[str, tuple[str, str]]:
     inv = a.get("invoke") or {}
     cases = ev.cases(include_dropped=False)
     code = [c for c in cases if ev.checks_for_case(c, check_type="code")]
-    base = ev.latest_run("baseline")
+    base_runs = ev.baseline_runs()
+    base = base_runs[-1] if base_runs else None
     by = agreement.per_labeller(ev)
     labellers = {k for people in by.values() for k in people}
     overlapped = sum(len(p) >= 2 for p in by.values())
     judges = gates._judge_checks(ev)
-    cal = next((g for g in gates.evaluate(ev) if g.id == "C10"), None)
+    gs = {g.id: g for g in gates.evaluate(ev)}
+    cal = gs.get("C10")
+    compared = gs.get("C13") is not None and gs["C13"].status == "met"
     comps = [m for m in ev.runs("candidate") if m.get("finished")]
     out: dict[str, tuple[str, str]] = {}
 
@@ -116,18 +119,26 @@ def _from_suite(ev: Evals) -> dict[str, tuple[str, str]]:
     synth = sum(bool((c.get("provenance") or {}).get("synthetic")) for c in cases)
     drafts = len(list(ev.p("labels", "drafts").glob("*.json"))) if ev.p("labels", "drafts").exists() else 0
     put("synthetic", "partial" if synth or drafts else "todo", f"{synth} synthetic case(s), {drafts} draft(s)")
-    put("engine", "done" if base else "todo", f"baseline {base['run_id']}" if base else "no baseline yet")
-    put("change-scoping", "done" if base else "todo", "status compares everything with the baseline")
-    put("ab", "done" if comps else "todo", f"{len(comps)} candidate run(s)")
+    put("engine", "done" if base else "todo",
+        f"baseline {' + '.join(m['run_id'] for m in base_runs)}" if base else "no baseline yet")
+    put("change-scoping", "done" if compared else "partial" if base else "todo",
+        "a change was compared and its moved cases can be labelled alone" if compared else
+        "status names every change since the baseline; no change has been compared yet" if base else
+        "needs a baseline")
+    put("ab", "done" if compared else "partial" if comps else "todo",
+        f"{len(comps)} candidate run(s)" + ("" if compared or not comps else ", the latest not compared yet"))
     put("trace-monitoring", "later", "not automated yet")
     weighted = all(isinstance(c.get("observed_share"), (int, float)) and c.get("worth") for c in ev.categories())
     put("weighting", "done" if ev.categories() and weighted else "partial" if ev.categories() else "todo",
         "worth and share on every category" if weighted and ev.categories() else "some categories lack worth or share")
-    put("business", "done" if ev.p("discovery.md").exists() else "todo", "discovery.md")
+    put("business", "done" if ev.discovery_path().exists() else "todo", "discovery.md")
     put("distribution", "later", "not automated yet")
-    put("significance", "done" if comps else "todo", "paired tests on every comparison")
-    put("noise-floor", "done" if base and (base.get("k") or 0) >= 3 else "todo",
-        f"k = {base.get('k')}" if base else "no baseline yet")
+    put("significance", "done" if compared else "todo",
+        "the latest comparison has its paired test" if compared else "no comparison yet")
+    ks = sorted({m.get("k") or 0 for m in base_runs})
+    put("noise-floor", "done" if base_runs and min(ks) >= 3 else "partial" if base_runs else "todo",
+        (f"k = {', '.join(map(str, ks))}: 3 to 5 trials per case shows how much results move by chance; "
+         "5 narrows the band" if base_runs else "no baseline yet"))
     res = load_json(agreement.result_path(ev)) or {}
     put("misclassification", "done" if res and not agreement.gate_problems(ev, res) else "partial" if res else "todo",
         f"{len(res.get('disagreements') or [])} disagreement(s) measured" if res else "not measured yet")
@@ -140,7 +151,7 @@ def _from_suite(ev: Evals) -> dict[str, tuple[str, str]]:
 
 def checklist(ev: Evals) -> list[dict]:
     report = {}
-    path = ev.p("discovery.md")
+    path = ev.discovery_path()
     if path.exists():
         fm, _ = split_front_matter(path.read_text())
         report = fm.get("components") or {}

@@ -16,7 +16,11 @@ the repository, pass `--agent <agent>` to every command. Below, `aot-evals` mean
 
 ## 1. Which phase
 
-1. Look for `evals/agents/*/discovery.md`. **None:** load `assess` and follow it. Stop here.
+1. Look for an existing suite in either layout: `evals/agents/*/agent.yaml`, or the older
+   `evals/*/agent.yaml`. A suite in the older layout works as it is; offer `aot-evals migrate`,
+   which moves it to `evals/agents/<agent>/` beside any discovery report (say what moves first,
+   with `--dry-run`). **No suite and no `evals/agents/*/discovery.md`:** load `assess` and follow
+   it. Stop here.
 2. Otherwise run:
 
    ```bash

@@ -58,6 +58,31 @@ reached and read.
 - The banner, the discovery page and the docs speak of Assess, Build and Judge instead of Phase 1
   and Phase 2.
 
+- **Suites made by earlier versions are found and read right.** A suite in the old layout,
+  `evals/<agent>/`, is found from the repository, from inside it, and with `--evals evals
+  --agent NAME` (which no longer treats `evals/` itself as a suite), with its repository root and
+  discovery report resolved; a note offers `aot-evals migrate`, which moves it to
+  `evals/agents/<agent>/` with `git mv`, beside a discovery report a later assessment put there.
+- **The baseline is every category's newest baseline run**, not the single newest run: a re-run of
+  one category no longer marks the others untested. `status`, the gates, `compare`, `report`,
+  `judge apply` and the labelling queues all use it, and `status` says when its runs used
+  different builds of the agent.
+- **"The agent changed" means its files changed.** Two commits with the same files outside
+  `evals/` are one agent, however many commits to the suite (or to an earlier layout) lie between.
+- `status` groups judges whose fingerprint differs from the baseline's, says when one was edited
+  without a version bump, and gives the step that fits its calibration (re-judge, recalibrate,
+  iterate, or label first). Lists of changed checks and cases show every name or `+N more`, and a
+  baseline recorded without check fingerprints no longer reports every check as new.
+- C10 fails a judge whose calibration is below its floors (it passed before). The coverage list
+  committed in the same commit as the first cases, as a squash merge leaves it, passes C2. C15
+  says whether the discriminating fraction is above or below the point where a prune proposal is
+  made, and why it can't be computed when it can't. C19 says when per-judge labels exist and
+  whole-run labels don't yet. `components` takes each state from the same facts as the gates.
+- Two runs started in the same second (category by category, on a fast agent) no longer share a
+  run folder; the second gets `-2`.
+- `validate` groups problems that differ only by case (`62 cases: no requirements (…, +57 more)`);
+  `--all` prints one line each.
+
 ### Upgrading from 0.4
 
 Existing suites keep working: no suite file needs to change, and every report, run and label
@@ -71,6 +96,14 @@ written by 0.4 reads as before. What does change:
 - **`status` output.** The plain output is the phase summary; `--gates` prints the old table. In
   `--json`, `next` is now the next step (`what`, `how`, `phase`); the first unmet gate moved to
   `next_gate`. `gates` is unchanged.
+- **A suite in `evals/<agent>/`** (made before 0.2) works as it is. `aot-evals migrate --dry-run`
+  says what would move to `evals/agents/<agent>/`, and `aot-evals migrate` moves it.
+- **Pages and helper scripts from earlier versions.** `report/case-review.html`, the
+  `*.label.html` labelling pages and old `report/report-*.html` files can go: `aot-evals serve`
+  replaces the labelling pages and `aot-evals report` writes reports fresh. `journal/activity.html`
+  is rewritten on the next command. Helper scripts a team wrote beside its suite for labelling
+  pages, paired comparisons or a judge of its own are now covered by `serve`, `compare` and the
+  `command` judge backend; check them against those before deleting.
 - **A second labeller no longer replaces the first.** In `labels/runs.jsonl`, a later label by
   another person sits beside the earlier one. Where two people disagree, the run counts toward
   nothing until a ruling: run `aot-evals agreement label status` to find any such runs in an

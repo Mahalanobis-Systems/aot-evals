@@ -43,7 +43,7 @@ def _share(v) -> float | None:
 
 def task_types(ev: Evals) -> list[dict]:
     """The discovery report's task types (its grid rows): name and share of traffic."""
-    path = ev.p("discovery.md")
+    path = ev.discovery_path()
     if not path.exists():
         return []
     fm, _ = split_front_matter(path.read_text())
@@ -53,7 +53,7 @@ def task_types(ev: Evals) -> list[dict]:
 
 def situations(ev: Evals) -> list[dict]:
     """The discovery report's grid columns: the situations public benchmarks test."""
-    path = ev.p("discovery.md")
+    path = ev.discovery_path()
     if not path.exists():
         return []
     fm, _ = split_front_matter(path.read_text())
