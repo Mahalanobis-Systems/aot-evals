@@ -1,4 +1,4 @@
-# Phase 3 — Build the evals
+# Steps 8–12: Build the evals
 
 Steps 8–12. Goal: a calibrated eval suite per agent, organized by category.
 

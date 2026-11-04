@@ -6,6 +6,9 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+- The process documents head their sections by steps (Steps 1–4, 5–7, 8–12) instead of "Phase 1-3", so
+  "phase" only ever means Assess, Build or Judge. File names are unchanged.
+
 ## 1.0.0 — 2026-11-03
 
 The first major release: three phases (Assess, Build, Judge), trust per category, a grader

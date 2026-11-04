@@ -1,4 +1,4 @@
-# Phase 2 — Understand the usage
+# Steps 5–7: Understand the usage
 
 Steps 5–7. Goal: know what each agent is asked to do, where it goes wrong, and have its raw traces in hand.
 
