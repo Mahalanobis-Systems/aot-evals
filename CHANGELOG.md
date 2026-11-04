@@ -6,6 +6,8 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+## 1.0.1 — 2026-11-04
+
 - The process documents head their sections by steps (Steps 1–4, 5–7, 8–12) instead of "Phase 1-3", so
   "phase" only ever means Assess, Build or Judge. File names are unchanged.
 
