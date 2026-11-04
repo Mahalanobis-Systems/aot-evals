@@ -1,4 +1,4 @@
-# Phase 1 — Understand the system
+# Steps 1–4: Understand the system
 
 Steps 1–4. Goal: know what agents exist, where they run, how much they run, and what already measures them.
 

@@ -216,7 +216,7 @@ the templates. Read them, or point any coding agent at them. Apache License 2.0 
 | Start with | What it holds |
 |---|---|
 | docs/method.md | The reference: principles, commands C0-C19 and their exit gates, judges, gates G1-G14 |
-| references/process/README.md | The process in three phases and twelve steps, to a calibrated suite per agent |
+| references/process/README.md | The process in twelve steps, to a calibrated suite per agent |
 | references/eval-best-practices.md | What the 2025-2026 literature says about evaluating agents, with sources |
 | references/benchmarks.md, benchmarks.yaml | The public benchmark catalog, and how an agent is matched against it |
 | references/situations.yaml | The conditions a request can put an agent in, which every suite should cover |
