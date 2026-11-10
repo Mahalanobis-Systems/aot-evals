@@ -464,8 +464,11 @@ def cmd_agreement(args) -> int:
             n_fail = sum(not r["label"] for r in labels)
             print(f"{len(labels)} whole runs with a verdict: {n_fail} fail, {len(labels) - n_fail} pass")
             for pair in ag.labeller_agreement(ev):
-                k = "n/a" if pair["kappa"] is None else f"{pair['kappa']:.2f}"
-                print(f"  {' & '.join(pair['labellers'])}: {pair['agree']}/{pair['n']} agreed, κ {k}")
+                def f2(v):
+                    return "n/a" if v is None else f"{v:.2f}"
+                print(f"  {' & '.join(pair['labellers'])}: {pair['agree']}/{pair['n']} agreed, κ {f2(pair['kappa'])}, "
+                      f"AC1 {f2(pair.get('ac1'))}; on fails {f2(pair.get('fail_agreement'))}, "
+                      f"on passes {f2(pair.get('pass_agreement'))}")
             dis = ag.disputes(ev)
             if dis:
                 print(f"{len(dis)} run(s) where labellers disagree, waiting for a ruling "

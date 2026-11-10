@@ -60,6 +60,9 @@ def test_two_flips_are_listed_but_not_called_a_regression(make_repo):
     assert c["losses"] == ["book-001", "book-002"] and c["gains"] == []
     assert c["test"]["p"] == 0.5 and c["min_flips_for_significance"] == 6
     assert c["verdict"] == "indistinguishable"  # never a net delta alone, and two flips prove nothing
+    # the paired test on every rate change is reported beside McNemar, and does not decide
+    assert 0 < c["paired_mean_test"]["p"] <= 1
+    assert all("p_adjusted_bh" in v["test"] for v in c["per_category"].values())
     assert c["net"] < 0 and c["test"]["ci"] is not None
     assert c["mde_at_80_power"] is not None
     assert c["per_set"]["error_finding"]["losses"] == ["book-001", "book-002"]
@@ -75,6 +78,7 @@ def test_broad_regression_is_worse(make_repo):
     c = comparison(repo)
     assert sorted(c["losses"]) == BOOKING
     assert c["test"]["p"] < 0.05 and c["test"]["ci"][1] < 0
+    assert c["paired_mean_test"]["p"] < 0.05
     assert c["verdict"] == "worse"
     assert c["per_set"]["quality_estimate"]["losses"] == ["book-q01", "book-q02"]
 

@@ -204,6 +204,11 @@ def paired(base: dict, cand: dict) -> dict:
         "net": sum(deltas) / len(deltas) if deltas else None,
         "test": {"name": "mcnemar_exact", "p": mcnemar_exact(len(gains), len(losses)),
                  "ci": bootstrap_ci(deltas), "ci_method": "bootstrap over cases, mean per-case delta"},
+        # Informational: a paired test on every change in a case's pass rate, not only majority
+        # flips. It tests the quantity M7's detectable effect is computed for; the verdict still
+        # reads McNemar (docs/statistics.md §7).
+        "paired_mean_test": {"name": "sign_flip_permutation", "p": stats.sign_flip_test(deltas)},
+        "mde_from_deltas": stats.mde_from_deltas(deltas),
     }
 
 
@@ -291,6 +296,13 @@ def compare(ev: Evals, baseline_runs: list[str], candidate_runs: list[str]) -> d
         per_category={c: paired(case_rates(base, category=c), case_rates(cand, category=c))
                       for c in sorted({a.get("category") for a in base.attempts if a.get("category")})},
     )
+    # Several categories tested at once: adjust their p-values for the false discovery rate, so
+    # one "significant" category out of ten is not read as a finding by chance.
+    cats_ = list(out["per_category"])
+    adj = stats.benjamini_hochberg([out["per_category"][c]["test"]["p"] if out["per_category"][c]["n_cases"] else None
+                                    for c in cats_])
+    for c, q in zip(cats_, adj, strict=True):
+        out["per_category"][c]["test"]["p_adjusted_bh"] = q
     for s in SETS:
         out["per_set"][s]["label"] = ("quality-estimate set" if s == "quality_estimate"
                                       else "error-finding set — not a quality estimate")
@@ -385,9 +397,13 @@ def render(c: dict) -> str:
         f"  losses ({len(c['losses'])}): {', '.join(c['losses']) or '-'}",
         f"  moved without flipping: {len(c['moved'])}",
         f"  net {pct(c['net'])}, 95% CI [{pct(ci[0]) if ci else '-'}, {pct(ci[1]) if ci else '-'}], "
-        f"McNemar exact p = {t['p']:.4f}",
+        f"McNemar exact p = {t['p']:.4f}"
+        + (f" (paired sign-flip test on every rate change: p = {c['paired_mean_test']['p']:.4f})"
+           if (c.get("paired_mean_test") or {}).get("p") is not None else ""),
         f"  baseline variance band {c['variance_band']['baseline']}; MDE at 80% power "
-        f"{mde}; "
+        f"{mde}"
+        + (f" from baseline noise, {100 * c['mde_from_deltas']:.1f} pts from these per-case deltas"
+           if c.get("mde_from_deltas") is not None else "") + "; "
         f"at least {c['min_flips_for_significance']} one-way flips needed",
     ]
     for d in c["per_set"].values():

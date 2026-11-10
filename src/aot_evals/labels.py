@@ -260,6 +260,8 @@ def status(ev: Evals, spec: JudgeSpec) -> dict:
         "by_category": by_cat,
         "missing_categories": sorted(c for c, d in by_cat.items() if d["pass"] + d["fail"] == 0),
         "tpr_ci_halfwidth": halfwidth(n_pass), "tnr_ci_halfwidth": halfwidth(n_fail),
+        # TPR is measured on passing labels and TNR on failing ones, so each needs its own count
+        "per_class_for_10pts": stats.labels_for_halfwidth(0.8, 0.10),
         "status": ("usable" if len(labels) >= 100 else "minimum" if len(labels) >= 60 else "uncalibrated"),
     }
 
@@ -269,7 +271,8 @@ def render_status(s: dict) -> str:
         return "n/a" if v is None else f"±{100 * v:.0f} pts"
     lines = [f"{s['judge']}: {s['labels']} labels ({s['pass']} pass / {s['fail']} fail; "
              f"{s['holdout']} holdout) — {s['status']} (M10: <60 uncalibrated, 100–200 usable)",
-             f"  TPR interval at this n: {pct(s['tpr_ci_halfwidth'])}; TNR: {pct(s['tnr_ci_halfwidth'])}",
+             f"  TPR interval at this n: {pct(s['tpr_ci_halfwidth'])}; TNR: {pct(s['tnr_ci_halfwidth'])} "
+             f"(±10 pts needs about {s.get('per_class_for_10pts')} passing and as many failing labels)",
              f"  labellers: {', '.join(s['labellers']) or '-'}"]
     for c, d in sorted(s["by_category"].items()):
         lines.append(f"  {c:<28} pass {d['pass']:>4}  fail {d['fail']:>4}")

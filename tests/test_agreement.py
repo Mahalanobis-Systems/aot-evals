@@ -68,6 +68,13 @@ def test_disagreements_are_listed_with_the_note_and_must_be_triaged(make_repo):
     d = by_case["book-003"]
     assert d["human"] == "fail" and d["suite"] == "pass" and d["note"] == "invited the wrong person"
     assert res["dev"]["catch"]["k"] == 1 and res["dev"]["catch"]["n"] == 2
+    # M35, informational: 1 of 2 clears a 50% floor, but two runs are not evidence
+    e = res["evidence"]["dev"]["catch"]
+    assert e["meets_point"] and not e["meets_margin"] and e["n"] == 2
+    # M33: labels on one run per case, combined with the suite's verdict on the other trials
+    h = res["human_anchored"]
+    assert h["n_labeled"] == res["all"]["runs"] - res["all"]["no_verdict"]
+    assert h["n_unlabeled"] > 0 and 0 <= h["ci"][0] <= h["point"] <= h["ci"][1] <= 1
     assert any("without a cause" in p for p in _gate(repo).problems)
     (repo.evals / "labels" / "triage.yaml").write_text(yaml.safe_dump(
         {d["item"]: {"cause": "missing-requirement", "note": "no check on the invitee"}}))

@@ -6,6 +6,29 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+- **The statistics behind the method** ([docs/statistics.md](docs/statistics.md)): for each decision
+  (how many cases, trials and labels, when a judge or a category can be trusted, when a difference
+  is real, what to prune) the rule aot-evals applies, its basis in the sampling, diagnostic-test,
+  psychometric and experiment-design literature, and when to deviate. It audits every rule of
+  thumb in the method and lists twelve proposed changes (P1–P12) that this release does not make.
+  No gate or verdict changes.
+- New numbers, each informational (docs/method.md M30–M35, E16):
+  - `allocate` prints the rarest failure each error-finding target surfaces with 95% probability,
+    and the report gives a category with no failure its `zero_failure_bound` (M30).
+  - Each category and set carries `variance_components`: between-case and within-case variance,
+    ICC, effective n, and the standard error after doubling cases or trials (M31, E16).
+  - Each judge check carries `corrected_trigger_rate`: how often its failure mode really occurs,
+    given the judge's measured TPR and TNR, with an interval (M32).
+  - `agreement` reports a `human_anchored` pass rate that combines the labels with the suite's
+    verdict on every other run (prediction-powered inference, M33), and `evidence`: whether each
+    dev rate clears its floor with enough runs behind it (M35). Calibration reports the same
+    `evidence` for TPR and TNR, and `label status` says how many labels of each kind ±10 points needs.
+  - Agreement between labelers adds Gwet's AC1 and agreement on fails and on passes separately,
+    in the CLI and the grader application (M34).
+  - `compare` adds a paired sign-flip test on every change in a case's pass rate, the detectable
+    effect implied by the observed per-case deltas (`mde_from_deltas`), and Benjamini–Hochberg
+    adjusted p-values per category (`p_adjusted_bh`).
+
 ## 1.0.1 — 2026-11-04
 
 - The process documents head their sections by steps (Steps 1–4, 5–7, 8–12) instead of "Phase 1-3", so

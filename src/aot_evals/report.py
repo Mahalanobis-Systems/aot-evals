@@ -222,8 +222,14 @@ def correctness(ctx: Context, finals: list[dict], set_name: str) -> dict:
         pass_rate = {"point": rate["point"], "ci": rate["ci"], "n": rate["n"],
                      "n_cases": rate["n_cases"], "k": ctx.k, "set": set_name,
                      "ci_method": rate["ci_method"]}
+    # M30: with no failure seen, how high could the failure rate still be? Counted over cases,
+    # since trials of one case are not independent.
+    zero_bound = (stats.zero_failure_bound(len(by_case))
+                  if by_case and all(all(v) for v in by_case.values()) else None)
     return {"pass_rate": pass_rate, "pass_pow_k": pass_pow_k, "pass_pow_k_reason": pass_pow_k_reason,
-            "flaky": flaky, "variance_band": band}
+            "flaky": flaky, "variance_band": band, "zero_failure_bound": zero_bound,
+            # M31: how much of the noise is case difficulty and how much run-to-run
+            "variance_components": stats.variance_components(list(by_case.values()))}
 
 
 # ---- plane B ------------------------------------------------------------------------------
@@ -381,6 +387,7 @@ def check_rows(ctx: Context) -> list[dict]:
     fires: dict[str, int] = defaultdict(int)
     sole: dict[str, int] = defaultdict(int)
     evaluated: dict[str, int] = defaultdict(int)
+    cases_seen: dict[str, set] = defaultdict(set)
     for key, lines in ctx.checks_by_attempt.items():
         if key not in final_keys:
             continue
@@ -391,6 +398,7 @@ def check_rows(ctx: Context) -> list[dict]:
             if verdict(line) is None:
                 continue
             evaluated[line["check_id"]] += 1
+            cases_seen[line["check_id"]].add(key[1])
             if verdict(line) is False:
                 fires[line["check_id"]] += 1
                 if len(failed) == 1:
@@ -401,14 +409,35 @@ def check_rows(ctx: Context) -> list[dict]:
         judge = None
         if ctype == "judge":
             judge = judge_block(ctx, cid)
+        rate = fires[cid] / evaluated[cid] if evaluated[cid] else None
         rows.append({
             "id": cid, "type": ctype, "failure_mode": fm.get("id"),
-            "trigger_rate": fires[cid] / evaluated[cid] if evaluated[cid] else None,
+            "trigger_rate": rate,
             "sole_failure_rate": sole[cid] / fires[cid] if fires[cid] else None,
             "evaluations": evaluated[cid] or None,
+            "corrected_trigger_rate": corrected_trigger_rate(rate, len(cases_seen[cid]), judge),
             "judge": judge,
         })
     return rows
+
+
+def corrected_trigger_rate(rate: float | None, n_cases: int, judge: dict | None) -> dict | None:
+    """M32: how often the failure mode really occurs, given how often the judge fires and the
+    judge's measured TPR and TNR (stats.rogan_gladen). A judge that misses failures under-reports
+    them and one that over-fires inflates them; the correction undoes both, and its interval
+    carries the uncertainty of the calibration as well as of the runs. The runs' share is counted
+    over cases, since trials of one case are not independent."""
+    cm = (judge or {}).get("confusion")
+    if rate is None or not cm or n_cases <= 0:
+        return None
+    pass_k = round((1 - rate) * n_cases)
+    r = stats.rogan_gladen(pass_k, n_cases, cm["tp"], cm["tp"] + cm["fn"], cm["tn"], cm["tn"] + cm["fp"])
+    if r is None:
+        return {"point": None, "ci": None, "observed": rate,
+                "reason": "TPR + TNR <= 1 on the labels: the judge is no better than chance"}
+    return {"point": 1 - r["point"], "ci": [1 - r["ci"][1], 1 - r["ci"][0]], "observed": rate,
+            "n_cases": n_cases, "calibrated": (judge or {}).get("status") == "calibrated",
+            "method": r["method"]}
 
 
 def judge_block(ctx: Context, cid: str) -> dict:
@@ -729,8 +758,14 @@ def build(ev: Evals, run_ids: list[str] | None = None, candidate_runs: list[str]
         "categories.yaml observed_share" if status["G6"] == "pass" else None)
     report["sets"]["quality_estimate"]["estimate"] = quality_estimate(ctx, status["G6"] == "pass")
     report["sets"]["error_finding"]["note"] = "error-finding set — not a quality estimate"
-    for s in SETS:  # M7, from this run's within-case variance
-        report["sets"][s]["mde_at_80_power"] = compare_mod.mde_from(ctx, compare_mod.case_rates(ctx, set_name=s))
+    for s in SETS:  # M7, from this run's within-case variance; M31, the same split as a G-study
+        rates_s = compare_mod.case_rates(ctx, set_name=s)
+        report["sets"][s]["mde_at_80_power"] = compare_mod.mde_from(ctx, rates_s)
+        by_case = defaultdict(list)
+        for a in ctx.finals():
+            if a.get("set") == s and a.get("passed") is not None and ctx.gated(a["case_id"]):
+                by_case[a["case_id"]].append(bool(a["passed"]))
+        report["sets"][s]["variance_components"] = stats.variance_components(list(by_case.values()))
     report["coverage"]["authoring_queue"] = suite.authoring_queue(ev, report["coverage"]["cells"])
 
     if status["G1"] == "fail":

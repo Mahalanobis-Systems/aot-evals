@@ -79,6 +79,11 @@ def plan(ev: Evals, halfwidth: float = 0.05, assumed_rate: float = 0.5, k: int =
             "per_category_ci_halfwidth_at_target": {
                 c["category"]: _halfwidth(c["target"], assumed_rate)
                 for c in cells if c["set"] == "error_finding"},
+            # M30: the rarest failure each target surfaces at least once with 95% probability,
+            # which is also the most a clean result rules out (docs/statistics.md §2)
+            "surfaces_rate_at_95": {
+                c["category"]: stats.zero_failure_bound(c["target"])
+                for c in cells if c["set"] == "error_finding" and c["target"]},
             "note": "finds and verifies errors; its pass rate is not a quality estimate",
         },
         "quality_estimate": {
@@ -112,6 +117,9 @@ def render(p: dict) -> str:
         f"    N = {ef['n']}; MDE (unpaired, upper bound) = {_pct(ef['mde_unpaired_upper_bound'])}",
         "    per-category 95% CI half-width at target: "
         + ", ".join(f"{k}: ±{_pct(v)}" for k, v in ef["per_category_ci_halfwidth_at_target"].items()),
+        "    each target surfaces, with 95% probability, a failure in at least: "
+        + ", ".join(f"{k}: {_pct(v, '%')}" for k, v in ef.get("surfaces_rate_at_95", {}).items()),
+        "    of the category's runs; rarer failures need more cases (cases_to_surface, docs/statistics.md §2)",
         "    (this set finds errors; its pass rate is not a quality estimate)",
         "",
         f"  quality-estimate set: {qe['rule']}",
@@ -127,8 +135,8 @@ def render(p: dict) -> str:
     return "\n".join(lines)
 
 
-def _pct(v) -> str:
-    return "n/a" if v is None else f"{100 * v:.1f} pts"
+def _pct(v, unit: str = " pts") -> str:
+    return "n/a" if v is None else f"{100 * v:.1f}{unit}"
 
 
 def write(ev: Evals, p: dict) -> None:
