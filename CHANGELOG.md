@@ -6,6 +6,8 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+## 1.1.0 — 2026-11-11
+
 - **The statistics behind the method** ([docs/statistics.md](docs/statistics.md)): for each decision
   (how many cases, trials and labels, when a judge or a category can be trusted, when a difference
   is real, what to prune) the rule aot-evals applies, its basis in the sampling, diagnostic-test,
