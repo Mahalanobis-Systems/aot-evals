@@ -140,8 +140,8 @@
   // ---- agreement ------------------------------------------------------------------------------
   function agreement(st) {
     let h = `<section class="panel"><h2>Between people</h2>`;
-    h += st.between_people.length ? `<div class="ga-wrap"><table><thead><tr><th>Labellers</th><th>Runs both labelled</th><th>Agreed</th><th>κ</th></tr></thead><tbody>` +
-      st.between_people.map((p) => `<tr><td>${esc(p.labellers.join(" & "))}</td><td>${p.n}</td><td>${pct(p.rate)}</td><td>${p.kappa == null ? "n/a" : p.kappa.toFixed(2)}</td></tr>`).join("") + `</tbody></table></div>`
+    h += st.between_people.length ? `<div class="ga-wrap"><table><thead><tr><th>Labellers</th><th>Runs both labelled</th><th>Agreed</th><th>κ</th><th title="Gwet's AC1: unlike κ, it does not collapse when most runs pass">AC1</th><th title="Of the runs either person failed, the share both failed">Agreed on fails</th></tr></thead><tbody>` +
+      st.between_people.map((p) => `<tr><td>${esc(p.labellers.join(" & "))}</td><td>${p.n}</td><td>${pct(p.rate)}</td><td>${p.kappa == null ? "n/a" : p.kappa.toFixed(2)}</td><td>${p.ac1 == null ? "n/a" : p.ac1.toFixed(2)}</td><td>${p.fail_agreement == null ? "n/a" : pct(p.fail_agreement)}</td></tr>`).join("") + `</tbody></table></div>`
       : `<p class="muted">No run has two labellers yet. The queue puts one overlap in every four runs.</p>`;
     h += `<h3>Waiting for a ruling (${st.disputes.length})</h3>` + (st.disputes.length ? st.disputes.map((d) => `<div class="ga-item" data-item="${esc(d.item_id)}"><p><strong>${esc(d.case_id)}</strong> <span class="muted">${esc(d.item_id)}</span></p><ul>` +
       d.labels.map((l) => `<li>${esc(l.labeller)}: <strong>${l.label ? "pass" : "fail"}</strong>${l.note ? " · " + esc(l.note) : ""}</li>`).join("") +

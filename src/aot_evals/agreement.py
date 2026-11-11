@@ -160,11 +160,12 @@ def labeller_agreement(ev: Evals) -> list[dict]:
             pairs = [(by_person[a][x], by_person[b][x]) for x in both]
             agree = sum(x == y for x, y in pairs)
             n = len(pairs)
-            pa, pb = sum(x for x, _ in pairs) / n, sum(y for _, y in pairs) / n
-            pe = pa * pb + (1 - pa) * (1 - pb)
-            kappa = (agree / n - pe) / (1 - pe) if pe < 1 else None
+            st = stats.agreement_stats(pairs) or {}
+            # M34: kappa swings with the pass rate; AC1 and the specific agreements do not
             out.append({"labellers": [a, b], "n": n, "agree": agree, "rate": agree / n,
-                        "ci95": stats.wilson(agree, n), "kappa": kappa,
+                        "ci95": stats.wilson(agree, n), "kappa": st.get("kappa"),
+                        "ac1": st.get("ac1"), "pass_agreement": st.get("positive_agreement"),
+                        "fail_agreement": st.get("negative_agreement"),
                         "differ": [x for x in both if by_person[a][x] != by_person[b][x]]})
     return out
 
@@ -548,9 +549,65 @@ def measure(ev: Evals, call_judges: bool = False, log=print) -> dict:
               "categories": categories,
               "judge_calls": g.calls, "labels_without_a_run": missing,
               "disagreements": sorted(disagreements, key=lambda d: (d["split"], d["human"], d["case_id"]))}
+    result["evidence"] = evidence(result)
+    result["human_anchored"] = human_anchored(ev, g, rows, labels)
     result["problems"] = gate_problems(ev, result, labels)
     write_json(result_path(ev), result)
     return result
+
+
+def evidence(result: dict, margin: float = 0.10) -> dict:
+    """M35, informational: does each dev rate clear its floor with enough runs behind it?
+
+    The gate reads the point estimate. This adds the non-inferiority reading proposed in
+    docs/statistics.md: the 95% lower bound within `margin` of the floor, and how many runs of
+    that kind a rate at today's level would need to get there. Suite-wide and per category.
+    """
+    f = result.get("floors") or {}
+
+    def one(block: dict | None) -> dict:
+        out = {}
+        for name, floor in (("catch", f.get("min_catch", MIN_CATCH)), ("clean", f.get("min_clean", MIN_CLEAN))):
+            r = (block or {}).get(name) or {}
+            out[name] = stats.floor_evidence(r.get("k", 0), r.get("n", 0), floor, margin)
+        return out
+
+    return {"margin": margin, "dev": one(result.get("dev")),
+            "categories": {c: one((v or {}).get("dev")) for c, v in (result.get("categories") or {}).items()},
+            "note": "informational; the gate reads the point estimate (docs/statistics.md §6)"}
+
+
+def human_anchored(ev: Evals, g: Grader, rows: list[dict], labels: list[dict]) -> dict | None:
+    """M33: the pass rate a person would give the labeled runs' whole population, from a few
+    labels and the suite's verdict on every run (PPI++, stats.ppi_mean).
+
+    The population is every final attempt of the runs the labels come from. Each is graded by
+    the suite as it is now (offline, cached judge verdicts only). Valid when the labeled
+    attempts are a random sample of that population; the queue takes one attempt per case
+    first, so cases count about equally.
+    """
+    run_ids = sorted({lab.get("run") for lab in labels if lab.get("run")})
+    if not run_ids or len(rows) < 2:
+        return None
+    labeled = {r["item"]: r for r in rows if r["suite"] is not None}
+    unl, no_verdict = [], 0
+    for rid in run_ids:
+        for a in finals(ev, [rid]):
+            if item_key(rid, a["case_id"], a["trial"], a["attempt"]) in labeled:
+                continue
+            v = g.grade(rid, a)["verdict"]
+            if v is None:
+                no_verdict += 1
+                continue
+            unl.append(1.0 if v == "pass" else 0.0)
+    lab = list(labeled.values())
+    est = stats.ppi_mean(unl, [1.0 if r["suite"] == "pass" else 0.0 for r in lab],
+                         [1.0 if r["human"] == "pass" else 0.0 for r in lab])
+    if est is None:
+        return None
+    return {**est, "runs": run_ids, "unlabeled_without_verdict": no_verdict,
+            "suite_pass_rate": sum(unl) / len(unl) if unl else None,
+            "assumption": "labeled attempts are a random sample of these runs' final attempts"}
 
 
 def gate_problems(ev: Evals, result: dict | None, labels: list[dict] | None = None) -> list[str]:
@@ -621,6 +678,18 @@ def render(result: dict) -> str:
             ci = x["ci95"]
             return "n/a" if x["rate"] is None else f"{x['rate']:.0%} ({x['k']}/{x['n']}, 95% {ci[0]:.0%}–{ci[1]:.0%})"
         lines.append(f"{split}: {s['runs']} runs · catch {fmt(c)} · clean pass {fmt(p)} · no verdict {s['no_verdict']}")
+    for name, label in (("catch", "catch rate"), ("clean", "clean pass rate")):
+        e = ((result.get("evidence") or {}).get("dev") or {}).get(name)
+        if e and e["meets_point"] and not e["meets_margin"]:
+            lines.append(f"evidence: dev {label} {e['point']:.0%} clears its floor on {e['n']} runs, but its 95% "
+                         f"lower bound is {e['lower']:.0%}; about {e['n_needed']} runs of that kind would put it "
+                         f"within {e['margin']:.0%} of the floor (informational, docs/statistics.md §6)")
+    h = result.get("human_anchored")
+    if h:
+        lines.append(f"human-anchored pass rate: {h['point']:.0%} (95% {h['ci'][0]:.0%}–{h['ci'][1]:.0%}) from "
+                     f"{h['n_labeled']} labels and {h['n_unlabeled']} unlabeled runs; labels alone: "
+                     f"{h['labels_only']['point']:.0%}" + (f", the suite alone: {h['suite_pass_rate']:.0%}"
+                                                          if h.get("suite_pass_rate") is not None else ""))
     dev = [d for d in result["disagreements"] if d["split"] == "dev"]
     if dev:
         lines.append(f"dev disagreements ({len(dev)}):")

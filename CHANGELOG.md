@@ -6,6 +6,48 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+- **The statistics behind the method** ([docs/statistics.md](docs/statistics.md)): for each decision
+  (how many cases, trials and labels, when a judge or a category can be trusted, when a difference
+  is real, what to prune) the rule aot-evals applies, its basis in the sampling, diagnostic-test,
+  psychometric and experiment-design literature, and when to deviate. It audits every rule of
+  thumb in the method and lists fifteen proposed changes (P1–P15) that this release does not make.
+  No gate or verdict changes.
+- New numbers, each informational (docs/method.md M30–M35, E16):
+  - `allocate` prints the rarest failure each error-finding target surfaces with 95% probability,
+    and the report gives a category with no failure its `zero_failure_bound` (M30).
+  - Each category and set carries `variance_components`: between-case and within-case variance,
+    ICC, effective n, and the standard error after doubling cases or trials (M31, E16).
+  - Each judge check carries `corrected_trigger_rate`: how often its failure mode really occurs,
+    given the judge's measured TPR and TNR, with an interval (M32).
+  - `agreement` reports a `human_anchored` pass rate that combines the labels with the suite's
+    verdict on every other run (prediction-powered inference, M33), and `evidence`: whether each
+    dev rate clears its floor with enough runs behind it (M35). Calibration reports the same
+    `evidence` for TPR and TNR, and `label status` says how many labels of each kind ±10 points needs.
+  - Agreement between labelers adds Gwet's AC1 and agreement on fails and on passes separately,
+    in the CLI and the grader application (M34).
+  - `compare` adds a paired sign-flip test on every change in a case's pass rate, the detectable
+    effect implied by the observed per-case deltas (`mde_from_deltas`), and Benjamini–Hochberg
+    adjusted p-values per category (`p_adjusted_bh`).
+  - `compare` prints the flips next to the net: b (pass→fail), c (fail→pass) and the flip rate d,
+    with the interval they imply, plus McNemar's mid-p and the inverted sign-flip interval (M36).
+- **Correlated cases.** A case may carry an optional `cluster` key (its template, source trace or
+  seed). Pass-rate intervals and the zero-failure bound then count clusters, and `compare` flips
+  signs per cluster, with Webb weights at 6–9 clusters, a cluster jackknife cross-check, and a note
+  that nothing can reach 5% at five clusters or fewer. Without keys, both say "cases assumed
+  independent". Each set gains a `dependence` block: Cochran's Q across repeats, and an
+  over-dispersion test across clusters (M37).
+- Pass-rate intervals use a t(G − 1) critical value instead of z, and the logit scale when a
+  symmetric interval would cross 0% or 100% (`ci_method` `cluster_robust_t`, `cluster_robust_t_logit`).
+  Intervals on suites with few cases are slightly wider; no gate reads them.
+- `docs/statistics.md` adds what the score is for (a numeric weight per category, and a
+  blind-spot check), a check for uneven failure costs, per-category sizing by improvement,
+  regression guard and detection, and correlated cases; three proposals (P13 costs, P14 weights
+  and allocation, P15 clusters) with a build order that puts costs and weights ahead of
+  cost-weighted thresholds and weighted allocation. The library (`aot_evals.stats`) gains the
+  functions they need: Student t, cluster summaries and jackknife, effective n, mid-p McNemar,
+  flip-rate sizing, objective weights, the blind-spot check, per-category allocation targets,
+  weighted Neyman allocation, seeded stratified draws and the cost check.
+
 ## 1.0.1 — 2026-11-04
 
 - The process documents head their sections by steps (Steps 1–4, 5–7, 8–12) instead of "Phase 1-3", so

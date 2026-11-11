@@ -112,7 +112,15 @@ grading designs and situations, never of cases.
 **Allocation** (`aot-evals allocate`): two sets sized by different arithmetic. Error-finding:
 about 10 per category, 3 for simple ones. Quality-estimate: in proportion to traffic, sized by the
 interval the owner needs. Only the second may be called quality. Show the smallest detectable
-change before anything runs.
+change before anything runs, and say what the error-finding targets can find: `allocate` prints
+the rarest failure each one surfaces (10 cases: a failure in about one run in four). Where a rare
+failure would be costly, write cases aimed at it rather than adding cases everywhere. After the
+baseline, the report's `variance_components` says whether more cases or more trials narrow the
+interval faster; more cases usually win. When cases come from one template, source trace or
+seed, give them the same `cluster` key: they fail together, and the report and comparisons then
+count them as one piece of evidence instead of several. Five or fewer clusters can't show a
+significant change at all, so spread cases across sources. Background:
+`${CLAUDE_PLUGIN_ROOT}/docs/statistics.md`.
 
 **Compare a change.** After any change to the prompt, skills, tools, model or harness, commit it
 and run a candidate with one declared variable:

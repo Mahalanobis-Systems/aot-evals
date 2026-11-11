@@ -51,6 +51,8 @@ def test_good_agent_clears_every_phase1_gate(make_repo):
         assert row["pass_rate"]["ci"] is not None
         assert row["operational"]["budget_status"] == "within"
         assert row["operational"]["cache_hit_rate"] is not None
+        # M30: a clean category says how high its failure rate could still be
+        assert math.isclose(row["zero_failure_bound"], 1 - 0.05 ** (1 / row["n_cases"]))
     assert r["sets"]["quality_estimate"]["estimate"]["point"] == 1.0
     assert r["coverage"]["list"] == "external"
     assert r["coverage"]["empty_cells"] > 0  # reschedule-meeting has no cases
@@ -126,6 +128,10 @@ def test_flaky_agent_is_reported_as_flaky(make_repo):
     assert ef["flaky"] > 0
     assert ef["pass_pow_k"] < ef["pass_rate"]["point"] < 1.0
     assert ef["variance_band"][0] < ef["variance_band"][1]
+    # M31: a flaky agent's noise is run-to-run, which more trials (not more cases) shrink
+    vc = ef["variance_components"]
+    assert vc["within_case"] > 0 and vc["se_double_trials"] < vc["se_now"]
+    assert ef["zero_failure_bound"] is None
     assert failing(r) == set()
 
 

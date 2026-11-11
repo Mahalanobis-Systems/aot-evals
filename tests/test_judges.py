@@ -156,6 +156,7 @@ def test_always_pass_judge_is_caught_by_tnr_and_greyed(make_repo, fake_url):
     m = cal["backends"]["always"]
     assert m["tpr"] == 1.0 and m["tnr"] == 0.0
     assert cal["status"] == "uncalibrated" and any("TNR" in r for r in cal["status_reasons"])
+    assert m["evidence"]["tnr"]["meets_point"] is False and m["evidence"]["tnr"]["n_needed"] is None
 
     repo.commit("calibration")
     repo.cli("run", "--purpose", "baseline", "--k", "3", "--force")
@@ -165,6 +166,8 @@ def test_always_pass_judge_is_caught_by_tnr_and_greyed(make_repo, fake_url):
     assert g3["status"] == "fail" and "check:reply-states-time" in g3["blocks"] and "TNR" in g3["detail"]
     j = judge_row(r)["judge"]
     assert j["status"] == "uncalibrated" and j["tnr"] == 0.0 and j["labels"] == 84
+    # M32: nothing to correct when the judge produced no verdicts in the run
+    assert judge_row(r)["evaluations"] is None and judge_row(r)["corrected_trigger_rate"] is None
     # greyed, not counted: the terse agent still books correctly, so the headline is untouched
     for row in r["categories"]:
         assert row["pass_rate"]["point"] == 1.0
@@ -213,6 +216,11 @@ def test_calibrated_judge_counts_toward_pass_rates(make_repo, fake_url):
     j = judge_row(r)["judge"]
     assert j["status"] == "calibrated" and j["model_family"] == "typesafe"
     assert j["agent_model_family"] == "toy" and j["threshold"] is not None
+    # M32: the judge's firing rate, corrected for its measured TPR/TNR, with an interval
+    row = judge_row(r)
+    corr = row["corrected_trigger_rate"]
+    assert corr["observed"] == row["trigger_rate"] and corr["calibrated"] is True
+    assert 0 <= corr["ci"][0] <= corr["point"] <= corr["ci"][1] <= 1
     assert r["conditions"]["judge_backends"][0]["check"] == "reply-states-time"
     c10 = next(g for g in gates.evaluate(Evals(repo.evals)) if g.id == "C10")
     assert c10.status == "met"

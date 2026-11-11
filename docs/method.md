@@ -3,7 +3,9 @@
 This is the reference for what aot-evals does and why: the principles, the measurement frame,
 the files it keeps in your repository, the commands C0–C19 and their exit gates, the
 measurements (M), experiments (E), report panels (P) and refusal gates (G) that the skills and
-the CLI name. The skills read the section they need; you can too.
+the CLI name. The skills read the section they need; you can too. The statistics behind each rule
+(why this many cases, trials or labels, and when to change them) are in
+[statistics.md](statistics.md).
 
 ## Contents
 
@@ -191,6 +193,11 @@ Rules:
   candidate without `--variable` declares `model=<id>`, and a resume keeps it. Two runs whose manifests differ on any field other than the declared independent
   variable are not compared (G7).
 - **Every case has a `set`**: `error_finding` or `quality_estimate`. There is no default.
+- **A case may have a `cluster`**: the template it was generated from, the source trace it came
+  from, or its fixture's seed. Cases with one key tend to pass or fail together, so the report
+  counts clusters and the comparison flips signs per cluster ([statistics.md
+  §4.3](statistics.md#43-correlated-cases-clusters)). Without it, cases are assumed independent
+  and the report says so.
 - **Every case has `requirements`**: what a correct run of it must do, each citing a rule of
   `labels/standard.md` and naming the checks that decide it, or why it is unchecked. Every rule
   that applies to the case's category is cited or excused in `rules_not_applicable` (C6, C8).
@@ -216,16 +223,16 @@ gate and the first unmet one.
 | C2 | `taxonomy` | Build the coverage list from a source outside the suite: the product spec, API/tool surface, help-centre topics or job description. The owner edits it; the source document is recorded. | `taxonomy.yaml` names a source outside `cases/` and a date, and its commit precedes the first case. |
 | C3 | `categorize` | Sort traces into categories, one per trace. Give each a worth and a per-failure-kind cost matrix. Count observed share. | Every category has a definition, an example, worth, a simple flag, a cost row and a measured share. "Other" is under 10%. |
 | C4 | `decompose` | Within each category: feature → scenario → failure mode. Mark each failure mode code-checkable, judge-needed or monitor-only, and set plane-B budgets. | Every failure mode names its category, check type and cost cell; `budgets.yaml` covers every category. |
-| C5 | `allocate` | Size both case sets and print the arithmetic. Error-finding: ≥10 per category, 3 for simple ones. Quality-estimate: proportional to observed share, sized by the interval the owner needs (M14). | Both budgets printed with target intervals and the minimum detectable effect (M7); every cell filled, scheduled, or declared out of scope with a reason. |
+| C5 | `allocate` | Size both case sets and print the arithmetic. Error-finding: ≥10 per category, 3 for simple ones, with the rarest failure each target surfaces (M30). Quality-estimate: proportional to observed share, sized by the interval the owner needs (M14). | Both budgets printed with target intervals and the minimum detectable effect (M7); every cell filled, scheduled, or declared out of scope with a reason. |
 | C6 | `author` | Write the labelling standard, then cases: frozen inputs, start state, trigger, scripted follow-ups, expected end state, and requirements walked rule by rule from the standard. Prefer self-verifying pairs where state allows. Scrub before writing. | The standard exists; every case has a set, a category, failure modes, provenance, requirements covering every rule that applies to it, and no secrets. |
 | C7 | `screen` | Per case: a human read; the checks must pass on start → expected end (reference) and fail on start → start (do nothing); a third pass, do-nothing plus a success claim, catches checks that trust the agent's report (G10). With a reference answer: other correct wordings must pass, the reference answer with nothing changed must fail, and an answer with every number wrong is reported if it passes. Drop cases that fail, and record the drop. | Screens recorded per case; drop rate reported. |
 | C8 | `checks` | Implement plane-A checks: code state diffs first, graded against the goal rather than one path; binary judges only where code cannot decide; side-effect checks on every agent; a grounding check for every fact a prose answer states. A check never uses the agent's own report of success. | Every failure mode has at least one binary check; side-effect checks present; every requirement names a check that runs on its case, or why it is unchecked. |
-| C9 | `label` | Collect human labels per judge, stratified across categories: one item per case first, then other trials where the answers differ. Target 100–200; below 60 the interval is too wide to act on. | Label count and stratification printed per judge. |
-| C10 | `calibrate` | Measure each judge against its labels: TPR and TNR separately (never raw agreement), κ, confusion matrix, cost per judgement. Choose a probabilistic backend's threshold on the labels. Version the criteria. | Every judge has TPR/TNR on ≥60 labels at or above its floors, a named backend and model family, and a version. Uncalibrated judges may run but never count toward headline numbers. |
+| C9 | `label` | Collect human labels per judge, stratified across categories: one item per case first, then other trials where the answers differ. Target 100–200; below 60 the interval is too wide to act on. TPR and TNR are each measured on one kind of label, so the count that matters is per kind: ±10 points needs about 60 of each ([statistics.md §5.3](statistics.md#53-how-many-labels-and-which-ones)). | Label count and stratification printed per judge. |
+| C10 | `calibrate` | Measure each judge against its labels: TPR and TNR separately (never raw agreement), κ, confusion matrix, cost per judgement. Choose a probabilistic backend's threshold on the labels. Version the criteria. Report the floor evidence (M35) beside each rate. | Every judge has TPR/TNR on ≥60 labels at or above its floors, a named backend and model family, and a version. Uncalibrated judges may run but never count toward headline numbers. |
 | C11 | `reliability` | Run *m* fresh sessions per item on two backends from different model families; report agreement at three levels (all / majority / none) next to C10's TPR/TNR. | Self-consistency and cross-family agreement reported next to TPR/TNR, never in place of it. |
 | C12 | `baseline` | Run the suite k = 3–5 times on an unchanged, committed build. Write per-trial outcomes and plane-B counters. Compute the variance band. | Run complete and finished, manifest complete, no eval-file exposure, variance band per category, plane B recorded against `budgets.yaml`. |
-| C19 | `agreement` | Runs after C12 (numbered last so earlier numbers stay stable). A person labels whole baseline runs pass or fail with a note, seeing the request, the answer and what changed, never the checks. Every labelled run is re-graded from its raw record with the suite as it is now, so labels outlive suite versions. Report the catch rate and clean pass rate (M29), dev and holdout; give every dev disagreement a cause. | ≥60 labelled runs with ≥15 of each kind; a measurement current for the suite and the labels; dev catch and clean pass rates at or above their floors (85% by default); every dev disagreement triaged. Until then G14 fails and comparisons are provisional. |
-| C13 | `compare` | Run a candidate on the same cases with one declared independent variable. Report gains, losses and a paired test, never a net delta alone, with plane-B deltas alongside. | Paired test present; gains and losses listed; manifests differ only on the declared variable. |
+| C19 | `agreement` | Runs after C12 (numbered last so earlier numbers stay stable). A person labels whole baseline runs pass or fail with a note, seeing the request, the answer and what changed, never the checks. Every labelled run is re-graded from its raw record with the suite as it is now, so labels outlive suite versions. Report the catch rate and clean pass rate (M29), dev and holdout, with their floor evidence (M35) and the human-anchored pass rate (M33); give every dev disagreement a cause. | ≥60 labelled runs with ≥15 of each kind; a measurement current for the suite and the labels; dev catch and clean pass rates at or above their floors (85% by default); every dev disagreement triaged. Until then G14 fails and comparisons are provisional. |
+| C13 | `compare` | Run a candidate on the same cases with one declared independent variable. Report gains, losses and a paired test, never a net delta alone, with plane-B deltas alongside. Per-category p-values carry a false-discovery adjustment. | Paired test present; gains and losses listed; manifests differ only on the declared variable. |
 | C14 | `coverage` | Count cases per (taxonomy entry × failure mode), zeros included, with the source document named. | Coverage reported against an external list, or refused (G5). |
 | C15 | `redundancy` | Over ≥2 agent versions, classify each case; report the discriminating fraction and a per-case index; propose prunes and cells to extend. | Discriminating fraction published; below the threshold (default 0.3), a prune/extend proposal. |
 | C16 | `drift` | Re-run the frozen set on a schedule and on every prompt, skill, tool, model or harness change, against the baseline's band. | Guidance only; not yet automated. |
@@ -264,7 +271,13 @@ re-derives the hard-case set, and a shift in category mix re-opens C3 and C5.
 **How comparisons work (C13).** Each side's verdict on a case is its majority over k trials. Gains
 and losses are majority flips, tested with McNemar's exact test; a bootstrap CI covers the mean
 per-case delta. A change is `better` or `worse` only when it is significant and outside the
-baseline's variance band; otherwise `indistinguishable`. The declared variable is a kind
+baseline's variance band; otherwise `indistinguishable`. Reported beside the verdict, and not
+deciding it: a paired sign-flip test on every change in a case's pass rate (the test M7's
+detectable effect describes), the detectable effect implied by the comparison's own per-case
+deltas, Benjamini–Hochberg adjusted p-values per category, the flips (b pass→fail, c fail→pass,
+flip rate d) with the interval they imply, McNemar's mid-p, the inverted sign-flip interval, and,
+when cases carry a `cluster`, the same test and interval per cluster with the regime the cluster
+count allows ([statistics.md §7](statistics.md#7-comparing-versions)). The declared variable is a kind
 (`model`, `prompt`, `config`, `tools`, `harness`, ...) that maps to the manifest fields allowed to
 differ. Runs of one build split across several runs (for example category by category, to pace a
 rate-limited runtime) count as one side: their case sets, checks and judges are merged per item.
@@ -453,6 +466,14 @@ are guidance for the online regime and are not yet computed by the CLI.
 | M27 † | B | Online fingerprints | per agent: unanswered requests, time to first response, tokens and cost per turn, tool calls per turn, category mix, model id per call | drift in the part of the system that cannot be sandboxed |
 | M29 | C | Whole-run agreement | catch rate (share of runs a person fails that the suite fails) and clean pass rate (share a person passes that the suite passes), each with a Wilson interval, dev and holdout; a run with no verdict counts as wrong either way | C19, G14. Per-check validity (M8, M22) does not imply it: a suite can clear every screen and miss what a person fails runs for |
 | M28 † | A | Behavioural signals | post-output edits, acceptance, follow-up corrections, re-asks | free labels for C9 |
+| M30 | A | Detection power and zero-failure bound | per error-finding target, the rarest failure it surfaces at least once with 95% probability, 1 − 0.05^(1/n); on a category with no failure, the same bound over its cases | "10 per category" surfaces failures in ≥26% of runs; a clean result rules out no rarer one ([statistics.md §2.2](statistics.md#22-sizing-a-categorys-cases-improvement-regression-guard-and-detection)) |
+| M31 | A | Variance components | between-case and within-case variance of per-trial outcomes (one-way random effects), ICC, design effect, effective n, and the standard error after doubling cases or trials | whether the next budget buys cases or trials ([statistics.md §4.1](statistics.md#41-where-the-noise-comes-from)) |
+| M32 | C | Corrected failure-mode rate | a judge check's firing rate corrected for its measured TPR/TNR (Rogan–Gladen), with a delta-method interval over cases | how often the failure really occurs; undefined when TPR + TNR ≤ 1 |
+| M33 | C | Human-anchored pass rate | whole-run labels combined with the suite's verdict on every other final attempt of the same runs (PPI++), with the labels-only and suite-only rates beside it | what a person would say the pass rate is; assumes the labeled runs are a random sample |
+| M34 | C | Agreement robust to the base rate | per pair of labelers: Cohen's κ, Gwet's AC1, agreement on fails and on passes | κ falls below zero at 90% agreement when most runs pass; AC1 and the specific agreements do not |
+| M36 | A | Flips | per comparison: b (pass → fail), c (fail → pass), the flip rate d = (b + c)/N, the net with its interval √((d − Δ²)/N), and McNemar's mid-p | the flip rate, not the pass rate, sets a comparison's precision: N ≈ 7.85·d/Δ² ([statistics.md §7.1](statistics.md#71-the-paired-design)) |
+| M37 | A | Dependence | per set: Cochran's Q across the baseline's repeats; with cluster keys, the cluster count, sizes, regime and an over-dispersion test across clusters | whether the intervals' independence assumption holds; "cases assumed independent" when no case has a key |
+| M35 | C | Floor evidence | per rate held to a floor (judge TPR/TNR, C19 catch/clean): the Wilson lower bound, whether it is within a 10-point margin of the floor, and the n of that kind a rate at today's level would need | informational; no gate reads it ([statistics.md §5.4](statistics.md#54-floors-clearing-a-bar-versus-showing-that-you-cleared-it)) |
 
 ---
 
@@ -477,6 +498,7 @@ No comparison runs before E1. Experiments marked † are guidance only.
 | E13 † | Drift watch | the frozen set on a schedule, plus M27 on a control chart with M5's limits | the standing check for provider-side and self-inflicted changes |
 | E15 | Suite validity | whole-run human labels on baseline runs, the suite re-graded on them; iterate on dev disagreements by cause; check holdout once; label a fresh batch before a new claim | M29, a triaged list of what the suite misses and why |
 | E14 | Operational sweep | plane B only, no labels or judges: budgets vs actuals per category | M18–M21; can run in week one, from an export |
+| E16 | Cases or trials (D-study) | from a k ≥ 3 baseline, split the variance into between-case and within-case parts and project the standard error at other N and k | M31; the cheaper of more cases or more trials for the precision needed |
 
 ---
 
@@ -498,13 +520,22 @@ renamed.
                   "data_exports": [ { "source": "...", "window": "...", "rows": 0 } ] },
   "regime":  "offline",
   "taxonomy": { "name": "...", "source": "...|MISSING", "read_on": "...", "entries": [] },
-  "sets":    { "error_finding": { "n": 0, "mde_at_80_power": 0.0 },
-               "quality_estimate": { "n": 0, "weights_source": "...", "estimate": {} } },
+  "sets":    { "error_finding": { "n": 0, "mde_at_80_power": 0.0, "variance_components": {},
+                                  "dependence": { "cochran_q": {}, "overdispersion": null,
+                                                  "clusters": null, "note": "..." } },
+               "quality_estimate": { "n": 0, "weights_source": "...", "estimate": {},
+                                     "variance_components": {}, "dependence": {} } },
   "categories": [ { "id": "...", "worth": "high", "simple": false,
                     "observed_share": 0.0, "n_cases": 0,
                     "pass_rate": { "point": 0.0, "ci": [0, 0], "n": 0, "n_cases": 0, "k": 5,
                                    "set": "...", "ci_method": "..." },
                     "pass_pow_k": 0.0, "pass_pow_k_reason": null, "flaky": 0, "variance_band": [0, 0],
+                    "zero_failure_bound": null, "zero_failure_bound_basis": "cases|clusters",
+                    "clusters": null,
+                    "variance_components": { "between_case": 0.0, "within_case": 0.0, "icc": 0.0,
+                                             "design_effect": 0.0, "effective_n": 0.0,
+                                             "se_now": 0.0, "se_double_cases": 0.0,
+                                             "se_double_trials": 0.0 },
                     "operational": { "cost_per_success": 0.0, "cost_per_run": 0.0,
                                      "latency_p50": 0, "latency_p90": 0,
                                      "tokens_input": 0, "tokens_output": 0, "cache_hit_rate": 0.0,
@@ -514,6 +545,8 @@ renamed.
                     "excluded": null } ],
   "checks":  [ { "id": "...", "type": "code|judge", "failure_mode": "...",
                  "trigger_rate": 0.0, "sole_failure_rate": 0.0,
+                 "corrected_trigger_rate": { "point": 0.0, "ci": [0, 0], "observed": 0.0,
+                                             "calibrated": true, "method": "rogan_gladen_delta" },
                  "judge": { "backend": "...", "model_family": "...", "agent_model_family": "...",
                             "tpr": 0.0, "tnr": 0.0, "labels": 0, "kappa": 0.0, "threshold": null,
                             "self_consistency": 0.0, "cross_family": 0.0,
@@ -527,7 +560,14 @@ renamed.
   "comparison": { "baseline": "...", "candidate": "...", "paired": true, "refused": null,
                   "gains": [], "losses": [], "net": 0.0,
                   "test": { "name": "mcnemar_exact", "p": 0.0, "ci": [0, 0] },
-                  "mde_at_80_power": 0.0, "per_set": {},
+                  "paired_mean_test": { "name": "sign_flip_permutation", "p": 0.0, "ci": [0, 0] },
+                  "flips": { "gains": 0, "losses": 0, "n_cases": 0, "net": 0.0, "flip_rate": 0.0,
+                             "se": 0.0, "ci": [0, 0] },
+                  "mcnemar_midp": 0.0,
+                  "clusters": { "n_clusters": 0, "regime": "...", "p": 0.0, "ci": [0, 0],
+                                "jackknife": {}, "note": null },
+                  "mde_at_80_power": 0.0, "mde_from_deltas": 0.0, "per_set": {},
+                  "per_category": { "...": { "test": { "p": 0.0, "p_adjusted_bh": 0.0 } } },
                   "operational_delta": { "cost_per_success": 0.0, "latency_p90": 0, "error_rate": 0.0 },
                   "verdict": "better|worse|indistinguishable|trade", "verdict_reasons": [] },
   "validity": { "stages": { "task": null, "simulator": null, "judge": null }, "compounded": null },

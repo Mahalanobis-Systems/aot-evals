@@ -183,7 +183,9 @@ def bootstrap_ci(deltas: list[float], seed: int = 0) -> list[float] | None:
     return [means[int(0.025 * BOOTSTRAP)], means[int(0.975 * BOOTSTRAP) - 1]]
 
 
-def paired(base: dict, cand: dict) -> dict:
+def paired(base: dict, cand: dict, cluster_of: dict[str, str | None] | None = None) -> dict:
+    """`cluster_of` maps a case to its cluster key (template, source trace or seed), when cases
+    carry one; signs then flip per cluster in the informational tests (docs/statistics.md §4.3)."""
     ids = sorted(set(base) & set(cand))
     deltas, gains, losses, moved = [], [], [], []
     for c in ids:
@@ -204,7 +206,33 @@ def paired(base: dict, cand: dict) -> dict:
         "net": sum(deltas) / len(deltas) if deltas else None,
         "test": {"name": "mcnemar_exact", "p": mcnemar_exact(len(gains), len(losses)),
                  "ci": bootstrap_ci(deltas), "ci_method": "bootstrap over cases, mean per-case delta"},
+        # Informational: a paired test on every change in a case's pass rate, not only majority
+        # flips. It tests the quantity M7's detectable effect is computed for; the verdict still
+        # reads McNemar (docs/statistics.md §7).
+        "paired_mean_test": {"name": "sign_flip_permutation", "p": stats.sign_flip_test(deltas),
+                             "ci": stats.sign_flip_interval(deltas),
+                             "ci_method": "sign-flip test inverted, per case"},
+        "mde_from_deltas": stats.mde_from_deltas(deltas),
+        # b, c and d: the flips are all the evidence a paired comparison holds (docs/statistics.md §7.1)
+        "flips": stats.flip_summary(len(gains), len(losses), len(ids)),
+        "mcnemar_midp": stats.mcnemar_midp(len(gains), len(losses)),
+        "clusters": _clustered(deltas, [((cluster_of or {}).get(c)) for c in ids]),
     }
+
+
+def _clustered(deltas: list[float], keys: list[str | None]) -> dict:
+    """The same paired evidence with cases that share a cluster key moving together. Without
+    keys, says so: every test above then assumes cases are independent."""
+    summary = stats.cluster_summary(keys)
+    if not summary["keyed_cases"]:
+        return {**summary, "note": "cases assumed independent: no case has a cluster key"}
+    out = {**summary, "p": stats.sign_flip_test(deltas, clusters=keys),
+           "ci": stats.sign_flip_interval(deltas, clusters=keys),
+           "jackknife": stats.cluster_jackknife(deltas, keys)}
+    if summary["regime"] == "fixed_suite_only":
+        out["note"] = (f"{summary['n_clusters']} clusters: no test can reach 5% (smallest p "
+                       f"{summary['min_attainable_p']:.3f}); say only whether it is better on these cases")
+    return out
 
 
 def band(ctx: Context) -> list[float] | None:
@@ -277,7 +305,8 @@ def compare(ev: Evals, baseline_runs: list[str], candidate_runs: list[str]) -> d
         return out
 
     rb, rc = case_rates(base), case_rates(cand)
-    p = paired(rb, rc)
+    cluster_of = {cid: c.get("cluster") for cid, c in cand.cases.items()}
+    p = paired(rb, rc, cluster_of)
     k = min(base.k or 0, cand.k or 0)
     b_band = band(base)
     width = (b_band[1] - b_band[0]) if b_band else None
@@ -287,10 +316,17 @@ def compare(ev: Evals, baseline_runs: list[str], candidate_runs: list[str]) -> d
         variance_band={"baseline": b_band, "candidate": band(cand)},
         mde_at_80_power=mde_from(base, {c: rb[c] for c in rb if c in rc}),
         min_flips_for_significance=min_flips_for_significance(),
-        per_set={s: paired(case_rates(base, set_name=s), case_rates(cand, set_name=s)) for s in SETS},
-        per_category={c: paired(case_rates(base, category=c), case_rates(cand, category=c))
+        per_set={s: paired(case_rates(base, set_name=s), case_rates(cand, set_name=s), cluster_of) for s in SETS},
+        per_category={c: paired(case_rates(base, category=c), case_rates(cand, category=c), cluster_of)
                       for c in sorted({a.get("category") for a in base.attempts if a.get("category")})},
     )
+    # Several categories tested at once: adjust their p-values for the false discovery rate, so
+    # one "significant" category out of ten is not read as a finding by chance.
+    cats_ = list(out["per_category"])
+    adj = stats.benjamini_hochberg([out["per_category"][c]["test"]["p"] if out["per_category"][c]["n_cases"] else None
+                                    for c in cats_])
+    for c, q in zip(cats_, adj, strict=True):
+        out["per_category"][c]["test"]["p_adjusted_bh"] = q
     for s in SETS:
         out["per_set"][s]["label"] = ("quality-estimate set" if s == "quality_estimate"
                                       else "error-finding set — not a quality estimate")
@@ -384,10 +420,22 @@ def render(c: dict) -> str:
         f"  gains  ({len(c['gains'])}): {', '.join(c['gains']) or '-'}",
         f"  losses ({len(c['losses'])}): {', '.join(c['losses']) or '-'}",
         f"  moved without flipping: {len(c['moved'])}",
+        *([f"  flips: {c['flips']['losses']} pass->fail (b), {c['flips']['gains']} fail->pass (c) of "
+           f"{c['flips']['n_cases']}; flip rate d = {100 * c['flips']['flip_rate']:.1f}%; net "
+           f"{pct(c['flips']['net'])} ± {100 * 1.96 * c['flips']['se']:.1f} pts; McNemar mid-p = "
+           f"{c['mcnemar_midp']:.4f}"] if c.get("flips") else []),
+        *([f"  clusters: {c['clusters']['note']}" if c["clusters"].get("note") and "p" not in c["clusters"]
+           else f"  clusters: {c['clusters']['n_clusters']} ({c['clusters']['regime']}); sign-flip per cluster "
+                f"p = {c['clusters']['p']:.4f}" + (f"; {c['clusters']['note']}" if c['clusters'].get('note') else "")]
+          if c.get("clusters") else []),
         f"  net {pct(c['net'])}, 95% CI [{pct(ci[0]) if ci else '-'}, {pct(ci[1]) if ci else '-'}], "
-        f"McNemar exact p = {t['p']:.4f}",
+        f"McNemar exact p = {t['p']:.4f}"
+        + (f" (paired sign-flip test on every rate change: p = {c['paired_mean_test']['p']:.4f})"
+           if (c.get("paired_mean_test") or {}).get("p") is not None else ""),
         f"  baseline variance band {c['variance_band']['baseline']}; MDE at 80% power "
-        f"{mde}; "
+        f"{mde}"
+        + (f" from baseline noise, {100 * c['mde_from_deltas']:.1f} pts from these per-case deltas"
+           if c.get("mde_from_deltas") is not None else "") + "; "
         f"at least {c['min_flips_for_significance']} one-way flips needed",
     ]
     for d in c["per_set"].values():

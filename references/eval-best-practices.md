@@ -116,6 +116,11 @@ can only be monitored, not scored: when two experts can't agree pass/fail
 after seeing each other's critiques, track pairwise trends and edit distance
 instead [Hamel judge, Validators].
 
+**How these thresholds hold up.** [docs/statistics.md](../docs/statistics.md) checks each rule of
+thumb above (10 cases per category, 100–200 labels, the 60-label minimum, point-estimate floors)
+against the sampling, diagnostic-test and psychometric literature, says which ones aot-evals keeps,
+revises or supplements, and lists the changes proposed.
+
 ## Sources
 
 Fetched and checked 2026-09-30. Grouped by the section that leans on them;

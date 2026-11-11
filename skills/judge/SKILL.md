@@ -77,6 +77,15 @@ One run in five is held out by a hash of its id. Fix only what the dev runs show
 holdout once the dev rates clear the floors. If holdout is much worse, the fixes were fitted to
 dev: label a fresh batch before claiming anything.
 
+**When a rate clears its floor on too few runs**, `aot-evals agreement` prints an `evidence:` line
+with the lower end of its interval and about how many runs of that kind would make it solid. Tell
+the graders in plain words ("87% of 15 failing runs could really be as low as 62%; label about 30
+more failing runs") and don't present the category as settled. Decide how many runs to label
+before looking at the rate: labeling until it clears is how a suite gets validated by luck.
+`agreement` also prints a **human-anchored pass rate**, the labels combined with the suite's
+verdict on every other run: it is the closest thing to "what people would say" and the number to
+quote to an owner. Background: `${CLAUDE_PLUGIN_ROOT}/docs/statistics.md` §5.4 and §6.
+
 ## 4. AI judges: calibrate, update, trust
 
 A judge is a check for one failure mode, asking one binary, typed question. Until it is calibrated

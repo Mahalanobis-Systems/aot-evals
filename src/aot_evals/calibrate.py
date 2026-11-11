@@ -223,6 +223,10 @@ def measure_backend(spec: JudgeSpec, backend: str, labels: list[dict], judged: d
     lats = [judged[r["item_id"]].get("latency_ms") for r in items if judged[r["item_id"]].get("latency_ms") is not None]
     cfg = spec.backends[backend]
     r_all = rates(cm_all)
+    # M35, informational: the floors read the point estimate; this says whether the labels behind
+    # each rate are enough to trust it (docs/statistics.md §5)
+    evidence = {"tpr": stats.floor_evidence(cm_all["tp"], r_all["n_pass"], spec.min_tpr),
+                "tnr": stats.floor_evidence(cm_all["tn"], r_all["n_fail"], spec.min_tnr)}
     return {
         "backend": backend, "type": cfg.get("type"), "model": cfg.get("model"), "family": cfg.get("family"),
         "labels": len(items), "errors": errors, "probabilistic": probabilistic,
@@ -231,6 +235,7 @@ def measure_backend(spec: JudgeSpec, backend: str, labels: list[dict], judged: d
         "threshold": threshold if probabilistic else None, "method": method,
         **r_all, "confusion": cm_all,
         "holdout": {**rates(cm_hold), "confusion": cm_hold},
+        "evidence": evidence,
         "confidence_calibration": {"ece": ece, "brier": brier},
         "cost_per_judgement": sum(costs) / len(costs) if costs else None,
         "latency_ms_mean": sum(lats) / len(lats) if lats else None,
@@ -321,6 +326,12 @@ def render(record: dict) -> str:
         c, h = m["confusion"], m["holdout"]
         lines.append(f"  {'':<12} all: tp {c['tp']} fn {c['fn']} fp {c['fp']} tn {c['tn']}; "
                      f"holdout (n={h['n']}): TPR {f(h['tpr'])} TNR {f(h['tnr'])}")
+        for name, kind in (("tpr", "passing"), ("tnr", "failing")):
+            e = (m.get("evidence") or {}).get(name)
+            if e and e["meets_point"] and not e["meets_margin"]:
+                lines.append(f"  {'':<12} evidence: {name.upper()} {f(e['point'])} on {e['n']} {kind} labels clears "
+                             f"its floor, but its 95% lower bound is {f(e['lower'])}; about {e['n_needed']} {kind} "
+                             f"labels would put it within {100 * e['margin']:.0f} pts of the floor")
     rec = record.get("recommendation")
     lines.append(f"  E5: {'use ' + rec['backend'] + ' — ' + rec['why'] if rec else 'no backend clears both floors'}")
     lines.append("  (raw agreement is not reported: it hides an always-pass judge)")

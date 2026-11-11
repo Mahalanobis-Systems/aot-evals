@@ -60,6 +60,9 @@ def test_two_flips_are_listed_but_not_called_a_regression(make_repo):
     assert c["losses"] == ["book-001", "book-002"] and c["gains"] == []
     assert c["test"]["p"] == 0.5 and c["min_flips_for_significance"] == 6
     assert c["verdict"] == "indistinguishable"  # never a net delta alone, and two flips prove nothing
+    # the paired test on every rate change is reported beside McNemar, and does not decide
+    assert 0 < c["paired_mean_test"]["p"] <= 1
+    assert all("p_adjusted_bh" in v["test"] for v in c["per_category"].values())
     assert c["net"] < 0 and c["test"]["ci"] is not None
     assert c["mde_at_80_power"] is not None
     assert c["per_set"]["error_finding"]["losses"] == ["book-001", "book-002"]
@@ -75,6 +78,7 @@ def test_broad_regression_is_worse(make_repo):
     c = comparison(repo)
     assert sorted(c["losses"]) == BOOKING
     assert c["test"]["p"] < 0.05 and c["test"]["ci"][1] < 0
+    assert c["paired_mean_test"]["p"] < 0.05
     assert c["verdict"] == "worse"
     assert c["per_set"]["quality_estimate"]["losses"] == ["book-q01", "book-q02"]
 
@@ -292,3 +296,42 @@ def test_run_model_pins_the_model_for_one_run(make_repo, monkeypatch):
     assert "model" not in Evals(repo.evals).latest_run("smoke")["invoke"]
     with pytest.raises(SystemExit, match="--model"):
         repo.cli("run", "--resume", m["run_id"], "--model", "toy-model-3")
+
+
+def test_flips_are_printed_and_cases_that_share_a_template_move_together(make_repo):
+    """§4.3: tag the booking cases with two templates; the comparison then flips signs per
+    template, and the evidence for the same seven losses shrinks to what two templates hold."""
+    repo = make_repo()
+    for cid in BOOKING:
+        path = next((repo.evals / "cases").glob(f"*/{cid}.json"))
+        case = json.loads(path.read_text())
+        case["cluster"] = "tmpl-q" if "-q" in cid else "tmpl-a"
+        path.write_text(json.dumps(case, indent=2))
+    repo.commit("booking cases share two templates")
+    baseline(repo)
+    candidate(repo, break_cases=BOOKING)
+    c = comparison(repo)
+    f = c["flips"]
+    assert f["losses"] == len(BOOKING) and f["gains"] == 0 and f["flip_rate"] == len(BOOKING) / c["n_cases"]
+    assert f["ci"][0] < f["net"] < f["ci"][1] < 0
+    assert c["mcnemar_midp"] < c["test"]["p"]  # mid-p is less conservative than exact
+    cl = c["clusters"]
+    assert cl["keyed_cases"] == len(BOOKING) and cl["n_clusters"] < c["n_cases"]
+    assert cl["p"] > c["paired_mean_test"]["p"]  # two templates are less evidence than seven cases
+    repo.cli("report")
+    r = repo.report()
+    row = next(x for x in r["categories"] if x["id"] == "book-meeting" and x["pass_rate"]["set"] == "error_finding")
+    assert row["pass_rate"]["n_clusters"] == 1 and row["clusters"]["regime"] == "fixed_suite_only"
+    assert r["sets"]["error_finding"]["dependence"]["cochran_q"] is not None
+
+
+def test_cases_without_a_cluster_key_are_said_to_be_assumed_independent(make_repo):
+    repo = make_repo()
+    baseline(repo)
+    candidate(repo, break_cases=["book-001"])
+    c = comparison(repo)
+    assert "assumed independent" in c["clusters"]["note"]
+    assert c["paired_mean_test"]["ci"] is not None and c["flips"]["losses"] == 1
+    repo.cli("report")
+    r = repo.report()
+    assert "assumed independent" in r["sets"]["error_finding"]["dependence"]["note"]
