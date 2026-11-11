@@ -13,7 +13,8 @@ against the literature, and [§10](#10-proposals) lists the changes that analysi
 this release does not yet make.
 
 Statuses used below: **computed** (the CLI prints it and `report.json` carries it), **gated** (a
-gate reads it), **proposed** (described here, not implemented; see §10).
+gate reads it), **library** (a function in `aot_evals.stats` that the CLI doesn't call yet, named
+as `stats.<function>`), **proposed** (described here, not implemented; see §10).
 
 ## Contents
 
@@ -58,6 +59,70 @@ Five fields supply the methods, and they rarely cite each other:
 The method's rule that **unknown values are `null`, never `0`** is a statistical rule as well: a
 zero is a measurement, and a measurement that wasn't made must not look like one.
 
+### 1.1 What the score is for: category weights
+
+**Decision.** What single quantity is the suite trying to estimate and improve?
+
+**What aot-evals does today.** The headline is the traffic-weighted pass rate of the
+quality-estimate set (M14). Each category also has a `worth` (high, medium, low), but `worth` is
+ordinal: it orders the report and the authoring queue and enters no arithmetic.
+
+**Why that is a choice, not a default.** A traffic-weighted pass rate counts every failure as
+equally bad: a wrong number in a report and a deleted customer record each cost one failed run.
+For some agents that is close enough, and for others it is badly wrong. The estimand should say
+what a failure in each category is worth, as a **ratio** to the others:
+
+  objective = Σ share × weight × pass rate  /  Σ share × weight
+
+The share-weighted estimator stays as it is; only the weights change. Equal weights are allowed,
+but they must be stated, so the traffic-weighted score becomes the stated special case rather than
+an unexamined default (`stats.objective_weights`; requiring a numeric weight at C3 is proposal
+P14). An unstated weight is unknown, not 1.
+
+**The blind-spot check.** A weighted score can still miss a category. A drop of δ in a category
+with objective weight w moves the score by w·δ. If that is below the comparison's detectable
+effect, the score cannot see the drop. A category with 2% of traffic that drops 10 points moves a
+traffic-weighted score by 0.2 points, and a 100-case paired comparison detects about 11. Weighting
+helps less than it seems: even at 60 times the weight of the rest, that category's 10-point drop
+moves the score only 5.5 points. So a category that matters and is blind gets a **guardrail** of its
+own: a non-inferiority test on that category alone, sized in §2.2 (`stats.blind_spot`; P14).
+
+### 1.2 Are failures equally costly?
+
+Much of the default arithmetic assumes they are: flat case targets per category, symmetric floors
+for TPR/TNR and for catch/clean pass rates, Youden's J for thresholds, unweighted pass rates in
+comparisons. Before choosing between these flat rules and the cost-aware ones (category weights,
+P14; cost-weighted thresholds, P4; weighted allocation, P5), check whether costs really differ.
+The check has two sources, because what the owner expects and what the agent does can differ, and
+the expensive failures are often ones nobody predicted.
+
+**Ask the owner.**
+
+- In Assess, one question: *are some of this agent's mistakes much worse than others? Which ones?*
+  Prompts that help: can it change or delete records, send messages, or move money? Would anyone
+  notice a mistake before it did damage?
+- At C3 and C4, when the owner confirms categories and failure modes: do the values in the cost row
+  really differ? Today the row is checked for presence only. Record whether the owner judged costs
+  even or uneven, and why.
+
+**Look at the actual failures.** Tag each baseline failure (C12) and each C19 disagreement with
+what it cost: did it write, delete or send; can it be undone; would a person have noticed before
+acting on it? `stats.failure_severity` turns those answers into low, medium or high: an
+irreversible write is high, a reversible side effect or an unnoticeable wrong answer is medium, a
+wrong answer a person would catch is low. `stats.cost_flags` then flags a category whose failures
+span severities with a high one among them, or whose worst failure is worse than its declared cost.
+The canonical case is **an agent asked for a report that changes CRM state**: a read-only request
+that writes costs far more than a wrong number, in a category the owner would rate low-cost. Feed
+each flag back to the cost row (C3), to the failure modes (C4: a side-effect check on read-only
+requests) and to allocation (C5).
+
+**What it decides.** If costs come out roughly even, the flat rules are fine, and the report should
+say so. If they are uneven, the report says where, and allocation, floors and comparisons should
+weight by cost, or at least flag where unweighted numbers mislead: a comparison that is "better" on
+pass rate while it adds a costly failure, or a judge that clears symmetric floors while missing the
+expensive failures. The check runs in Assess, at C3/C4, after every baseline and with C19 triage
+(proposal P13, ahead of P4, P5 and P14, which all depend on its answer).
+
 ---
 
 ## 2. Designing the test set
@@ -79,18 +144,46 @@ probability** is recorded at sampling time, so each case can be reweighted by it
 (Horvitz & Thompson 1952; for models, active testing, Kossen et al. 2021). aot-evals does not record
 inclusion probabilities today, so the sets stay separate (proposal P5).
 
-### 2.2 Sizing the error-finding set: what can it find?
+**The quality-estimate set must be drawn, not picked.** Proportional counts per category are not
+enough: if the author chooses which traces fill each quota, the set is a quota sample, and a quota
+sample carries the author's selection bias with no way to measure it. Each category's cases should
+be a **seeded simple random draw** from that category's traces, with the seed and each case's
+inclusion probability recorded, and every skip after the draw (a trace with PII that can't be
+scrubbed, a duplicate) recorded with its reason and replaced from a second seeded draw, never by
+hand (`stats.stratified_draw`; P5).
 
-**Decision.** How many cases per category?
+### 2.2 Sizing a category's cases: improvement, regression guard and detection
 
-**What aot-evals does.** `allocate` targets 10 per category, 3 for simple ones, and now prints
-the rarest failure each target will surface (**computed**, M30).
+**Decision.** How many cases does each category get?
 
-**Why.** An error-finding set is sized by **detection probability**, not by an interval. If a
-failure affects a fraction *p* of a category's runs and cases are drawn from that category, the
-chance that *n* cases show it at least once is 1 − (1 − *p*)ⁿ. Fix that chance at 95% and solve:
+**What aot-evals does today.** `allocate` targets 10 per category, 3 for simple ones, and now prints
+the rarest failure each target will surface (**computed**, M30). The rule reads neither the
+category's weight nor its measured accuracy, which are the two inputs that should set its count.
+Use it to start, before any baseline exists; after the first baseline, size each category as below
+(proposal P14).
 
-| Cases in the category | Surfaces, with 95% probability, a failure that affects at least |
+A category's cases do one of two jobs, and the jobs need different arithmetic, so one flat number
+can't serve both.
+
+**Improvement: seeing whether a change helped.** Size it with the paired comparison the method
+uses. The cases needed depend on the smallest change the owner wants to see and on the share of
+cases that flip between versions (§7.1), not directly on the category's accuracy:
+N ≈ 7.85·d/Δ² for a net change Δ at flip rate d (`stats.cases_for_flip_rate`). Realistic gains
+scale with the room left to improve, so "harder needs more cases" doesn't hold. Halving the failure
+rate, unpaired (pairing lowers every row), takes per version (`stats.cases_per_arm`):
+
+| Failure rate | Cases per version to see it halved |
+|---:|---:|
+| 50% | 55 |
+| 30% | 118 |
+| 10% | 432 |
+| 1% | 4,671 |
+
+**Detection: seeing failures you can't afford to miss.** If a failure affects a fraction *p* of a
+category's runs, *n* cases show it at least once with probability 1 − (1 − *p*)ⁿ. Fix that chance at
+95% and solve:
+
+| Cases | Surfaces, with 95% probability, a failure that affects at least |
 |---:|---:|
 | 3 | 63% of runs |
 | 10 | 26% |
@@ -100,26 +193,59 @@ chance that *n* cases show it at least once is 1 − (1 − *p*)ⁿ. Fix that ch
 | 100 | 3% |
 | 299 | 1% |
 
+Detection applies **per failure mode**, and this is where hard categories really do need more
+cases: a category at 70% is usually several failure modes at a few percent each, not one at 30%,
+and each needs enough cases to be seen.
+
 The same number, read backwards, is the **zero-failure bound**: if all *n* cases pass, the failure
 rate could still be as high as 1 − 0.05^(1/*n*), about 3/*n* (the "rule of three", Hanley &
 Lippman-Hand 1983). The report prints it on every category with no failure
-(`zero_failure_bound`).
+(`zero_failure_bound`), over clusters rather than cases when cases carry a cluster key (§4.3).
+A clean run on 10 cases cannot rule out a failure that hits one run in five.
 
-So "10 per category" finds frequent failures quickly and says nothing about rare ones. A clean run
-on 10 cases cannot rule out a failure that hits one run in five. That is fine for a first pass, and
-it is the reason the error-finding set should grow in the categories where a rare failure is
-costly, not uniformly.
+**Two states per category, with costly failure modes on top.** Recomputed after every baseline,
+weight and measured accuracy put each category in one of two states. Separately, a category in
+either state can have rare, costly failure modes (§1.2), each adding a detection need.
 
-**When to deviate.**
+| | Its cases do | Sized by |
+|---|---|---|
+| **Room to improve** | improvement | the smallest change worth seeing there, and its flip rate |
+| **Solved**, the remaining failures explained | regression guard | the drop it must catch, set by the weight |
+| **On top, in either state:** a rare, costly failure mode | detection, per mode | that mode's rate; or a check on every production run when offline cases can't reach it |
+| **On top, if the blind-spot check fired** (§1.1) | a guardrail | the drop the category alone must catch |
 
-- **A rare, costly failure** (a wrong refund, a leaked record): don't wait for random cases to find
-  it. Write cases that target it directly: contrast sets, metamorphic relations, the situations
-  grid (§3). Targeted cases are elicitation, so they can't estimate its rate. To estimate the rate,
-  sample with recorded weights (importance sampling, Zhao et al. 2016; Wu & Hilton 2024).
-- **A simple category** (one deterministic path): 3 cases surface only failures in more than 63% of
-  runs. That is the intent. If a simple category ever fails, it isn't simple.
-- `stats.cases_to_surface(rate)` gives the count for any rate: 59 for 5%, 299 for 1%, 2,995 for
-  0.1%.
+A category's target is the largest of these needs, since the same cases serve every job, subject
+to a floor (`stats.allocation_target`). Weight enters through the inputs: a heavier category gets a
+smaller worthwhile change, a tighter tolerated drop and more of its failure modes counted as costly.
+Scaled to the budget by weight, this is the error-finding counterpart of the Neyman allocation in
+§2.3.
+
+**Solved has to be shown.** A category at 99% has one question: what is the 1%?
+
+| The 1% is | How you tell | Then |
+|---|---|---|
+| Noise | the case passes on a re-run (within-case variance, M31) | solved |
+| A gold or check error | a person passes the run (C19 triage: `wrong-expectation`, `check-bug`) | fix it, then solved |
+| A real rare failure | it fails consistently on some input | low weight: solved and accepted; high weight: solved, with that failure as a costly mode with its own detection need |
+
+**A solved category needs a regression guard.** Near 100%, with noise ruled out, one new
+consistent failure is signal, so the guard is sized by detection: the smallest *n* with
+1 − (1 − δ)ⁿ ≥ 95% for a tolerated drop δ set by the weight.
+
+| Tolerated drop | Cases |
+|---:|---:|
+| 10 points | 29 |
+| 5 points | 59 |
+| 2 points | 149 |
+| 1 point | 299: use a check on every production run or a canary instead |
+
+This replaces the `simple` flag's "3 cases" with something checkable: a category gets few cases
+because it is shown solved and its weight tolerates a loose guard, not because it looks easy.
+
+**For a rare, costly failure,** don't wait for random cases to find it. Write cases that target it
+directly: contrast sets, metamorphic relations, the situations grid (§3). Targeted cases are
+elicitation, so they can't estimate its rate. To estimate the rate, sample with recorded weights
+(importance sampling, Zhao et al. 2016; Wu & Hilton 2024).
 
 ### 2.3 Sizing the quality-estimate set: how precise must the number be?
 
@@ -132,9 +258,11 @@ category's share of traffic, and the estimate is the share-weighted pass rate (M
 **Why.** This is stratified sampling with **proportional allocation** (Cochran, ch. 5). It is
 unbiased and easy to explain. Two refinements matter at small sizes:
 
-- **Neyman allocation** puts more cases where the share times the standard deviation is largest. A
-  category at 99% pass needs far fewer cases than one at 70% to reach the same precision. With
-  unequal variances it gives the narrowest interval for a fixed budget (proposal P5).
+- **Neyman allocation** puts more cases where the objective weight times the standard deviation is
+  largest, with objective weight = share × category weight (§1.1), so it carries the weight as well
+  as the variance. A category at 99% pass needs far fewer cases than one at 70% to reach the same
+  precision. With unequal variances it gives the narrowest interval on the weighted objective for
+  a fixed budget (`stats.neyman_allocation`; proposal P5).
 - **Small strata.** Proportional allocation gives a category with 1% of traffic about 4 of 385
   cases, too few to say anything about that category itself. Domain estimation sets a minimum per
   stratum and reweights (proposal P5). Until then, the per-category rows of the quality-estimate set
@@ -256,9 +384,13 @@ In typical agent suites the between-case part dominates, so **more cases beat mo
 is large enough to see flakiness at all (Miller 2024 reaches the same conclusion). k = 3 is the
 smallest k that gives a majority verdict and an estimate of within-case noise.
 
-**Caveat.** Cluster-robust intervals are anti-conservative with few clusters (Cameron & Miller
-2015). Below about 30 cases, read the interval as a minimum width. The report falls back to a
-Wilson interval over cases when the cluster estimate collapses.
+**Caveat.** Cluster-robust intervals are anti-conservative with few clusters: with 5 to 30 of
+them, tests built on them over-reject (Cameron, Gelbach & Miller 2008; MacKinnon, Nielsen & Webb
+2023). The pass-rate interval therefore uses a t(G − 1) critical value rather than z, and builds
+the interval on the logit scale when a symmetric one would cross 0% or 100% (`ci_method`
+`cluster_robust_t` or `cluster_robust_t_logit`). Below about 30 cases, still read it as a minimum
+width. The report falls back to a Wilson interval over cases (or clusters) when the cluster
+estimate collapses.
 
 ### 4.2 Flakiness and pass^k
 
@@ -270,6 +402,63 @@ Wilson interval over cases when the cluster estimate collapses.
   When a case has more trials than k, the unbiased estimator is C(c, k)/C(n, k) for c passes in n
   trials (the pass@k estimator of Chen et al. 2021, applied to all-pass). The report uses the
   plug-in on exactly k trials today (proposal P7).
+
+### 4.3 Correlated cases: clusters
+
+**Decision.** Are the cases as independent as the intervals assume?
+
+**What aot-evals does.** Trials are clustered within a case (§4.1). Everywhere else (McNemar, the
+sign-flip test, the bootstrap, Wilson intervals, the zero-failure bound, effective n) cases were
+treated as independent. A case may now carry an optional **`cluster`** key: the template it was
+generated from, the source trace it came from, or the seed of its fixture. When cases have one,
+the report counts clusters, the comparison flips signs per cluster, and both say which regime the
+cluster count allows (**computed**, informational). Without keys, both say "cases assumed
+independent".
+
+**Why.** Cases flip together when they share a template or a source trace, a check, or a judge,
+and when an outage or a model change hits one run. Clustered outcomes inflate variance by the
+design effect 1 + (m − 1)ρ, for clusters of size m with within-cluster correlation ρ (Kish 1965).
+Clustered standard errors run 1.1–3 times the naive ones on real benchmarks (Miller 2024), and on
+small clustered evals only a clustered model reached nominal coverage (Bowyer et al. 2025). The
+size of the effect: 24 gains and 6 losses give p ≈ 0.002 if every case is independent. If the 24
+gains are 4 templates of 6 copies that flip together, signs flipped per template give p ≈ 0.13,
+and counted as 4 gains against 6 losses, McNemar gives p ≈ 0.75.
+
+**What G allows.** A sign-flip test on G clusters can't return a two-sided p below 2/2^G
+(`stats.min_attainable_p`), so:
+
+| Clusters (G) | What can be said | How |
+|---|---|---|
+| ≤ 5 | only "better on these cases": no test can reach 5%, however many cases each cluster holds | report the fixed-suite estimate and say why |
+| 6–9 | a test, with care | sign-flip with Webb's six-point weights (Webb 2023), which have more distinct patterns than ±1 |
+| ≥ 10 | a test | sign-flip per cluster (Rademacher signs), cross-checked with a cluster jackknife (CV3) standard error and t(G − 1) |
+
+A cluster holding more than 30% of the cases is flagged: one template then decides the result.
+`stats.cluster_summary` reports G, the sizes and the regime.
+
+**Bounds on effective n.** The zero-failure bound and Wilson intervals should count effective
+cases, n / (1 + (m − 1)ρ) (`stats.effective_n`), or clusters when failures are all-or-nothing per
+seed. 100 clean cases from 10 seeds bound the failure rate at about 26%, not 3%. A clean category
+can't show how correlated its clusters are, so its zero-failure bound counts clusters.
+
+**Dependence checks** (each set's `dependence` block, informational):
+
+- **Shocks across a run:** Cochran's Q (Cochran 1950), with cases as blocks and repeats as
+  treatments, shuffling each case's outcomes across its repeats (`stats.cochran_q`). A small p means
+  one repeat failed more than the others: an outage, a rate limit, a provider change mid-run.
+- **Template clustering:** a dispersion test of case pass rates across clusters, shuffling cases
+  across clusters at fixed sizes, with the cluster-level ICC (`stats.overdispersion_test`; Tarone
+  1979 for the parametric version).
+- **Drift while the comparison runs:** interleave baseline and candidate trials in the same time
+  window, in random order, so an outage hits both sides. An A/A rerun of the baseline shows whether
+  shocks exist at all (proposal P15).
+
+**Shared judges are a cluster too.** One judge or rubric used across many cases, or a judge from
+the same model family as the candidate, makes errors move together. On one leaderboard, models
+agreed on about 60% of the items where both were wrong, more so when they shared a provider or an
+architecture, and larger, more accurate models had more correlated errors (Kim et al. 2025). Model
+mistakes grow more similar as capability rises, which weakens one model overseeing another (Goel
+et al. 2025). See §5.1 for what that does to a suite of checks.
 
 ---
 
@@ -300,6 +489,13 @@ probability ∏ TPR_i. Five judge checks at TPR 0.9 pass a correct run only 59% 
 checks are near TPR 1, so this cost falls almost entirely on judges. It is why the suite as a whole
 is held to people (C19's **clean pass rate**), and why a judge should guard a failure mode that
 code can't decide, not double one that code already checks.
+
+The product ∏ TPR_i assumes the judges err independently. Judges that share a model family, a
+rubric or a prompt template don't (§4.3), so their errors overlap. That makes the product a poor
+predictor in both directions: correlated false fails land on the same runs, and correlated misses
+let the same bad runs through every check. Measure the suite's false-fail rate directly from the
+clean pass rate rather than multiplying, and treat judges from one family as one cluster when
+reading their agreement (C11).
 
 ### 5.2 A judge is a diagnostic test
 
@@ -520,6 +716,23 @@ detects about 7 points when the change shifts every case alike, and about 15 poi
 cases unevenly (a 15% discordance rate). Listing gains and losses separately follows from the same
 logic. A net of zero can hide ten fixes and ten new breaks, and both lists need reading.
 
+**The flips are all the evidence.** When A and B run on the same N cases, only the flips carry
+information: b cases went from pass to fail, c from fail to pass. Cases that both pass or both fail
+add nothing. The net change is Δ = (c − b)/N, the **flip rate** is d = (b + c)/N, and the standard
+error of Δ is √((d − Δ²)/N). The same +5 points at N = 200 can be a clear win or noise:
+
+| What the change did | d | 95% interval on Δ |
+|---|---:|---|
+| 10 gains, 0 losses | 5% | +5 ± 3.0 points |
+| 30 gains, 20 losses | 25% | +5 ± 6.9 points |
+
+Every comparison now prints b, c and d next to Δ (`flips`, **computed**). The cases needed to
+detect Δ at 80% power are about **N ≈ 7.85·d/Δ²** (`stats.cases_for_flip_rate`): set by the flip
+rate, not the pass rate. Flaky cases inflate d with no real change, so an A/A rerun of the
+baseline gives the noise floor of d, and more trials per case shrink only that noise, not real
+churn. Store d from past comparisons and size the next one from it (proposal P3); the MDE printed
+before a run (M7) assumes the change moves every case alike, so it is optimistic.
+
 ### 7.2 Which test, and what it can detect
 
 **What aot-evals does.** Each side's verdict on a case is its majority over k trials. Flips are
@@ -537,6 +750,19 @@ of that mean (Fisher 1935; Good 2005). Reporting it beside McNemar shows when th
 `mde_from_deltas` uses the spread of the actual per-case deltas, which includes how unevenly the
 change moved cases, so after the fact it is the honest detectable effect. Proposal P3 would make
 the verdict read the paired test.
+
+**Exact McNemar is conservative.** The exact conditional test's real size is often near 2% at a
+nominal 5%, and a comparison of methods for paired binary data recommends against it in every
+situation studied, in favor of the mid-p version (Fagerland, Lydersen & Laake 2013). Where a
+McNemar is shown, the comparison now also prints the **mid-p** value (`mcnemar_midp`, **computed**);
+P3 retires the exact test from the verdict.
+
+**The interval.** The percentile bootstrap over cases under-covers on small suites near a ceiling,
+where the deltas are few, discrete and skewed. Inverting the sign-flip test gives an interval that
+assumes only that each case's delta is symmetric about the true mean: every μ at which flipping the
+signs of (delta − μ) is not rejected (`paired_mean_test.ci`, **computed**; `stats.sign_flip_interval`).
+At N ≥ 100 the two agree; below that, read the sign-flip interval. P3 makes it the verdict's
+interval, flipped per cluster when cases carry one (§4.3).
 
 **The variance band.** The band is the min–max of per-repeat pass rates over the baseline's k
 repeats. Its width depends on k (more repeats, wider range), and it double-counts noise the paired
@@ -629,14 +855,19 @@ formal literature.
 
 | Rule | Where | Origin | Formal basis | Verdict | Status |
 |---|---|---|---|---|---|
+| Every failure costs the same (implicit in flat targets, symmetric floors, Youden's J, unweighted pass rates) | C3–C5, C10, C13, C19 | unstated | decision theory; the cost check of §1.2 is the test of it | **test it**: keep the flat rules only where costs come out even, and say so | P13; `stats.cost_flags` |
+| Traffic-weighted pass rate as the objective; `worth` ordinal | M14, C3 | practice | weighted estimand; blind-spot check against the MDE | **revise**: a numeric weight per category, equal weights stated | P14; `stats.objective_weights`, `stats.blind_spot` |
 | Two disjoint case sets | §2.3, G6 | practice | elicitation vs estimation; Horvitz–Thompson | **keep** | gated |
-| ≥10 cases per category, 3 for simple | C5 | practice | detection probability: 10 surfaces ≥26% failures | **keep, with the bound printed**; grow where rare failures are costly | computed (M30) |
-| Quality set n = z²p(1−p)/h², proportional | C5, M14 | survey sampling | proportional allocation (Cochran) | **keep**; add Neyman allocation, minimum per stratum | P5 |
+| ≥10 cases per category, 3 for simple | C5 | practice | detection probability weighted by importance per failure mode; improvement sized by flip rate; regression guards sized by a tolerated drop | **revise**: the rule ignores both inputs that should set a count, the category's weight and its measured accuracy. Keep it only as the starting point before a baseline | P14; bound computed (M30); `stats.allocation_target` |
+| Quality set n = z²p(1−p)/h², proportional | C5, M14 | survey sampling | proportional allocation (Cochran) | **keep**; add Neyman allocation carrying the weight as well as the variance, and a minimum per stratum | P5 |
+| Quality-estimate cases chosen by the author within each quota | C6 | practice | quota vs stratified random sampling | **revise**: a seeded random draw per category, recorded, skips with reasons | P5; `stats.stratified_draw` |
 | Normal interval on the weighted estimate | M14 | — | too narrow under a few hundred items (Bowyer et al. 2025) | **revise** | P5 |
 | Coverage against an external list | G5 | psychometrics, testing | blueprint; content validity; category-partition | **keep**; add t-way coverage | P10 |
 | Reference passes, do-nothing fails | C7 | ABC checklist | mutation analysis | **keep**; extend to a mutation score | P9 |
 | k = 3–5 | C12 | practice | G-study: depends on ICC | **keep as default**; choose from `variance_components` | computed (M31) |
-| Cluster-robust pass-rate CI | M2 | Miller 2024 | clustered SEs; small-cluster bias | **keep**; read as a minimum below ~30 cases | — |
+| Cluster-robust pass-rate CI with z | M2 | Miller 2024 | small-cluster bias (Cameron, Gelbach & Miller 2008) | **revised**: t(G − 1), logit scale near the bounds | done |
+| Cases independent of each other | M2, M30, C13 | unstated | design effect; cluster randomization inference; wild cluster bootstrap | **revise**: an optional cluster key per case; signs flip per cluster; bounds on effective n | P15; cluster tests and dependence checks computed |
+| ∏ TPR for a suite of judges | §5.1 | — | assumes independent errors; same-family judges correlate (Kim et al. 2025) | **qualify**: measure the false-fail rate via clean pass rate | — |
 | pass^k from k trials | M3 | τ-bench | unbiased C(c,k)/C(n,k) | **refine** | P7 |
 | Binary judges, one failure mode each | §5 | practice | diagnostic tests; rater facet variance | **keep** | — |
 | TPR/TNR, never raw agreement | M8 | practice; medicine | sensitivity/specificity | **keep** | gated |
@@ -651,7 +882,9 @@ formal literature.
 | One overlap in four | §4.2 | practice | precision of agreement | **keep**; ~60 shared runs for ±10 pts | — |
 | ≥60 whole runs, ≥15 of each | C19 | practice | Wilson width per kind (±17–19 pts at 15) | **revise** with P1 | evidence computed |
 | Dev iterated, holdout checked once | E15 | ML practice | adaptive data analysis | **keep**; meter optimizer loops | P11 |
-| McNemar on majority flips + band | C13 | practice | paired permutation test matches M7 | **revise**: the verdict should read the paired test | P3; test computed |
+| McNemar on majority flips + band | C13 | practice | paired permutation test matches M7; exact McNemar is conservative (Fagerland et al. 2013) | **revise**: the verdict should read the paired test; mid-p where McNemar is shown | P3; test and mid-p computed |
+| Percentile bootstrap interval on the mean delta | C13 | practice | under-covers on small suites near a ceiling | **revise**: the inverted sign-flip interval | P3; interval computed |
+| A net delta with gains and losses listed | M6 | practice | flip rate d sets the precision: N ≈ 7.85·d/Δ² | **supplement** with b, c, d and the interval from d | computed |
 | MDE from within-case variance | M7 | Miller 2024 | omits case-by-change interaction | **supplement** with the MDE from observed deltas | computed |
 | No multiplicity control on categories | C13 | — | Benjamini–Hochberg | **add** | computed |
 | Discriminating fraction ≥ 0.3 | C15 | practice | IRT discrimination; misclassification at small k | **keep as a heuristic**; never prune without the MDE check | — |
@@ -662,8 +895,8 @@ formal literature.
 
 ## 10. Proposals
 
-These follow from §9 and are not in this release. They are ordered by how much they change what
-the method can claim, against what they cost a team.
+These follow from §9 and are not in this release. Ids are stable; the build order is below the
+table.
 
 | id | Change | What it fixes | Cost to a team |
 |---|---|---|---|
@@ -679,10 +912,20 @@ the method can claim, against what they cost a team.
 | **P10** | Declare the situations grid as factors and report t-way coverage beside the empty-cell count | coverage with a checkable denominator | writing down the factors |
 | **P11** | A holdout budget for optimization loops: a split the optimizer never sees, and a count of looks | adaptive overfitting | a held-out split |
 | **P12** | A judge anchor set re-judged on every judge version, with an equating check | judge versions on different scales | judge calls on the anchor set |
+| **P13** | The uneven-cost check (§1.2): the owner's answer recorded in Assess and at C3/C4; every baseline failure and C19 disagreement tagged with what it did (wrote, deleted, sent; reversible; noticed); categories flagged by `stats.cost_flags`; the report says whether costs came out even, and where not | flat rules applied where costs differ; costly failures in categories rated low-cost | one question in Assess; a cost tag per triaged failure |
+| **P14** | A numeric weight per category, required at C3 (equal weights allowed, stated); the weighted objective as the headline; per-category targets from state (improve or solved), costly failure modes and the blind-spot guardrail (§2.2), re-run after every baseline; a non-inferiority guardrail per blind category | the score silently weighting every failure alike; allocation blind to weight and accuracy; categories the score can't see | changes allocation and the headline, so which suites pass C5 and what they report. Existing suites default to equal weights, recorded as an explicit choice, so nothing moves until an owner sets real ones; the blind-spot check then shows which categories need one |
+| **P15** | An optional `cluster` key per case at C6 (template, source trace, seed); the verdict's test and interval flip signs per cluster, with Webb weights at 6 ≤ G < 10 and "better on these cases" only at G ≤ 5; a cluster jackknife cross-check; bounds on effective n; baseline and candidate trials interleaved, and an A/A mode | evidence overstated when cases share a template, a source or a judge | one optional field on a case; without it everything behaves as today and the report says "cases assumed independent". Some verdicts move from better or worse to indistinguishable |
 
-P1 and P2 change which suites pass their gates, so they belong in a minor release with migration
-notes: `floors.yaml` and the judge's `min_tpr`/`min_tnr` stay the levers, and the margin would be a
-new one.
+**Build order.** P1 and P2 (floors and label counts), then P3 with P15 in the same release
+(the verdict's test, its interval and clusters change together), then P13 and P14 (costs and
+weights), and only then P4 and P5, because cost-weighted thresholds and weighted allocation both
+need P13's answer and P14's numeric weights; built in the old order they would rest on ordinal
+labels. P6 to P12 follow in the order listed.
+
+P1, P2, P3, P14 and P15 change which suites pass their gates or what a comparison concludes, so
+they belong in a minor release with migration notes: `floors.yaml` and the judge's
+`min_tpr`/`min_tnr` stay the levers, the margin is a new one, and equal weights and missing cluster
+keys keep today's behavior until an owner sets them.
 
 ---
 
@@ -705,14 +948,26 @@ everything all right?", *JAMA*. Kossen et al. (2021), Active Testing,
 **Error bars and comparisons.** Miller, E. (2024), "Adding error bars to evals",
 [2411.00640](https://arxiv.org/abs/2411.00640). Bowyer et al. (2025), small-sample intervals for
 evals, [2503.01747](https://arxiv.org/abs/2503.01747). Madaan et al. (2024), variance in evals,
-[2406.10229](https://arxiv.org/abs/2406.10229). Cameron, A. & Miller, D. (2015), "A practitioner's
-guide to cluster-robust inference", *J. Human Resources*. McNemar, Q. (1947), *Psychometrika*.
+[2406.10229](https://arxiv.org/abs/2406.10229). McNemar, Q. (1947), *Psychometrika*.
 Fisher, R. (1935), *The Design of Experiments*. Good, P. (2005), *Permutation, Parametric and
 Bootstrap Tests of Hypotheses*. Benjamini, Y. & Hochberg, Y. (1995), "Controlling the false
 discovery rate", *JRSS B*. Howard et al. (2021), "Time-uniform, nonparametric, nonasymptotic
 confidence sequences", *Annals of Statistics*. Montgomery, D. (2019), *Introduction to Statistical
 Quality Control*. Yao et al. (2024), τ-bench and pass^k, [2406.12045](https://arxiv.org/abs/2406.12045).
 Chen et al. (2021), unbiased pass@k, [2107.03374](https://arxiv.org/abs/2107.03374).
+
+**Paired and clustered inference.** Fagerland, M., Lydersen, S. & Laake, P. (2013), "The McNemar
+test for binary matched-pairs data: mid-p and asymptotic are better than exact conditional", *BMC
+Medical Research Methodology*, https://pmc.ncbi.nlm.nih.gov/articles/PMC3716987/. Cameron, A.,
+Gelbach, J. & Miller, D. (2008), "Bootstrap-based improvements for inference with clustered errors",
+*Rev. Economics and Statistics*, https://www.nber.org/papers/t0344. MacKinnon, J., Nielsen, M. &
+Webb, M. (2023), "Cluster-robust inference: a guide to empirical practice", *J. Econometrics*,
+[2205.03285](https://arxiv.org/abs/2205.03285). Webb, M. (2023), "Reworking wild bootstrap-based
+inference for clustered errors", *Canadian J. Economics*. Cochran, W. (1950), "The comparison of
+percentages in matched samples", *Biometrika*. Tarone, R. (1979), "Testing the goodness of fit of
+the binomial distribution", *Biometrika*. Kim, E. et al. (2025), "Correlated errors in large language
+models", [2506.07962](https://arxiv.org/abs/2506.07962). Goel, S. et al. (2025), "Great models think
+alike and this undermines AI oversight", [2502.04313](https://arxiv.org/abs/2502.04313).
 
 **Diagnostic tests and judges.** Rogan, W. & Gladen, B. (1978), "Estimating prevalence from the
 results of a screening test", *Am. J. Epidemiology*. Begg, C. & Greenes, R. (1983), "Assessment of

@@ -38,7 +38,7 @@ def test_every_command_gate_measurement_experiment_and_panel_is_parsed(built):
     _, doc = built
     assert [c["id"] for c in doc["commands"]] == [f"C{i}" for i in [*range(13), 19, *range(13, 19)]]
     assert [g["id"] for g in doc["gates"]] == [f"G{i}" for i in range(1, 15)]
-    assert {m["id"] for m in doc["measurements"]} == {f"M{i}" for i in range(1, 36)}
+    assert {m["id"] for m in doc["measurements"]} == {f"M{i}" for i in range(1, 38)}
     assert {e["id"] for e in doc["experiments"]} == {f"E{i}" for i in range(1, 17)}
     assert [p["id"] for p in doc["panels"]] == [f"P{i}" for i in range(14)]
     assert [p["id"] for p in doc["planes"]] == ["A", "B", "C"]

@@ -127,3 +127,110 @@ def test_sign_flip_test_and_false_discovery_adjustment():
     adj = stats.benjamini_hochberg([0.01, 0.04, None, 0.03, 0.5])
     assert adj[2] is None and adj[0] == 0.04 and adj[4] == 0.5
     assert all(a >= p for a, p in zip(adj, [0.01, 0.04, 0, 0.03, 0.5], strict=True) if a is not None)
+
+
+# ---- review: uneven costs, category weights, flip rate and clusters ------------------------
+
+def test_t_quantiles_match_the_tables():
+    assert abs(stats.t_quantile(0.975, 9) - 2.262) < 1e-3
+    assert abs(stats.t_quantile(0.975, 1) - 12.706) < 1e-3
+    assert abs(stats.t_quantile(0.975, 10_000) - 1.960) < 1e-3
+    assert abs(stats.t_cdf(0.0, 5) - 0.5) < 1e-12
+
+
+def test_flip_rate_sets_a_comparisons_precision():
+    clean, churn = stats.flip_summary(10, 0, 200), stats.flip_summary(30, 20, 200)
+    assert clean["net"] == churn["net"] == 0.05
+    assert abs(1.96 * clean["se"] - 0.030) < 1e-3 and abs(1.96 * churn["se"] - 0.069) < 1e-3
+    assert stats.cases_for_flip_rate(0.25, 0.05) == 785  # about 7.85 d / effect^2
+    assert stats.mcnemar_midp(5, 5) == 1.0 and stats.mcnemar_midp(6, 0) < stats.mcnemar_midp(6, 0) * 2
+    assert stats.mcnemar_midp(8, 1) < 0.05  # exact McNemar: 0.039; mid-p is smaller
+
+
+def test_signs_flip_per_cluster_and_few_clusters_cannot_reach_five_percent():
+    clusters = [f"t{i // 6}" for i in range(24)] + [f"u{i}" for i in range(6)]
+    deltas = [1.0] * 24 + [-1.0] * 6
+    assert stats.sign_flip_test(deltas) < 0.01
+    assert stats.sign_flip_test(deltas, clusters=clusters) > 0.05
+    assert stats.min_attainable_p(5) == 0.0625
+    five = [f"t{i % 5}" for i in range(50)]
+    assert stats.sign_flip_interval([0.2] * 50, clusters=five) is None
+    s = stats.cluster_summary(five)
+    assert s["regime"] == "fixed_suite_only" and s["n_clusters"] == 5
+    assert stats.cluster_summary(["a"] * 4 + [None] * 6)["dominant"] == ["a"]
+    assert stats.cluster_summary([None] * 3)["regime"] == "cases_assumed_independent"
+
+
+def test_sign_flip_interval_covers_the_mean_and_widens_with_clusters():
+    import random
+    rng = random.Random(1)
+    deltas = [rng.choice([0.0, 0.0, 1 / 3, -1 / 3, 2 / 3]) for _ in range(40)]
+    lo, hi = stats.sign_flip_interval(deltas)
+    assert lo < sum(deltas) / 40 < hi
+    keys = [f"t{i // 4}" for i in range(40)]
+    clo, chi = stats.sign_flip_interval(deltas, clusters=keys)
+    assert clo < sum(deltas) / 40 < chi
+    jk = stats.cluster_jackknife(deltas, keys)
+    assert jk["df"] == 9 and jk["ci"][0] < jk["mean"] < jk["ci"][1]
+
+
+def test_effective_n_bounds_and_clustered_pass_rate():
+    assert stats.effective_n(100, 10, 1.0) == 10  # all-or-nothing per seed: the seeds are the sample
+    assert abs(stats.zero_failure_bound(10) - 0.259) < 1e-3
+    assert stats.effective_n(100, 10, 0.0) == 100 and stats.effective_n(100, 10, None) is None
+    trials = [[True, True, False]] * 6 + [[True] * 3] * 6
+    flat = stats.clustered_pass_rate(trials)
+    grouped = stats.clustered_pass_rate(trials, [f"g{i % 3}" for i in range(12)])
+    assert grouped["n_clusters"] == 3 and flat["ci_method"].startswith("cluster_robust_t")
+    assert (grouped["ci"][1] - grouped["ci"][0]) > (flat["ci"][1] - flat["ci"][0])
+    near_ceiling = stats.clustered_pass_rate([[True, True, True]] * 29 + [[True, True, False]])
+    assert near_ceiling["ci_method"] == "cluster_robust_t_logit" and near_ceiling["ci"][1] <= 1.0
+
+
+def test_dependence_checks_find_shocks_and_template_clusters():
+    shock = [[True, True, False]] * 20 + [[True, True, True]] * 10  # the third repeat failed 20 cases
+    assert stats.cochran_q(shock)["p"] < 0.01
+    calm = [[True, False, True], [False, True, True], [True, True, False]] * 10
+    assert stats.cochran_q(calm)["p"] > 0.05
+    together = [[1.0] * 5, [0.0] * 5, [1.0] * 5, [0.0] * 5]
+    assert stats.overdispersion_test(together)["p"] < 0.05
+
+
+def test_weights_blind_spots_and_allocation():
+    w = stats.objective_weights({"a": 0.98, "b": 0.02}, {"a": 1, "b": 1})
+    assert abs(w["b"] - 0.02) < 1e-12
+    assert stats.objective_weights({"a": 0.5, "b": 0.5}, {"a": 1}) is None  # unstated is unknown
+    bs = stats.blind_spot(w["b"], 0.10, 0.11)
+    assert abs(bs["moves_objective_by"] - 0.002) < 1e-12 and bs["blind"]
+    heavy = stats.objective_weights({"a": 0.98, "b": 0.02}, {"a": 1, "b": 60})
+    # even weighted 60x, a 10-point drop moves the score 5.5 points: still blind to an 11-point MDE
+    assert stats.blind_spot(heavy["b"], 0.10, 0.11)["blind"]
+    assert not stats.blind_spot(heavy["b"], 0.25, 0.11)["blind"]
+    assert [stats.cases_per_arm(1 - r, 1 - r / 2) for r in (0.5, 0.3)] == [55, 118]
+    assert [stats.cases_to_surface(d) for d in (0.10, 0.05, 0.02, 0.01)] == [29, 59, 149, 299]
+    t = stats.allocation_target("solved", tolerated_drop=0.05, costly_mode_rates=[0.02])
+    assert t["target"] == 149 and t["needs"]["regression_guard"] == 59
+    imp = stats.allocation_target("improve", smallest_change=0.10, flip_rate=0.2)
+    assert imp["target"] == stats.cases_for_flip_rate(0.2, 0.10)
+    assert stats.allocation_target("improve")["unknown_needs"] == ["improvement"]
+    n = stats.neyman_allocation({"easy": (0.5, 0.99), "hard": (0.5, 0.7)}, 100, floor=5)
+    assert sum(n.values()) == 100 and n["hard"] > n["easy"] >= 5
+
+
+def test_stratified_draw_records_inclusion_probabilities():
+    pop = {"a": [f"a{i}" for i in range(10)], "b": [f"b{i}" for i in range(4)]}
+    d = stats.stratified_draw(pop, {"a": 5, "b": 4}, seed=7)
+    assert d == stats.stratified_draw(pop, {"a": 5, "b": 4}, seed=7)  # seeded: reproducible
+    assert len(d["drawn"]["a"]) == 5 and d["inclusion_probability"]["b0"] == 1.0
+    assert all(d["inclusion_probability"][x] == 0.5 for x in d["drawn"]["a"])
+
+
+def test_cost_flags_catch_a_write_in_a_read_only_category():
+    assert stats.failure_severity(writes=True, reversible=False, noticed=None) == "high"
+    assert stats.failure_severity(writes=False, reversible=None, noticed=True) == "low"
+    assert stats.failure_severity(writes=True, reversible=None, noticed=True) is None
+    f = stats.cost_flags([("report", "low"), ("report", "high"), ("book", "medium")],
+                         {"report": "low", "book": "medium"})
+    assert f["categories"]["report"]["flag"] and f["categories"]["report"]["exceeds_declared"]
+    assert not f["categories"]["book"]["flag"] and f["even"] is False
+    assert stats.cost_flags([("book", "medium")], {"book": "medium"})["even"] is True

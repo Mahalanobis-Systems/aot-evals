@@ -116,7 +116,11 @@ change before anything runs, and say what the error-finding targets can find: `a
 the rarest failure each one surfaces (10 cases: a failure in about one run in four). Where a rare
 failure would be costly, write cases aimed at it rather than adding cases everywhere. After the
 baseline, the report's `variance_components` says whether more cases or more trials narrow the
-interval faster; more cases usually win. Background: `${CLAUDE_PLUGIN_ROOT}/docs/statistics.md`.
+interval faster; more cases usually win. When cases come from one template, source trace or
+seed, give them the same `cluster` key: they fail together, and the report and comparisons then
+count them as one piece of evidence instead of several. Five or fewer clusters can't show a
+significant change at all, so spread cases across sources. Background:
+`${CLAUDE_PLUGIN_ROOT}/docs/statistics.md`.
 
 **Compare a change.** After any change to the prompt, skills, tools, model or harness, commit it
 and run a candidate with one declared variable:

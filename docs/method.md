@@ -193,6 +193,11 @@ Rules:
   candidate without `--variable` declares `model=<id>`, and a resume keeps it. Two runs whose manifests differ on any field other than the declared independent
   variable are not compared (G7).
 - **Every case has a `set`**: `error_finding` or `quality_estimate`. There is no default.
+- **A case may have a `cluster`**: the template it was generated from, the source trace it came
+  from, or its fixture's seed. Cases with one key tend to pass or fail together, so the report
+  counts clusters and the comparison flips signs per cluster ([statistics.md
+  §4.3](statistics.md#43-correlated-cases-clusters)). Without it, cases are assumed independent
+  and the report says so.
 - **Every case has `requirements`**: what a correct run of it must do, each citing a rule of
   `labels/standard.md` and naming the checks that decide it, or why it is unchecked. Every rule
   that applies to the case's category is cited or excused in `rules_not_applicable` (C6, C8).
@@ -269,8 +274,10 @@ per-case delta. A change is `better` or `worse` only when it is significant and 
 baseline's variance band; otherwise `indistinguishable`. Reported beside the verdict, and not
 deciding it: a paired sign-flip test on every change in a case's pass rate (the test M7's
 detectable effect describes), the detectable effect implied by the comparison's own per-case
-deltas, and Benjamini–Hochberg adjusted p-values per category
-([statistics.md §7](statistics.md#7-comparing-versions)). The declared variable is a kind
+deltas, Benjamini–Hochberg adjusted p-values per category, the flips (b pass→fail, c fail→pass,
+flip rate d) with the interval they imply, McNemar's mid-p, the inverted sign-flip interval, and,
+when cases carry a `cluster`, the same test and interval per cluster with the regime the cluster
+count allows ([statistics.md §7](statistics.md#7-comparing-versions)). The declared variable is a kind
 (`model`, `prompt`, `config`, `tools`, `harness`, ...) that maps to the manifest fields allowed to
 differ. Runs of one build split across several runs (for example category by category, to pace a
 rate-limited runtime) count as one side: their case sets, checks and judges are merged per item.
@@ -459,11 +466,13 @@ are guidance for the online regime and are not yet computed by the CLI.
 | M27 † | B | Online fingerprints | per agent: unanswered requests, time to first response, tokens and cost per turn, tool calls per turn, category mix, model id per call | drift in the part of the system that cannot be sandboxed |
 | M29 | C | Whole-run agreement | catch rate (share of runs a person fails that the suite fails) and clean pass rate (share a person passes that the suite passes), each with a Wilson interval, dev and holdout; a run with no verdict counts as wrong either way | C19, G14. Per-check validity (M8, M22) does not imply it: a suite can clear every screen and miss what a person fails runs for |
 | M28 † | A | Behavioural signals | post-output edits, acceptance, follow-up corrections, re-asks | free labels for C9 |
-| M30 | A | Detection power and zero-failure bound | per error-finding target, the rarest failure it surfaces at least once with 95% probability, 1 − 0.05^(1/n); on a category with no failure, the same bound over its cases | "10 per category" surfaces failures in ≥26% of runs; a clean result rules out no rarer one ([statistics.md §2.2](statistics.md#22-sizing-the-error-finding-set-what-can-it-find)) |
+| M30 | A | Detection power and zero-failure bound | per error-finding target, the rarest failure it surfaces at least once with 95% probability, 1 − 0.05^(1/n); on a category with no failure, the same bound over its cases | "10 per category" surfaces failures in ≥26% of runs; a clean result rules out no rarer one ([statistics.md §2.2](statistics.md#22-sizing-a-categorys-cases-improvement-regression-guard-and-detection)) |
 | M31 | A | Variance components | between-case and within-case variance of per-trial outcomes (one-way random effects), ICC, design effect, effective n, and the standard error after doubling cases or trials | whether the next budget buys cases or trials ([statistics.md §4.1](statistics.md#41-where-the-noise-comes-from)) |
 | M32 | C | Corrected failure-mode rate | a judge check's firing rate corrected for its measured TPR/TNR (Rogan–Gladen), with a delta-method interval over cases | how often the failure really occurs; undefined when TPR + TNR ≤ 1 |
 | M33 | C | Human-anchored pass rate | whole-run labels combined with the suite's verdict on every other final attempt of the same runs (PPI++), with the labels-only and suite-only rates beside it | what a person would say the pass rate is; assumes the labeled runs are a random sample |
 | M34 | C | Agreement robust to the base rate | per pair of labelers: Cohen's κ, Gwet's AC1, agreement on fails and on passes | κ falls below zero at 90% agreement when most runs pass; AC1 and the specific agreements do not |
+| M36 | A | Flips | per comparison: b (pass → fail), c (fail → pass), the flip rate d = (b + c)/N, the net with its interval √((d − Δ²)/N), and McNemar's mid-p | the flip rate, not the pass rate, sets a comparison's precision: N ≈ 7.85·d/Δ² ([statistics.md §7.1](statistics.md#71-the-paired-design)) |
+| M37 | A | Dependence | per set: Cochran's Q across the baseline's repeats; with cluster keys, the cluster count, sizes, regime and an over-dispersion test across clusters | whether the intervals' independence assumption holds; "cases assumed independent" when no case has a key |
 | M35 | C | Floor evidence | per rate held to a floor (judge TPR/TNR, C19 catch/clean): the Wilson lower bound, whether it is within a 10-point margin of the floor, and the n of that kind a rate at today's level would need | informational; no gate reads it ([statistics.md §5.4](statistics.md#54-floors-clearing-a-bar-versus-showing-that-you-cleared-it)) |
 
 ---
@@ -511,15 +520,18 @@ renamed.
                   "data_exports": [ { "source": "...", "window": "...", "rows": 0 } ] },
   "regime":  "offline",
   "taxonomy": { "name": "...", "source": "...|MISSING", "read_on": "...", "entries": [] },
-  "sets":    { "error_finding": { "n": 0, "mde_at_80_power": 0.0, "variance_components": {} },
+  "sets":    { "error_finding": { "n": 0, "mde_at_80_power": 0.0, "variance_components": {},
+                                  "dependence": { "cochran_q": {}, "overdispersion": null,
+                                                  "clusters": null, "note": "..." } },
                "quality_estimate": { "n": 0, "weights_source": "...", "estimate": {},
-                                     "variance_components": {} } },
+                                     "variance_components": {}, "dependence": {} } },
   "categories": [ { "id": "...", "worth": "high", "simple": false,
                     "observed_share": 0.0, "n_cases": 0,
                     "pass_rate": { "point": 0.0, "ci": [0, 0], "n": 0, "n_cases": 0, "k": 5,
                                    "set": "...", "ci_method": "..." },
                     "pass_pow_k": 0.0, "pass_pow_k_reason": null, "flaky": 0, "variance_band": [0, 0],
-                    "zero_failure_bound": null,
+                    "zero_failure_bound": null, "zero_failure_bound_basis": "cases|clusters",
+                    "clusters": null,
                     "variance_components": { "between_case": 0.0, "within_case": 0.0, "icc": 0.0,
                                              "design_effect": 0.0, "effective_n": 0.0,
                                              "se_now": 0.0, "se_double_cases": 0.0,
@@ -548,7 +560,12 @@ renamed.
   "comparison": { "baseline": "...", "candidate": "...", "paired": true, "refused": null,
                   "gains": [], "losses": [], "net": 0.0,
                   "test": { "name": "mcnemar_exact", "p": 0.0, "ci": [0, 0] },
-                  "paired_mean_test": { "name": "sign_flip_permutation", "p": 0.0 },
+                  "paired_mean_test": { "name": "sign_flip_permutation", "p": 0.0, "ci": [0, 0] },
+                  "flips": { "gains": 0, "losses": 0, "n_cases": 0, "net": 0.0, "flip_rate": 0.0,
+                             "se": 0.0, "ci": [0, 0] },
+                  "mcnemar_midp": 0.0,
+                  "clusters": { "n_clusters": 0, "regime": "...", "p": 0.0, "ci": [0, 0],
+                                "jackknife": {}, "note": null },
                   "mde_at_80_power": 0.0, "mde_from_deltas": 0.0, "per_set": {},
                   "per_category": { "...": { "test": { "p": 0.0, "p_adjusted_bh": 0.0 } } },
                   "operational_delta": { "cost_per_success": 0.0, "latency_p90": 0, "error_rate": 0.0 },

@@ -197,9 +197,16 @@ def _passes_by_case(finals: list[dict]) -> dict[str, list[bool]]:
     return out
 
 
+def _cluster_keys(ctx: Context, case_ids) -> list[str | None] | None:
+    """Each case's `cluster` (template, source trace or seed), or None when no case has one."""
+    keys = [(ctx.cases.get(c) or {}).get("cluster") for c in case_ids]
+    return keys if any(k is not None for k in keys) else None
+
+
 def correctness(ctx: Context, finals: list[dict], set_name: str) -> dict:
     by_case = _passes_by_case(finals)
-    rate = stats.clustered_pass_rate(list(by_case.values()))
+    keys = _cluster_keys(ctx, list(by_case))
+    rate = stats.clustered_pass_rate(list(by_case.values()), keys)
     # A case's trials are those of the runs that included it: runs split by category each
     # cover some cases, so summing k over every run left pass^k null.
     complete = [v for c, v in by_case.items() if len(v) == ctx.trials_of.get(c)]
@@ -222,12 +229,18 @@ def correctness(ctx: Context, finals: list[dict], set_name: str) -> dict:
         pass_rate = {"point": rate["point"], "ci": rate["ci"], "n": rate["n"],
                      "n_cases": rate["n_cases"], "k": ctx.k, "set": set_name,
                      "ci_method": rate["ci_method"]}
+        if "n_clusters" in rate:
+            pass_rate["n_clusters"] = rate["n_clusters"]
     # M30: with no failure seen, how high could the failure rate still be? Counted over cases,
-    # since trials of one case are not independent.
-    zero_bound = (stats.zero_failure_bound(len(by_case))
-                  if by_case and all(all(v) for v in by_case.values()) else None)
+    # since trials of one case are not independent; over clusters when cases carry one, since a
+    # clean result can't show how correlated a cluster's cases are (all-or-nothing is assumed).
+    clean = bool(by_case) and all(all(v) for v in by_case.values())
+    units = rate.get("n_clusters", len(by_case)) if rate else len(by_case)
+    zero_bound = stats.zero_failure_bound(units) if clean else None
     return {"pass_rate": pass_rate, "pass_pow_k": pass_pow_k, "pass_pow_k_reason": pass_pow_k_reason,
             "flaky": flaky, "variance_band": band, "zero_failure_bound": zero_bound,
+            "zero_failure_bound_basis": (("clusters" if keys else "cases") if clean else None),
+            "clusters": stats.cluster_summary(keys) if keys else None,
             # M31: how much of the noise is case difficulty and how much run-to-run
             "variance_components": stats.variance_components(list(by_case.values()))}
 
@@ -766,6 +779,7 @@ def build(ev: Evals, run_ids: list[str] | None = None, candidate_runs: list[str]
             if a.get("set") == s and a.get("passed") is not None and ctx.gated(a["case_id"]):
                 by_case[a["case_id"]].append(bool(a["passed"]))
         report["sets"][s]["variance_components"] = stats.variance_components(list(by_case.values()))
+        report["sets"][s]["dependence"] = dependence(ctx, s)
     report["coverage"]["authoring_queue"] = suite.authoring_queue(ev, report["coverage"]["cells"])
 
     if status["G1"] == "fail":
@@ -779,6 +793,28 @@ def build(ev: Evals, run_ids: list[str] | None = None, candidate_runs: list[str]
     report["categories"] = category_rows(ctx)
     report["next_actions"] = next_actions(ev, report)
     return report
+
+
+def dependence(ctx: Context, set_name: str) -> dict:
+    """§4.3: are outcomes as independent as the intervals assume? Cochran's Q across the
+    baseline's repeats (a shock that hit one repeat), and, when cases carry a cluster key, an
+    over-dispersion test of cases across clusters. Informational."""
+    ordered: dict[str, list[tuple]] = defaultdict(list)
+    for a in ctx.finals():
+        if a.get("set") == set_name and a.get("passed") is not None and ctx.gated(a["case_id"]):
+            ordered[a["case_id"]].append(((ctx.pass_of.get(a["run_id"]) or 0), a["trial"], bool(a["passed"])))
+    trials = {c: [x[2] for x in sorted(v)] for c, v in ordered.items()}
+    keys = _cluster_keys(ctx, list(trials))
+    over = None
+    if keys:
+        groups: dict = {}
+        for (c, v), g in zip(trials.items(), keys, strict=True):
+            groups.setdefault(g if g is not None else ("case", c), []).append(sum(v) / len(v))
+        over = stats.overdispersion_test(list(groups.values()), draws=1_000)
+    return {"cochran_q": stats.cochran_q(list(trials.values()), draws=1_000),
+            "overdispersion": over,
+            "clusters": stats.cluster_summary(keys) if keys else None,
+            "note": None if keys else "cases assumed independent: no case has a cluster key"}
 
 
 def _agreement_summary(ev: Evals) -> dict | None:

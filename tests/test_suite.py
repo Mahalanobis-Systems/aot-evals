@@ -296,3 +296,42 @@ def test_run_model_pins_the_model_for_one_run(make_repo, monkeypatch):
     assert "model" not in Evals(repo.evals).latest_run("smoke")["invoke"]
     with pytest.raises(SystemExit, match="--model"):
         repo.cli("run", "--resume", m["run_id"], "--model", "toy-model-3")
+
+
+def test_flips_are_printed_and_cases_that_share_a_template_move_together(make_repo):
+    """§4.3: tag the booking cases with two templates; the comparison then flips signs per
+    template, and the evidence for the same seven losses shrinks to what two templates hold."""
+    repo = make_repo()
+    for cid in BOOKING:
+        path = next((repo.evals / "cases").glob(f"*/{cid}.json"))
+        case = json.loads(path.read_text())
+        case["cluster"] = "tmpl-q" if "-q" in cid else "tmpl-a"
+        path.write_text(json.dumps(case, indent=2))
+    repo.commit("booking cases share two templates")
+    baseline(repo)
+    candidate(repo, break_cases=BOOKING)
+    c = comparison(repo)
+    f = c["flips"]
+    assert f["losses"] == len(BOOKING) and f["gains"] == 0 and f["flip_rate"] == len(BOOKING) / c["n_cases"]
+    assert f["ci"][0] < f["net"] < f["ci"][1] < 0
+    assert c["mcnemar_midp"] < c["test"]["p"]  # mid-p is less conservative than exact
+    cl = c["clusters"]
+    assert cl["keyed_cases"] == len(BOOKING) and cl["n_clusters"] < c["n_cases"]
+    assert cl["p"] > c["paired_mean_test"]["p"]  # two templates are less evidence than seven cases
+    repo.cli("report")
+    r = repo.report()
+    row = next(x for x in r["categories"] if x["id"] == "book-meeting" and x["pass_rate"]["set"] == "error_finding")
+    assert row["pass_rate"]["n_clusters"] == 1 and row["clusters"]["regime"] == "fixed_suite_only"
+    assert r["sets"]["error_finding"]["dependence"]["cochran_q"] is not None
+
+
+def test_cases_without_a_cluster_key_are_said_to_be_assumed_independent(make_repo):
+    repo = make_repo()
+    baseline(repo)
+    candidate(repo, break_cases=["book-001"])
+    c = comparison(repo)
+    assert "assumed independent" in c["clusters"]["note"]
+    assert c["paired_mean_test"]["ci"] is not None and c["flips"]["losses"] == 1
+    repo.cli("report")
+    r = repo.report()
+    assert "assumed independent" in r["sets"]["error_finding"]["dependence"]["note"]
