@@ -8,6 +8,8 @@
     aot-evals validate                  every problem and warning, across all gates (2.0: the eval spec)
     aot-evals import FILE ...           C0: copy an export into evals/data/, record provenance
     aot-evals allocate [--write]        C5: size both case sets, print the arithmetic
+    aot-evals --eval ID plan [--write]  2.0: case targets per use case and pool, from the decision rule
+    aot-evals --eval ID draw            2.0: the seeded stratified draw of the quality set, with π
     aot-evals screen [--read-by NAME]   C7: reference / do-nothing / claim screens per case
     aot-evals run --purpose P --k N     C1 smoke, C12 baseline, candidate runs
     aot-evals build [--run]             the lightest Build: drafts, the checklist, then the baseline
@@ -77,7 +79,16 @@ def _evals(args) -> Evals:
 
 # Commands that work on an agent folder holding 2.0 evals (docs/v2-design.md §1). The rest read a
 # 1.x suite only, until their stage of the 2.0 refactor.
-V2_READY = {"init", "validate", "status", "import", "log", "activity", "snapshot"}
+V2_READY = {"init", "validate", "status", "import", "log", "activity", "snapshot", "plan", "draw",
+            "screen", "run", "report"}
+
+
+def _one_eval(args, ev: Evals):
+    """The eval a 2.0 command works on: --eval, or the agent's only eval."""
+    try:
+        return ev.eval(getattr(args, "eval", None))
+    except ContractError as e:
+        sys.exit(str(e))
 
 
 def _v2(args, ev: Evals) -> bool:
@@ -218,6 +229,12 @@ def cmd_validate(args) -> int:
             if args.warnings and s.defaults:
                 print("  defaults: " + ", ".join(f"{d['field']} = {d['value']}" for d in s.defaults))
             n_problems += len(s.missing) + len(s.invalid)
+            from .design import case_issues
+
+            for c in case_issues(e):
+                for p in c["problems"]:
+                    print(f"  case:    {c['path'] or c['id']}: {p}")
+                n_problems += len(c["problems"])
         print(f"\n{n_problems} problem(s)")
         return 1 if n_problems else 0
     n_problems = 0
@@ -248,8 +265,44 @@ def cmd_import(args) -> int:
     return 0
 
 
+def cmd_plan(args) -> int:
+    from . import plan as plan_mod
+
+    e = _one_eval(args, _evals(args))
+    p = plan_mod.plan(e, assumed_rate=args.assumed_rate, flip_rate=args.flip_rate, total=args.total)
+    if args.mark_short:
+        if not args.reason:
+            sys.exit("--mark-short needs --reason")
+        for row in p["rows"]:
+            if row["status"] == "short":
+                row["status"], row["reason"] = args.mark_short, args.reason
+    print(json.dumps(p, indent=2) if args.json else plan_mod.render(p))
+    if args.write:
+        plan_mod.write(e, p)
+        print(f"\nwrote {e.p('plan.yaml')}")
+    return 0
+
+
+def cmd_draw(args) -> int:
+    from . import design
+
+    e = _one_eval(args, _evals(args))
+    n = {}
+    for item in args.n or []:
+        uc, sep, v = item.partition("=")
+        if not sep or not v.isdigit():
+            sys.exit(f"--n takes USE_CASE=N, not {item!r}")
+        n[uc] = int(v)
+    r = design.draw(e, n=n, skip=args.skip or None, reason=args.reason, prune=args.prune,
+                    dry_run=args.dry_run)
+    print(design.render_draw(r))
+    return 1 if r.get("refused") else 0
+
+
 def cmd_allocate(args) -> int:
     ev = _evals(args)
+    if _v2(args, ev):
+        sys.exit("2.0 evals size their cases with `aot-evals plan` (allocate is 1.x)")
     _unmet_before(ev, "C5")
     p = allocate_mod.plan(ev, halfwidth=args.halfwidth, assumed_rate=args.assumed_rate, k=args.k)
     if args.mark_short:
@@ -267,7 +320,12 @@ def cmd_allocate(args) -> int:
 
 def cmd_screen(args) -> int:
     ev = _evals(args)
-    _unmet_before(ev, "C7")
+    if _v2(args, ev):
+        if args.judges:
+            sys.exit("--judges does not read 2.0 evals yet: their judges' calibration is per eval")
+        ev = _one_eval(args, ev)
+    else:
+        _unmet_before(ev, "C7")
     if args.read_by and not (args.case or args.all):
         sys.exit("--read-by records a human read: name the cases read with --case (repeatable), "
                  "or pass --all if NAME really read every case")
@@ -298,6 +356,10 @@ def compare_variables() -> list[str]:
 
 def cmd_run(args) -> int:
     ev = _evals(args)
+    if _v2(args, ev):
+        return _run_v2(args, ev)
+    if args.use_case:
+        sys.exit("--use-case is for 2.0 evals; a 1.x suite takes --category")
     if args.resume:
         given = [flag for flag, v in (("--purpose", args.purpose), ("--k", args.k),
                                       ("--case", args.case), ("--category", args.category),
@@ -332,6 +394,50 @@ def cmd_run(args) -> int:
                        judges=not args.no_judges, pause_every=args.pause_every,
                        pause_seconds=args.pause_seconds, stop_after=args.stop_after)
     return _run_summary(ev, m)
+
+
+def _run_v2(args, ev: Evals) -> int:
+    """`run` on a 2.0 eval: k from the spec's trials, use cases in place of categories, and the
+    spec's missing fields recorded in the manifest instead of gates (docs/v2-design.md §5)."""
+    e = _one_eval(args, ev)
+    if args.category:
+        sys.exit("a 2.0 eval selects cases with --use-case (categories are 1.x)")
+    log = _progress(ev, journal.command_gate("run", args.purpose or "resume"))
+    if args.resume:
+        given = [flag for flag, v in (("--purpose", args.purpose), ("--k", args.k), ("--case", args.case),
+                                      ("--use-case", args.use_case), ("--question", args.question),
+                                      ("--variable", args.variable), ("--model", args.model),
+                                      ("--label", args.label)) if v not in (None, False)]
+        if given:
+            sys.exit(f"refused: --resume carries on the run as its manifest recorded it; drop "
+                     f"{', '.join(given)}")
+        m = runner_mod.resume(e, args.resume, log=log, judges=not args.no_judges,
+                              pause_every=args.pause_every, pause_seconds=args.pause_seconds,
+                              stop_after=args.stop_after)
+        return _run_summary(e, m)
+    if not args.purpose:
+        sys.exit("aot-evals run: --purpose is required (or --resume RUN_ID)")
+    spec = e.spec()
+    trials = spec.part("measurement").get("trials")
+    if args.k is None:
+        # trials: auto stays at 3 until a baseline measures the variance split (rule 16)
+        args.k = 1 if args.purpose == "smoke" else trials if isinstance(trials, int) else 3
+    if args.purpose == "baseline" and args.k < 3:
+        sys.exit("refused: a baseline needs k >= 3 to measure variance (rule 16)")
+    if args.model and args.purpose == "candidate" and not args.variable:
+        args.variable = f"model={args.model}"
+    if args.purpose == "candidate" and not args.variable:
+        sys.exit("refused: a candidate run declares its one independent variable, e.g. --variable "
+                 "model=claude-haiku-4-5 or --variable prompt=v7. Kinds: "
+                 + ", ".join(sorted(compare_variables())))
+    for i in spec.blocked("run"):
+        print(f"note: {i.field}: {i.why}", file=sys.stderr)
+    m = runner_mod.run(e, purpose=args.purpose, k=args.k, case_ids=args.case or None,
+                       categories=args.use_case or None, variable=args.variable,
+                       label=args.label, adhoc_question=args.question, model=args.model,
+                       log=log, judges=not args.no_judges, pause_every=args.pause_every,
+                       pause_seconds=args.pause_seconds, stop_after=args.stop_after)
+    return _run_summary(e, m)
 
 
 def _run_summary(ev: Evals, m: dict) -> int:
@@ -686,6 +792,24 @@ def cmd_redundancy(args) -> int:
 
 def cmd_report(args) -> int:
     ev = _evals(args)
+    if _v2(args, ev):
+        from . import report_v2
+
+        e = _one_eval(args, ev)
+        if args.candidate or args.html:
+            sys.exit("--candidate and --html do not read 2.0 evals yet; report writes the estimate")
+        r = report_v2.build(e, args.run or None)
+        print(f"wrote {report_v2.write(e, r)}")
+        est = r["estimate"]
+        if est["theta"] is not None:
+            lo, hi = est["ci"]
+            print(f"  θ̂ = {est['theta']:.4f} [{lo:.4f}, {hi:.4f}] ({est['quantity']}, {est['weights_source']} "
+                  f"weights, {est['n_cases']} cases in {est['n_clusters']} clusters, k = {est['k']})")
+        else:
+            print(f"  θ̂ unknown: {est['null_reason']}")
+        if r.get("refused"):
+            print(f"  refused: {r['refused']}")
+        return 0
     r = report_mod.build(ev, args.run or None, args.candidate or None)
     path = report_mod.write(ev, r)
     print(f"wrote {path}")
@@ -944,6 +1068,31 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--force", action="store_true")
     s.set_defaults(fn=cmd_allocate)
 
+    s = sub.add_parser("plan", help="2.0: case targets per use case and pool, from the decision rule")
+    s.add_argument("--assumed-rate", type=float, help="the value of the estimand's quantity you expect "
+                   "(a pass rate, or a failure rate for failure_rate:...); default: the baseline's")
+    s.add_argument("--flip-rate", type=float, help="the share of cases that flip between versions, for "
+                   "a superiority or non-inferiority test (from an A/A rerun or the last comparison)")
+    s.add_argument("--total", type=int, help="the quality set's size, in place of the headline need")
+    s.add_argument("--write", action="store_true", help="write <eval>/plan.yaml")
+    s.add_argument("--mark-short", choices=["scheduled", "out_of_scope"],
+                   help="mark every row that is still short (needs --reason)")
+    s.add_argument("--reason")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_plan)
+
+    s = sub.add_parser("draw", help="2.0: draw the quality set from the frame, seeded and stratified, with π")
+    s.add_argument("--n", action="append", metavar="USE_CASE=N",
+                   help="draw N from this use case, in place of plan.yaml's target (repeatable)")
+    s.add_argument("--skip", action="append", metavar="TRACE_ID",
+                   help="take this trace out of the frame (needs --reason); the next of the seeded "
+                   "order replaces it")
+    s.add_argument("--reason", help="why the skipped trace leaves the frame (PII, a duplicate, ...)")
+    s.add_argument("--prune", action="store_true",
+                   help="remove quality cases the draw no longer holds")
+    s.add_argument("--dry-run", action="store_true", help="say what would change, write nothing")
+    s.set_defaults(fn=cmd_draw)
+
     s = sub.add_parser("screen", help="C7: screen cases")
     s.add_argument("--judges", action="store_true",
                    help="let calibrated judges count in the non-answer and liar screens (calls cost money)")
@@ -963,6 +1112,7 @@ def main(argv: list[str] | None = None) -> int:
                    "with a final attempt and run the rest; refused if the build changed")
     s.add_argument("--case", action="append")
     s.add_argument("--category", action="append")
+    s.add_argument("--use-case", action="append", help="2.0: limit to this use case (repeatable)")
     s.add_argument("--question", help="smoke only: run one ad-hoc trigger before any case exists")
     s.add_argument("--variable", help="the declared independent variable, e.g. 'model=claude-haiku-4-5'")
     s.add_argument("--label", help="suffix for the run id")

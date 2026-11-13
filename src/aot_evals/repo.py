@@ -6,7 +6,7 @@ directory; `validate` and the gates are where strictness lives.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .util import ContractError, load_json, load_yaml, read_jsonl
@@ -45,8 +45,65 @@ def is_evals_root(d: Path) -> bool:
         (d / "agents").is_dir() or bool(old_suites(d)))
 
 
+class _Runs:
+    """Reading runs/: shared by a 1.x suite and a 2.0 eval, each with its own runs/ folder."""
+
+    def p(self, *parts: str) -> Path:  # pragma: no cover - both subclasses define it
+        raise NotImplementedError
+
+    def cases(self, include_dropped: bool = True) -> list[dict]:  # pragma: no cover
+        raise NotImplementedError
+
+    def run_dirs(self) -> list[Path]:
+        d = self.p("runs")
+        if not d.exists():
+            return []
+        return sorted(p for p in d.iterdir() if (p / "manifest.json").exists())
+
+    def run_manifest(self, run_id: str) -> dict | None:
+        return load_json(self.p("runs", run_id, "manifest.json"))
+
+    def run_records(self, run_id: str) -> list[dict]:
+        return read_jsonl(self.p("runs", run_id, "outcomes.jsonl"))
+
+    def runs(self, purpose: str | None = None) -> list[dict]:
+        out = []
+        for d in self.run_dirs():
+            m = load_json(d / "manifest.json") or {}
+            if purpose is None or m.get("purpose") == purpose:
+                out.append(m)
+        return out
+
+    def baseline_runs(self) -> list[dict]:
+        """The effective baseline (docs/method.md §4.1): for each current case, the newest finished
+        baseline run that covers it, oldest first. A re-run of one category leaves the baseline of
+        the others in place; a full re-run replaces them all."""
+        runs = [m for m in self.runs("baseline") if m.get("finished")]
+        if not runs:
+            return []
+        try:
+            ids = {c.get("id") for c in self.cases(include_dropped=False)}
+        except ContractError:
+            ids = set()
+        covered: set = set()
+        picked = []
+        for m in reversed(runs):
+            cs = set((m.get("case_set") or {}).get("ids") or [])
+            if not picked or (cs & ids) - covered:
+                picked.append(m)
+                covered |= cs
+        return list(reversed(picked))
+
+    def baseline_ids(self) -> list[str]:
+        return [m["run_id"] for m in self.baseline_runs()]
+
+    def latest_run(self, purpose: str | None = None) -> dict | None:
+        runs = [r for r in self.runs(purpose) if r.get("finished")]
+        return runs[-1] if runs else None
+
+
 @dataclass
-class Evals:
+class Evals(_Runs):
     root: Path  # the agent's suite: evals/agents/<agent>/, or evals/ itself in a one-agent repo
 
     @classmethod
@@ -129,6 +186,15 @@ class Evals:
 
     def exists(self) -> bool:
         return self.root.is_dir()
+
+    @property
+    def env_dir(self) -> Path:
+        """The sandbox fakes, hashed into every manifest."""
+        return self.p("env")
+
+    @property
+    def standard_path(self) -> Path:
+        return self.p("labels", "standard.md")
 
     # ---- configuration files ---------------------------------------------------------------
 
@@ -231,55 +297,6 @@ class Evals:
                 out.append((cid, fm))
         return out
 
-    # ---- runs ------------------------------------------------------------------------------
-
-    def run_dirs(self) -> list[Path]:
-        d = self.p("runs")
-        if not d.exists():
-            return []
-        return sorted(p for p in d.iterdir() if (p / "manifest.json").exists())
-
-    def run_manifest(self, run_id: str) -> dict | None:
-        return load_json(self.p("runs", run_id, "manifest.json"))
-
-    def run_records(self, run_id: str) -> list[dict]:
-        return read_jsonl(self.p("runs", run_id, "outcomes.jsonl"))
-
-    def runs(self, purpose: str | None = None) -> list[dict]:
-        out = []
-        for d in self.run_dirs():
-            m = load_json(d / "manifest.json") or {}
-            if purpose is None or m.get("purpose") == purpose:
-                out.append(m)
-        return out
-
-    def baseline_runs(self) -> list[dict]:
-        """The effective baseline (docs/method.md §4.1): for each current case, the newest finished
-        baseline run that covers it, oldest first. A re-run of one category leaves the baseline of
-        the others in place; a full re-run replaces them all."""
-        runs = [m for m in self.runs("baseline") if m.get("finished")]
-        if not runs:
-            return []
-        try:
-            ids = {c.get("id") for c in self.cases(include_dropped=False)}
-        except ContractError:
-            ids = set()
-        covered: set = set()
-        picked = []
-        for m in reversed(runs):
-            cs = set((m.get("case_set") or {}).get("ids") or [])
-            if not picked or (cs & ids) - covered:
-                picked.append(m)
-                covered |= cs
-        return list(reversed(picked))
-
-    def baseline_ids(self) -> list[str]:
-        return [m["run_id"] for m in self.baseline_runs()]
-
-    def latest_run(self, purpose: str | None = None) -> dict | None:
-        runs = [r for r in self.runs(purpose) if r.get("finished")]
-        return runs[-1] if runs else None
-
     # ---- 2.0 evals (docs/v2-design.md §1) --------------------------------------------------
 
     def eval_dirs(self) -> list[Path]:
@@ -333,15 +350,45 @@ RESERVED_EVAL_IDS = (*SHARED_DIRS, "cases", "checks", "runs", "report", "pulled"
 V1_FILES = ("categories.yaml", "failure_modes.yaml", "taxonomy.yaml", "allocation.yaml")
 
 
+POOLS = ("quality", "bug_finding")
+
+
 @dataclass
-class Eval:
+class Eval(_Runs):
     """One eval of an agent system: evals/agents/<agent>/<eval>/ (docs/v2-design.md §1).
 
     Its cases, checks, judges, labels, runs and report are its own; the sandbox (`env/`), the
-    frames (`data/`), the labeling standard and the journal belong to the agent system."""
+    frames (`data/`), the labeling standard and the journal belong to the agent system.
 
-    agent: Evals
+    It reads like a 1.x suite where the runner, the judges and isolation need it to (`cases`,
+    `checks_for_case`, `agent`, the runs), with the 2.0 meaning: the failure modes come from the
+    spec's measurement model, and a mode applies to a case through the case's use case."""
+
+    agent_system: Evals
     root: Path
+    _spec: object = field(default=None, init=False, repr=False, compare=False)
+
+    @property
+    def agent_dir(self) -> Evals:
+        return self.agent_system
+
+    def agent(self) -> dict:
+        """agent.yaml, with a component eval's own `invoke` in place of the system's (v2-design §2)."""
+        data = dict(self.agent_system.agent())
+        unit = (self.spec().part("estimand").get("unit") or {})
+        own = self.spec().resolved.get("invoke")
+        if isinstance(unit, dict) and unit.get("kind") == "component":
+            # never the system's invoke: a component eval runs the component on its handoffs
+            data["invoke"] = own if isinstance(own, dict) else {}
+        return data
+
+    @property
+    def evals_dir(self) -> Path:
+        return self.agent_system.evals_dir
+
+    @property
+    def old_layout(self) -> bool:
+        return False
 
     @property
     def id(self) -> str:
@@ -353,7 +400,7 @@ class Eval:
 
     def shared(self, *parts: str) -> Path:
         """A path in the agent system's folder, shared by its evals."""
-        return self.agent.p(*parts)
+        return self.agent_system.p(*parts)
 
     @property
     def spec_path(self) -> Path:
@@ -370,10 +417,68 @@ class Eval:
     @property
     def repo_root(self) -> Path:
         """Where `invoke.cwd` starts, as for agent.yaml."""
-        return self.agent.repo_root
+        return self.agent_system.repo_root
 
     def exports(self) -> list[dict]:
-        return self.agent.exports()
+        return self.agent_system.exports()
+
+    # ---- cases -----------------------------------------------------------------------------
+
+    def case_paths(self) -> list[Path]:
+        d = self.p("cases")
+        return sorted(d.glob("*/*.json")) if d.exists() else []
+
+    def cases(self, include_dropped: bool = True) -> list[dict]:
+        out = []
+        for path in self.case_paths():
+            case = load_json(path)
+            if not isinstance(case, dict):
+                raise ContractError(f"{path}: a case must be a JSON object")
+            case["_path"] = str(path.relative_to(self.root))
+            case["_dir_use_case"] = path.parent.name
+            if not include_dropped and (case.get("screen") or {}).get("dropped"):
+                continue
+            out.append(case)
+        return out
+
+    # ---- failure modes and checks (the measurement model) ---------------------------------
+
+    def failure_modes(self) -> list[dict]:
+        fms = self.spec().part("measurement").get("failure_modes")
+        return [f for f in fms if isinstance(f, dict) and f.get("id")] if isinstance(fms, list) else []
+
+    def failure_modes_for_case(self, case: dict) -> list[dict]:
+        """The modes that apply to a case: those whose use cases include its use case. Every
+        case of a use case is graded the same way, drawn or written (v2-design §3)."""
+        uc = case.get("use_case")
+        out = []
+        for fm in self.failure_modes():
+            ucs = fm.get("use_cases")
+            if ucs == ALL_CATEGORIES or (isinstance(ucs, list) and uc in ucs):
+                out.append(fm)
+        return out
+
+    def checks_for_case(self, case: dict, check_type: str | None = "code") -> list[tuple[str, dict]]:
+        """(check_id, failure_mode) for each counted check and each diagnostic that applies to a
+        case. `counted(check_id, fm)` says which is which (rule 12)."""
+        seen, out = set(), []
+        for fm in self.failure_modes_for_case(case):
+            ids = ([fm["check"]] if isinstance(fm.get("check"), str) else []) + [
+                d for d in (fm.get("diagnostics") or []) if isinstance(d, str)]
+            for cid in ids:
+                if cid in seen or (check_type and self.check_type(cid) != check_type):
+                    continue
+                seen.add(cid)
+                out.append((cid, fm))
+        return out
+
+    @staticmethod
+    def counted(check_id: str, fm: dict) -> bool:
+        """Whether a check is the one that counts for its failure mode, not a diagnostic."""
+        return fm.get("check") == check_id
+
+    def judge_labels(self, check_id: str) -> list[dict]:
+        return read_jsonl(self.p("checks", "judge", f"{check_id}.labels.jsonl"))
 
     def code_check_path(self, check_id: str) -> Path:
         return self.p("checks", "code", f"{check_id}.py")
@@ -388,8 +493,10 @@ class Eval:
             return "judge"
         return None
 
-    def spec(self):
-        """The eval spec, loaded and validated (`spec.Spec`)."""
+    def spec(self, reload: bool = False):
+        """The eval spec, loaded and validated (`spec.Spec`), read once per Eval."""
         from .spec import load
 
-        return load(self)
+        if self._spec is None or reload:
+            self._spec = load(self)
+        return self._spec

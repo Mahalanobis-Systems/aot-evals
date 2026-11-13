@@ -1,3 +1,5 @@
+import pytest
+
 from aot_evals import stats
 from aot_evals.scrub import scan
 
@@ -382,3 +384,59 @@ def test_holm_controls_any_false_alarm_and_is_stricter_than_bh():
     assert all(h >= b for h, b in zip(adj, bh, strict=True) if h is not None)
     assert stats.holm([0.3, 0.9]) == [0.6, 0.9]  # monotone, capped at 1
     assert stats.holm([]) == [] and stats.holm([None]) == [None]
+
+
+# ---- 2.0 estimand and design (docs/statistics.md §2.1-§2.4, §4.1, §4.5; estimators §7) ----------
+
+def test_stratified_draw_is_prefix_stable_and_replaces_skips_from_its_order():
+    pop = {"a": [f"a{i}" for i in range(20)], "b": [f"b{i}" for i in range(5)]}
+    small = stats.stratified_draw(pop, {"a": 4, "b": 2}, seed=3)
+    big = stats.stratified_draw(pop, {"a": 9, "b": 2}, seed=3)
+    assert set(small["drawn"]["a"]) < set(big["drawn"]["a"])  # drawing more extends the draw
+    assert small["drawn"]["b"] == big["drawn"]["b"]  # and leaves the other strata alone
+    order = stats.draw_order(pop["a"], 3, "a")
+    assert sorted(order[:4]) == small["drawn"]["a"] and small["index"][order[0]] == 0
+    skipped = stats.stratified_draw(pop, {"a": 4, "b": 2}, seed=3, skip=[order[1]])
+    assert skipped["drawn"]["a"] == sorted([order[0], *order[2:5]])  # the next of the same order
+    assert skipped["replaced"]["a"] == [order[1]] and skipped["frame_size"]["a"] == 19
+    assert skipped["inclusion_probability"][order[0]] == 4 / 19
+    assert stats.draw_order(pop["a"], 3, "a") != stats.draw_order(pop["a"], 4, "a")
+
+
+def test_hajek_counts_clusters_not_cases():
+    ys = [1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
+    alone = stats.hajek_mean(ys, [0.5] * 6)
+    paired = stats.hajek_mean(ys, [0.5] * 6, ["t1", "t1", "t1", "t2", "t2", "t2"])
+    assert alone["point"] == paired["point"] == 0.5
+    assert paired["n_clusters"] == 2 and paired["n_effective"] == 2 and paired["se"] > alone["se"]
+    assert stats.hajek_mean([1.0, 0.0], [0.5, 0.5], ["x", "x"])["se"] is None  # one cluster: no SE
+
+
+def test_stratified_hajek_weights_use_cases_and_never_gives_zero_variance():
+    strata = {"common": {"weight": 0.7, "values": [1.0] * 30 + [0.0] * 10, "inclusion_probs": [0.1] * 40},
+              "rare": {"weight": 0.3, "values": [1.0] * 10, "inclusion_probs": [0.5] * 10}}
+    r = stats.stratified_hajek(strata)
+    assert r["point"] == pytest.approx(0.7 * 0.75 + 0.3 * 1.0)
+    rare = r["per_use_case"]["rare"]
+    assert rare["se"] == 0 and rare["variance_used"] == pytest.approx((11 / 12) * (1 / 12) / 10)
+    assert r["ci"][1] <= 1 and r["ci"][0] < r["point"]
+    # weights are normalized; a weight-0 use case may have no cases; any other may not
+    assert stats.stratified_hajek({**strata, "none": {"weight": 0, "values": [], "inclusion_probs": []}})["point"] \
+        == pytest.approx(r["point"])
+    missing = stats.stratified_hajek({**strata, "gift": {"weight": 0.1, "values": [], "inclusion_probs": []}})
+    assert missing["point"] is None and missing["missing"] == ["gift"]
+    assert stats.stratified_hajek({"a": {"weight": None, "values": [1.0], "inclusion_probs": [1.0]}}) is None
+
+
+def test_paired_n_matches_the_non_inferiority_figures():
+    # statistics §4.5: a cheaper model within 5 points at a 16% flip rate
+    assert stats.paired_n(0.16, 0.05, alpha=0.025) == stats.cases_for_flip_rate(0.16, 0.05) == 503
+    assert stats.paired_n(0.16, 0.05, alpha=0.05) == 396  # "about 400"
+    assert stats.paired_n(0.16, 0) is None and stats.paired_n(0, 0.05) is None
+
+
+def test_allocation_design_effect():
+    w = {"a": 0.9, "b": 0.1}
+    assert stats.allocation_design_effect(w, {"a": 90, "b": 10}) == pytest.approx(1.0)
+    assert stats.allocation_design_effect(w, {"a": 50, "b": 50}) == pytest.approx(100 * (0.81 / 50 + 0.01 / 50))
+    assert stats.allocation_design_effect(w, {"a": 100, "b": 0}) is None

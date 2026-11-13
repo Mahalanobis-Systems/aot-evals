@@ -212,9 +212,25 @@ invoke:                            # component evals only; the system eval uses 
 | `decision_rule.constraints` | Decision rule | no | budget keys as in 1.x `budgets.yaml` |
 
 **What the generated plan holds.** `plan.yaml` (1.x `allocation.yaml`) is written by
-`aot-evals plan`: per use case and pool, the target from the decision rule's power (with each
+`aot-evals plan --write`: per use case and pool, the target from the decision rule's power (with each
 judge's inflation factor), the minimum, the optimum allocation of the rest, what exists, and how
 many are screened. Humans edit only `status` and `reason`, as in 1.x.
+
+- **The headline need** is the independent cases the rule's test needs at its α and power:
+  `stats.threshold_n` for a threshold test, with the judge's catch and clean rates written into the
+  test, or `stats.paired_n` for a superiority or non-inferiority test, from the flip rate, times each
+  counted judge's inflation factor. A judge without a current calibration is planned at
+  `max_inflation`, the most the spec lets it cost.
+- **Minimums**: each use case gate's own need, and each oversampled use case's factor × share × N.
+- **N** is raised until the optimum allocation (proportional to the weights until a baseline
+  measures spreads and per-trial costs) still holds the headline need once its unequal weighting
+  (`stats.allocation_design_effect`) and the clusters' measured design effect are counted.
+  `--total N` fixes the budget instead.
+- **What it can't know it says.** Before a baseline, a threshold test needs the rate expected under
+  the alternative (`--assumed-rate`, the value of the quantity) and a paired test the flip rate
+  (`--flip-rate`, from an A/A rerun or the last comparison); without them the targets are null and
+  the reason names the flag. Every assumption is written under `assumptions` with its source.
+- Bug-finding rows have no target: that pool is sized by its coverage list, not by power.
 
 ## 3. Cases
 
@@ -235,8 +251,28 @@ For a component eval, `trigger` and `inputs` hold the handoff as the component r
 
 **Quality cases come from `aot-evals draw`, never by hand.** It draws from the frame with the
 eval's seed, stratified by use case and oversampled as declared, records `inclusion_prob` on each
-case, and logs every skip with its reason. A quality case without `draw` is refused from the
-estimate (rule 6). Bug-finding cases carry no `draw` and never enter θ̂ (rule 5).
+case, and logs every skip with its reason. A quality case without `draw`, or with a `draw` from
+another frame or seed than the spec's, is refused from the estimate (rule 6). Bug-finding cases
+carry no `draw` and never enter θ̂ (rule 5); a `draw` on one is ignored, with a note.
+
+- **The frame's rows.** Each row of the frame's import is a JSON object with an `id` (or
+  `trace_id`), a `use_case`, and the fields the case needs (`trigger`, `inputs`, `start_state`,
+  `followups`, `expected_end_state`, `requirements`, `rules_not_applicable`, `failure_modes`,
+  `coverage_entries`, and the `cluster_key` field). Only those are copied into the case, with
+  `provenance` pointing at the trace. Rows with no use case, or one the spec doesn't name, are
+  counted in the draw log and never drawn.
+- **The order.** Each use case is drawn as the first n of a seeded random order of its rows
+  (`stats.draw_order`, one stream per use case). So drawing more later extends the same draw and
+  rewrites the earlier cases' π (an expansion), and resizing one use case never changes another's.
+  n comes from `--n USE_CASE=N`, else `plan.yaml`'s target, else the last draw.
+- **Skips.** `draw --skip TRACE_ID --reason R` takes a row out of the frame; the next row of the same
+  order replaces it, and π counts the rows that remain. Skips, frame sizes and the frame's hash are
+  in `<eval>/draw.json`; a new frame or seed starts a new log.
+- **Removing cases.** A quality case the draw no longer holds (a smaller n, a skip, a new seed) is
+  removed only with `--prune`; without it `draw` refuses, so no one trims the quality set by hand.
+- **Clusters.** A case's cluster is its `cluster`, else the value of its `cluster_key` field, else its
+  id. Clusters shared by the two pools are listed in the report (`design.clusters`), since the pools
+  must be disjoint by cluster key (rule 10).
 
 ## 4. Checks and judges
 
@@ -255,13 +291,18 @@ refused). Judge files keep their front matter, with these changes:
 
 The manifest becomes `aot-evals/run-manifest@2`:
 
-- adds `eval` (id and version) and `spec_sha`, one hash per part (below);
-- `case_set` adds each quality case's `inclusion_prob`;
+- adds `eval` (id and version), `spec_sha`, one hash per part (below), and `spec_complete`;
+- `case_set` adds each quality case's `inclusion_prob` (null for one without a valid draw);
+- `spec_issues` (the fields missing or invalid when the run started) replaces 1.x `unmet_gates`;
+- `fakes_sha256` hashes the agent system's shared `env/`, and `standard_sha` its shared standard;
 - removes `simulator`;
-- everything else as 1.x, including `fakes_sha256` and the resume rules.
+- everything else as 1.x, including the resume rules.
 
-`outcomes.jsonl` attempt lines rename `category` to `use_case` and `set` to `pool`. The agent
-contract's per-result fields keep their names.
+`outcomes.jsonl` attempt lines rename `category` to `use_case` and `set` to `pool`. Check lines add
+`counted`: true for a failure mode's counted check, false for a diagnostic (rule 12). An attempt's
+`passed` is its counted code checks' verdict. The agent contract's per-result fields keep their
+names. `run` takes k from `measurement.trials` (3 while it is `auto`), `--use-case` in place of
+`--category`, and for a component eval invokes the component through `eval.yaml`'s `invoke`.
 
 **Which runs can be compared.** The spec says what a run's number means, so two runs compare only
 when they measured the same thing. `spec_sha` holds one hash per part, `{estimand, design,
@@ -290,14 +331,27 @@ values are null with a reason, never 0, and nothing is pre-rounded.
 | `schema`, `generated`, `runs`, `refused` | as 1.x | |
 | `eval` | `{id, version, unit, quantity, decision}` | Estimand |
 | `spec` | `{complete, missing[{field, why, blocks[]}], invalid[…], notes[…], defaults[{field, value}]}` (§2) | all |
-| `estimate` | the headline: `{theta, ci, ci_method, weights{use_case: w}, weights_source, estimator: "hajek", corrected, n_cases, n_clusters, k}` | Estimand, design |
-| `use_cases` | one row per use case and pool: 1.x category rows, with `share`, `cost`, `weight`, `inclusion_prob_range` | Estimand, design |
-| `design` | `{quality{n, drawn, seed, skips[]}, bug_finding{n, coverage}, clusters{n, design_effect, largest}}` | Design |
+| `estimate` | the headline: `{theta, ci, ci_method, se, quantity, weights{use_case: w}, weights_source, estimator: "hajek", corrected, n_cases, n_clusters, k, null_reason}` | Estimand, design |
+| `use_cases` | one row per use case and pool: 1.x category rows, with `share`, `cost`, `weight`, `inclusion_prob_range`, and `estimate` (the use case's Hájek μ̂ of the quantity, quality pool only) | Estimand, design |
+| `design` | `{quality{n, drawn, frame, seed, oversample, strata, skips[], refused[]}, bug_finding{n, coverage}, clusters{n, n_bug_finding, cluster_key, design_effect, icc, largest, mean_size, shared_with_bug_finding}, cases_without_pool[]}` | Design |
 | `measurement` | `{failure_modes[{id, check, catch, clean, j, inflation, corrected_rate}], eval_vs_people{catch, clean, labels{fail, pass}}, person_anchored{ppi}, variance{icc, between, within}, people{ac1, specific_agreement}}` | Measurement |
 | `decision` | `{test, quantity, bar, margin, alpha, power, looks, result: "pass" \| "fail" \| "insufficient", interval, detectable_effect, cases_needed, gates[{use_case, result, p, p_adjusted}], also_requires[{eval, result}], constraints{status, breaches[]}}` | Decision rule |
 | `comparison` | as 1.x, with the verdict read from the paired sign-flip test and `variance_band` removed | Decision rule |
 | `coverage`, `redundancy`, `cases`, `conditions`, `next_actions` | as 1.x (`conditions.simulator` removed) | |
 | `checks` | as 1.x, with `catch` and `clean` in place of `tnr` and `tpr` | Measurement |
+
+**How the estimate is computed** (estimators §7). A trial scores 1 for `pass_rate` when every
+counted check of the modes that apply to its case passed, and for `failure_rate:<mode>` when that
+mode's check failed; a trial missing a counted verdict is unscored. ŷ is a case's mean over its
+scored trials. θ̂ = Σ w_s μ̂_s over the use cases with weight, μ̂_s the Hájek mean of ŷ over the
+quality cases that count (a valid draw, screened, committed). Its interval is normal, with each use
+case's linearized variance summed over clusters and floored at an Agresti–Caffo-adjusted binomial
+variance (`stats.stratified_hajek`, statistics §2.3). `theta` is null, with `null_reason`, when the
+spec blocks the estimate, a weight is unstated, there is no run, a use case with weight has no
+scored case, or the runs are refused. `refused` is set when a run's manifest is not v2 or its
+`estimand`, `design` or `measurement` hash differs from the current spec's: those numbers are a
+different quantity. Until judge corrections land, `corrected` is false and `corrected_reason` names
+the counted judges.
 
 **Removed from v1:** `validity` (compounded validity), `online` (always null), `regime`,
 `sets` (now `estimate`, `design` and `use_cases`), `categories` (now `use_cases`), the `simple`
@@ -320,8 +374,9 @@ Unchanged in purpose: `start`, `doctor`, `init`, `status`, `validate`, `import`,
 | `--eval <id>` | new global option |
 | `init [--eval <id> --component <name>]` | scaffolds an eval folder with `eval.yaml`, and the agent system's shared files if missing; `--component` alone names the eval for the component; refuses a second system eval and an id that names a shared folder |
 | `validate`, `status` | on an agent folder with 2.0 evals, read the specs: each missing, invalid and (with `--warnings`) noted field, and the defaults filled |
-| `draw` | new: seeded stratified draw of the quality set from the frame, with π |
-| `plan` | replaces `allocate`; targets from the decision rule |
+| `draw [--n UC=N] [--skip ID --reason R] [--prune] [--dry-run]` | new: seeded stratified draw of the quality set from the frame, with π (§3) |
+| `plan [--assumed-rate R] [--flip-rate D] [--total N] [--write]` | replaces `allocate`; targets from the decision rule (§2) |
+| `screen`, `run`, `report` | read a 2.0 eval: `run --use-case`, k from `measurement.trials`; `report` writes the §6 keys so far (`--candidate` and `--html` not yet) |
 | `migrate --to 2` | new: 1.x suite to a 2.0 end-to-end eval ([§8](#8-migration-from-1x)) |
 | `build`, `components`, `discovery-page` | rewritten around the four parts (stage 7) |
 | `demo` | the online store ([§9](#9-the-online-store-example)) |

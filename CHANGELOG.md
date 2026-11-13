@@ -6,6 +6,22 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+- **2.0 estimand and design** (stage 4, docs/v2-design.md §2–§6). `aot-evals --eval ID plan
+  [--write]` sizes each use case's quality set from the decision rule (a threshold test through the
+  judge's error, or a paired test from the flip rate, times each judge's inflation; an uncalibrated
+  judge at `max_inflation`), around use case gates and oversampling, by optimum allocation; what it
+  can't know before a baseline it asks for (`--assumed-rate`, `--flip-rate`, `--total`).
+  `aot-evals --eval ID draw` draws the quality set from the frame, seeded and stratified by use
+  case, with each case's `draw.inclusion_prob`; drawing more extends the same draw, a skip is logged
+  with its reason and replaced from the seeded order, and drawn cases are removed only with
+  `--prune`. Cases carry `use_case`, `pool` (`quality` or `bug_finding`), `draw` and `cluster`, and
+  `validate` lists the ones that are wrong. `screen`, `run` and `report` read 2.0 evals: runs write
+  the `aot-evals/run-manifest@2` (the eval, `spec_sha` per part, each quality case's π) and
+  attempt lines with `use_case` and `pool`, and `report` writes `aot-evals/report@2` with `eval`,
+  `spec`, `estimate` (the cost- or traffic-weighted Hájek θ̂ with a cluster-aware interval),
+  `use_cases` and `design`, refusing runs made under another estimand, design or measurement.
+  New in `aot_evals.stats`: `stratified_hajek`, `paired_n`, `allocation_design_effect`,
+  `draw_order`; `hajek_mean` takes clusters, and `stratified_draw` is prefix-stable and takes skips.
 - **The 2.0 eval spec** (stage 3, docs/v2-design.md §1–§2). `aot-evals --eval ID init [--component
   NAME]` creates a 2.0 eval: `evals/agents/<agent>/<eval>/` with its `eval.yaml`, cases, checks,
   labels, runs and report, beside the agent system's shared `env/`, `data/` and labeling standard.

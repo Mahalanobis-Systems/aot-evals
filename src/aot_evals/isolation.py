@@ -52,7 +52,7 @@ def make_copy(ev: Evals, label: str) -> Path:
     """A copy of the repository without the eval answers; returns the copy's repository root."""
     src = ev.repo_root
     evals_rel = str(ev.evals_dir.relative_to(src))
-    env_rel = str(ev.p("env").relative_to(src))
+    env_rel = str(ev.env_dir.relative_to(src))
     dest = Path(tempfile.mkdtemp(prefix=f"aot-evals-{label}-")) / src.name
     dest.mkdir()
     files = _git_list(src, "--cached", "--others", "--exclude-standard")
