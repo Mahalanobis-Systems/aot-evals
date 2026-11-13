@@ -6,6 +6,28 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+- **2.0 measurement** (stage 5, docs/v2-design.md §4–§6). Grader error is the **catch rate** and the
+  **clean pass rate** everywhere in 2.0: calibrations add `catch`, `clean`, their intervals and lower
+  bounds, `labels_per_kind` and J (beside 1.x's `tpr`/`tnr`), and `calibrate` and `label status` speak
+  them for a 2.0 eval. **A judge's floor is `measurement.max_inflation`** (default 2.0): a judge counts
+  only when its inflation factor q(1 − q)/(J²·p(1 − p)), at its one-sided lower bounds on catch and
+  clean and the eval's current failure rate on its mode, is within the limit; a refused or
+  uncalibrated judge that feeds the quantity leaves θ̂ null with the reason (rule 13), and `min_tpr`/
+  `min_tnr` on a 2.0 judge are a note. **Corrections feed `estimate`**: `rogan_gladen` (the
+  quantity's judge, or the eval against people for a pass rate) and `ppi` (the labeled trials with
+  every graded one, design-weighted PPI++), with `estimate.uncorrected` kept beside the corrected θ̂
+  and `use_cases[].estimate_corrected` per row. **report.json v2 adds `measurement`**: each failure
+  mode's grader with its catch and clean pass rates, labels per kind, inflation, floor and corrected
+  rate; `eval_vs_people`; `person_anchored`; the variance split; agreement between labelers; and
+  `gates`, one entry per unmet gate. **`agreement` reads 2.0 evals**: floors from `measurement.people`
+  (stated floors read with the non-inferiority margin, null ones from `max_inflation`), labels
+  counted per kind against a count fixed before looking (`labels_per_kind`), and agreement.json adds
+  `labels_per_kind`, `labels_needed`, the margin-based `evidence` the gate now reads, and `gates`
+  (`people_labels`, `people_disputes`, `people_stale`, `people_floor`, `people_triage`).
+  **`trials: auto`** runs k = 3 until a baseline measures the variance split, then the k it implies
+  (the manifest records it under `trials`). `label`, `calibrate`, `agreement`, `judge` and
+  `screen --judges` read 2.0 evals. New in `aot_evals.stats`: `rogan_gladen_rate`, `ppi_weighted`,
+  `trials_for_split`.
 - **2.0 estimand and design** (stage 4, docs/v2-design.md §2–§6). `aot-evals --eval ID plan
   [--write]` sizes each use case's quality set from the decision rule (a threshold test through the
   judge's error, or a paired test from the flip rate, times each judge's inflation; an uncalibrated

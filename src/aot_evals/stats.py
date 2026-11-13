@@ -406,19 +406,94 @@ def rogan_gladen(fail_k: float, n: int, catch_k: float, catch_n: int, clean_k: f
     """
     if min(n, catch_n, clean_n) <= 0:
         return None
-    f_obs, catch, clean = fail_k / n, catch_k / catch_n, clean_k / clean_n
+    f_obs = fail_k / n
+    out = rogan_gladen_rate(f_obs, f_obs * (1 - f_obs) / n, catch_k, catch_n, clean_k, clean_n)
+    if out is None:
+        return None
+    # `youden_j` is the 1.x key, kept beside `j` until stage 8.
+    out["youden_j"] = out["j"]
+    out["method"] = "rogan_gladen_delta"
+    return out
+
+
+def rogan_gladen_rate(observed: float, var_observed: float, catch_k: float, catch_n: int,
+                      clean_k: float, clean_n: int, z: float = Z95) -> dict | None:
+    """Rogan-Gladen for a rate that was estimated, not counted: `observed` is the failure rate the
+    grader reports and `var_observed` its sampling variance under the design (a weighted Hájek
+    mean over use cases and clusters, say, rather than k of n). The correction is linear,
+    f = (observed + clean - 1) / J, so a weighted mean of graded outcomes corrects as a whole
+    (estimators §7). The delta-method variance adds the calibration's own uncertainty, which
+    shrinks only with more labels (statistics §3.2, §3.3):
+
+      Var f = (var_observed + (1 - f)^2 clean(1 - clean) / clean_n + f^2 catch(1 - catch) / catch_n) / J^2
+
+    `rogan_gladen` is the counted case, var_observed = f_obs(1 - f_obs) / n. None unless J > 0
+    and both kinds of label exist."""
+    if min(catch_n, clean_n) <= 0 or var_observed is None or var_observed < 0:
+        return None
+    if not 0 <= observed <= 1:
+        return None
+    catch, clean = catch_k / catch_n, clean_k / clean_n
     j = catch + clean - 1
     if j <= 0:
         return None
-    f = (f_obs + clean - 1) / j
-    var = (f_obs * (1 - f_obs) / n + (1 - f) ** 2 * clean * (1 - clean) / clean_n
-           + f ** 2 * catch * (1 - catch) / catch_n) / j ** 2
+    f = (observed + clean - 1) / j
+    var_labels = ((1 - f) ** 2 * clean * (1 - clean) / clean_n + f ** 2 * catch * (1 - catch) / catch_n) / j ** 2
+    var = var_observed / j ** 2 + var_labels
     se = math.sqrt(max(var, 0.0))
     point = min(1.0, max(0.0, f))
-    # `youden_j` is the 1.x key, kept beside `j` until stage 8.
-    return {"point": point, "ci": [max(0.0, f - Z95 * se), min(1.0, f + Z95 * se)],
-            "observed": f_obs, "catch": catch, "clean": clean, "j": j, "youden_j": j,
-            "method": "rogan_gladen_delta"}
+    return {"point": point, "ci": [max(0.0, f - z * se), min(1.0, f + z * se)], "se": se,
+            "se_from_labels": math.sqrt(max(var_labels, 0.0)),
+            "observed": observed, "catch": catch, "clean": clean, "j": j,
+            "method": "rogan_gladen, delta-method interval with the calibration's uncertainty"}
+
+
+def ppi_weighted(theta_f: float, var_f: float, y: Sequence[float], f: Sequence[float],
+                 weights: Sequence[float], z: float = Z95) -> dict | None:
+    """Prediction-powered estimate of a design-weighted mean (PPI++ with power tuning:
+    Angelopoulos et al. 2023; Angelopoulos, Duchi & Zrnic 2026), for an eval whose graded outcomes
+    are weighted by use case and inclusion probability.
+
+    `theta_f`, `var_f`: the grader's estimate over every scored trial and its design variance
+    (the Hájek θ̂ and its se², which already carry the clusters and use cases). `y`, `f`,
+    `weights`: on the trials a person labeled, the person's value, the grader's value and each
+    trial's design weight (w_s / π_i, shared by its trials). The estimate is
+
+      ȳ_L + λ (θ_f - f̄_L),
+
+    the labels' weighted mean corrected by how far the grader's verdicts on the labeled trials
+    sit from its verdicts on all of them. λ minimizes the variance
+    λ² var_f + (s²_y - 2λ c_yf + λ² s²_f) / n_eff and is clipped to [0, 1]; at 0 it is the
+    labels alone, so it is never meaningfully worse than them. n_eff is Kish's effective size of
+    the labeled weights. The labeled trials are treated as independent of the rest, which holds
+    as their share shrinks. Valid when the labeled trials are a random sample of the scored ones
+    (statistics §3.6): labels come from a queue that draws them, never from picking. None with
+    fewer than two labeled trials or a weight at or below 0."""
+    ys, fs, ws = [float(v) for v in y], [float(v) for v in f], [float(v) for v in weights]
+    n = len(ys)
+    if n < 2 or len(fs) != n or len(ws) != n or any(w <= 0 for w in ws) or var_f is None or var_f < 0:
+        return None
+    sw = sum(ws)
+    wn = [w / sw for w in ws]
+    n_eff = 1 / sum(w * w for w in wn)
+    my = sum(w * v for w, v in zip(wn, ys, strict=True))
+    mf = sum(w * v for w, v in zip(wn, fs, strict=True))
+    adj = n_eff / (n_eff - 1) if n_eff > 1 else 1.0
+    s_y = adj * sum(w * (v - my) ** 2 for w, v in zip(wn, ys, strict=True))
+    s_f = adj * sum(w * (v - mf) ** 2 for w, v in zip(wn, fs, strict=True))
+    c = adj * sum(w * (a - my) * (b - mf) for w, a, b in zip(wn, ys, fs, strict=True))
+    denom = var_f + s_f / n_eff
+    lam = 0.0 if denom <= 0 else min(1.0, max(0.0, (c / n_eff) / denom))
+    point = my + lam * (theta_f - mf)
+    var = lam ** 2 * var_f + (s_y - 2 * lam * c + lam ** 2 * s_f) / n_eff
+    se = math.sqrt(max(var, 0.0))
+    se_lab = math.sqrt(max(s_y / n_eff, 0.0))
+    return {"point": min(1.0, max(0.0, point)), "ci": [max(0.0, point - z * se), min(1.0, point + z * se)],
+            "se": se, "lambda": lam, "n_labeled": n, "n_effective_labeled": n_eff,
+            "labels_only": {"point": my, "se": se_lab,
+                            "ci": [max(0.0, my - z * se_lab), min(1.0, my + z * se_lab)]},
+            "grader": {"point": theta_f, "se": math.sqrt(var_f)},
+            "method": "ppi++ (power-tuned), design-weighted, normal interval"}
 
 
 # ---- what a grader's error costs in cases (docs/statistics.md §3.3) --------------------------
@@ -647,6 +722,30 @@ def variance_components(trials_by_case: Sequence[Sequence[float]]) -> dict | Non
             "within_share_of_error": (within / k) / (between + within / k) if (between + within / k) > 0 else None,
             "se_now": se(n_cases, k), "se_double_cases": se(2 * n_cases, k), "se_double_trials": se(n_cases, 2 * k),
             "method": "one-way random effects (ANOVA), unequal k"}
+
+
+def trials_for_split(between: float, within: float, case_cost: float = 1.0, k_min: int = 3,
+                     k_max: int = 10) -> dict | None:
+    """Trials per case from the measured variance split (rule 16; statistics §3.7, a D-study).
+
+    With N cases of k trials, SE² = between / N + within / (N k), and a case costs `case_cost`
+    trials' worth on top of its own trials (drawing it, screening it, a person reading it). For a
+    fixed budget the SE is smallest at k* = sqrt(case_cost × within / between), the classic
+    two-stage optimum (Cochran 1977, §10.6). It is clamped to [k_min, k_max]: k = 3 is the
+    smallest k that gives a majority and a within-case estimate (statistics §3.7), and k_max
+    stops a split with almost no between-case variance from asking for an unbounded k. With
+    case_cost = 1 (the default when nothing says otherwise) a case is worth one more trial.
+    None for a split that is not a variance."""
+    if between is None or within is None or between < 0 or within < 0 or case_cost <= 0:
+        return None
+    if between == 0:
+        k_star = math.inf if within > 0 else float(k_min)
+    else:
+        k_star = math.sqrt(case_cost * within / between)
+    k = int(min(k_max, max(k_min, math.ceil(k_star - 1e-9)))) if math.isfinite(k_star) else k_max
+    return {"k": k, "k_optimum": k_star if math.isfinite(k_star) else None, "case_cost": case_cost,
+            "k_min": k_min, "k_max": k_max,
+            "bound": "k_min" if k_star <= k_min else "k_max" if k_star > k_max else None}
 
 
 # ---- tests for comparisons -------------------------------------------------------------------

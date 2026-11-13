@@ -1,8 +1,10 @@
 """`report` for a 2.0 eval: `<eval>/report/report.json`, schema `aot-evals/report@2`
 (docs/v2-design.md §6).
 
-This module writes the keys of the estimand and the sampling design: `eval`, `spec`, `estimate`
-(the headline θ̂), `use_cases` (the per-use-case table, the diagnostic beside it) and `design`.
+This module writes the keys of the estimand, the sampling design and the measurement model:
+`eval`, `spec`, `estimate` (the headline θ̂), `use_cases` (the per-use-case table, the
+diagnostic beside it), `design` and `measurement` (each failure mode's grader with its catch and
+clean pass rates and its floor, the eval held to people, the variance split; measurement.py).
 Keys may be added within v2, never removed or renamed. Everything is recomputed from per-trial
 records, nothing is pre-rounded, and an unknown value is null with its reason, never 0.
 
@@ -17,6 +19,11 @@ the mean of its scored trials.
 (rule 6), screened and committed (rule 17), in runs whose estimand, design and measurement hashes
 match the current spec (v2-design §5). θ̂ = Σ w_s μ̂_s with μ̂_s the Hájek mean of ŷ over use case
 s and its interval from the clusters (`stats.stratified_hajek`).
+
+**What the grader's error does to it.** A counted judge that feeds the quantity counts only when
+its error rates are measured and within `measurement.max_inflation`; otherwise θ̂ is null with
+the reason (rule 13). The correction the spec names (`rogan_gladen`, `ppi`) is then applied to
+the observed θ̂; `estimate.uncorrected` keeps the number before it.
 """
 
 from __future__ import annotations
@@ -113,6 +120,8 @@ class Scored:
         verdicts = {ln.get("check_id"): ln.get("passed") for ln in lines if ln.get("counted")}
         wanted = {fm["check"]: fm["id"] for fm in self.ev.failure_modes_for_case(case)
                   if isinstance(fm.get("check"), str)}
+        # each counted check's own verdict, for its failure mode's rate (measurement.py)
+        a["verdicts"] = {c: verdicts.get(c) for c in wanted}
         if not wanted or any(verdicts.get(c) is None for c in wanted):
             return
         a["passed"] = all(verdicts[c] for c in wanted)
@@ -166,16 +175,13 @@ def _budget(spec: Spec, uc: str) -> dict | None:
     return out or None
 
 
-def estimate(s: Scored, refused: str | None, weights: dict | None, source: str | None) -> dict:
+def estimate(s: Scored, refused: str | None, weights: dict | None, source: str | None,
+             meas: dict | None = None) -> dict:
     spec = s.spec
     out = {"theta": None, "ci": None, "ci_method": None, "se": None, "quantity": spec.part("estimand").get("quantity"),
            "weights": weights, "weights_source": source, "estimator": "hajek", "corrected": False,
+           "correction": spec.part("measurement").get("correction"), "uncorrected": None,
            "n_cases": 0, "n_clusters": 0, "k": s.k, "null_reason": None}
-    judges = sorted({fm["check"] for fm in s.ev.failure_modes() if isinstance(fm.get("check"), str)
-                     and s.ev.check_type(fm["check"]) == "judge"})
-    if judges:
-        out["corrected_reason"] = (f"counted judges ({', '.join(judges)}) are taken as they graded; "
-                                   "the correction for their measured error is not applied yet")
     blocked = spec.blocked("estimate")
     if blocked:
         out["null_reason"] = "the spec does not say what the number means: " + ", ".join(
@@ -210,11 +216,51 @@ def estimate(s: Scored, refused: str | None, weights: dict | None, source: str |
         out["null_reason"] = ("no scored quality case in " + ", ".join(r["missing"])
                               + ": θ is unknown without them (aot-evals draw, then run)")
         return out
-    out.update({"theta": r["point"], "ci": r["ci"], "ci_method": r["ci_method"], "se": r["se"]})
+    observed = {"point": r["point"], "ci": r["ci"], "se": r["se"]}
+    out.update({"theta": r["point"], "ci": r["ci"], "ci_method": r["ci_method"], "se": r["se"],
+                "uncorrected": {"theta": r["point"], "ci": r["ci"], "se": r["se"]}})
+    if meas is None:
+        return out
+    from .measurement import correct, judge_block
+
+    why = judge_block(meas)
+    if why:
+        out.update({"theta": None, "ci": None, "se": None, "null_reason": why})
+        return out
+    c = correct(s, meas, weights, observed)
+    out.update(c)
+    if c.get("corrected"):
+        out["ci_method"] = (c.get("correction_detail") or {}).get("method") or out["ci_method"]
     return out
 
 
-def use_case_rows(s: Scored, weights: dict | None) -> list[dict]:
+def _row_correction(s: Scored, est: dict | None, meas: dict | None) -> dict | None:
+    """A use case's μ̂ corrected by Rogan-Gladen, when that is the spec's correction and its
+    grader is measured (the correction is linear, so each row corrects on its own). PPI corrects
+    θ̂ as a whole: its rows stay uncorrected (null)."""
+    if not est or est.get("point") is None or meas is None or meas.get("correction") != "rogan_gladen":
+        return None
+    kind, mode = quantity(s.spec)
+    var = (est.get("se") or 0.0) ** 2
+    if kind == "failure_rate":
+        row = next((r for r in meas["failure_modes"] if r["id"] == mode), None)
+        if not row or row["type"] != "judge":
+            return None
+        from .measurement import judge_calibration
+
+        c = judge_calibration(s.ev, row["check"], meas["alpha"])["counts"]
+        return stats.rogan_gladen_rate(est["point"], var, c["catch_k"], c["catch_n"], c["clean_k"],
+                                       c["clean_n"]) if c else None
+    a = meas["eval_vs_people"].get("all") or {}
+    cat, cln = a.get("catch") or {}, a.get("clean") or {}
+    if not cat.get("n") or not cln.get("n"):
+        return None
+    r = stats.rogan_gladen_rate(1 - est["point"], var, cat["k"], cat["n"], cln["k"], cln["n"])
+    return None if r is None else {**r, "point": 1 - r["point"], "ci": [1 - r["ci"][1], 1 - r["ci"][0]],
+                                   "note": "corrected on the failure rate 1 − μ̂"}
+
+
+def use_case_rows(s: Scored, weights: dict | None, meas: dict | None = None) -> list[dict]:
     spec = s.spec
     replay = bool(s.manifests) and all(m.get("replay") for m in s.manifests)
     rows = []
@@ -244,6 +290,7 @@ def use_case_rows(s: Scored, weights: dict | None) -> list[dict]:
                 row["estimate"] = stats.hajek_mean([vals[c] for c in ids],
                                                    [s.status[c]["inclusion_prob"] for c in ids],
                                                    [s.status[c]["cluster"] for c in ids])
+                row["estimate_corrected"] = _row_correction(s, row["estimate"], meas)
             else:
                 row["note"] = "bug-finding cases: they find failures and never enter θ̂ (rule 5)"
             if left:
@@ -302,6 +349,9 @@ def build(ev: Eval, run_ids: list[str] | None = None) -> dict:
     s = Scored(ev, run_ids)
     weights, source = use_case_weights(spec)
     refused = refusal(ev, spec, s.manifests)
+    from .measurement import section
+
+    meas = section(s, weights, refused)
     report = {
         "schema": SCHEMA,
         "generated": now_iso(),
@@ -309,9 +359,10 @@ def build(ev: Eval, run_ids: list[str] | None = None) -> dict:
         "runs": [m["run_id"] for m in s.manifests],
         "eval": eval_key(spec),
         "spec": {**spec.as_dict(), "sha": part_hashes(spec, ev)},
-        "estimate": estimate(s, refused, weights, source),
-        "use_cases": None if refused else use_case_rows(s, weights),
+        "estimate": estimate(s, refused, weights, source, meas),
+        "use_cases": None if refused else use_case_rows(s, weights, meas),
         "design": design_key(s),
+        "measurement": meas,
     }
     return report
 

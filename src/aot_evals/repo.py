@@ -387,6 +387,10 @@ class Eval(_Runs):
         return self.agent_system.evals_dir
 
     @property
+    def agent_name(self) -> str:
+        return self.agent_system.agent_name
+
+    @property
     def old_layout(self) -> bool:
         return False
 

@@ -80,7 +80,7 @@ def _evals(args) -> Evals:
 # Commands that work on an agent folder holding 2.0 evals (docs/v2-design.md §1). The rest read a
 # 1.x suite only, until their stage of the 2.0 refactor.
 V2_READY = {"init", "validate", "status", "import", "log", "activity", "snapshot", "plan", "draw",
-            "screen", "run", "report"}
+            "screen", "run", "report", "label", "calibrate", "agreement", "judge"}
 
 
 def _one_eval(args, ev: Evals):
@@ -94,6 +94,22 @@ def _one_eval(args, ev: Evals):
 def _v2(args, ev: Evals) -> bool:
     """Whether this command works on the agent's 2.0 evals rather than its 1.x suite."""
     return bool(getattr(args, "eval", None)) or (ev.has_evals and not ev.has_v1_suite)
+
+
+def _target(args):
+    """What a command that reads a suite or an eval works on: the 2.0 eval, or the 1.x suite."""
+    ev = _evals(args)
+    return _one_eval(args, ev) if _v2(args, ev) else ev
+
+
+def _default_runs(ev) -> list[str]:
+    from .repo import Eval
+
+    if isinstance(ev, Eval):
+        from .report_v2 import default_runs
+
+        return default_runs(ev)
+    return report_mod.default_runs(ev)
 
 
 def _selected_evals(args, ev: Evals) -> list:
@@ -321,8 +337,6 @@ def cmd_allocate(args) -> int:
 def cmd_screen(args) -> int:
     ev = _evals(args)
     if _v2(args, ev):
-        if args.judges:
-            sys.exit("--judges does not read 2.0 evals yet: their judges' calibration is per eval")
         ev = _one_eval(args, ev)
     else:
         _unmet_before(ev, "C7")
@@ -418,10 +432,14 @@ def _run_v2(args, ev: Evals) -> int:
     if not args.purpose:
         sys.exit("aot-evals run: --purpose is required (or --resume RUN_ID)")
     spec = e.spec()
-    trials = spec.part("measurement").get("trials")
     if args.k is None:
-        # trials: auto stays at 3 until a baseline measures the variance split (rule 16)
-        args.k = 1 if args.purpose == "smoke" else trials if isinstance(trials, int) else 3
+        # trials: auto is 3 until a baseline measures the variance split, then from it (rule 16)
+        from .measurement import trials_for_run
+
+        t = trials_for_run(e)
+        args.k = 1 if args.purpose == "smoke" else t["k"]
+        if t["spec"] == "auto" and args.purpose != "smoke":
+            print(f"note: trials auto: k = {t['k']} ({t['source']})", file=sys.stderr)
     if args.purpose == "baseline" and args.k < 3:
         sys.exit("refused: a baseline needs k >= 3 to measure variance (rule 16)")
     if args.model and args.purpose == "candidate" and not args.variable:
@@ -465,6 +483,12 @@ def _spec(ev: Evals, judge_id: str):
 def _judge_ids(ev: Evals, judge_id: str | None) -> list[str]:
     if judge_id:
         return [judge_id]
+    from .repo import Eval
+
+    if isinstance(ev, Eval):
+        from .spec import check_ids
+
+        return sorted(c for c in check_ids(ev.spec()) if ev.check_type(c) == "judge")
     return gates_mod._judge_checks(ev)
 
 
@@ -474,7 +498,7 @@ def cmd_label(args) -> int:
     from . import label_page
     from . import labels as labels_mod
 
-    ev = _evals(args)
+    ev = _target(args)
     if args.action == "status":
         ids = _judge_ids(ev, args.judge)
         if not ids:
@@ -486,7 +510,7 @@ def cmd_label(args) -> int:
         sys.exit("--judge is required")
     spec = _spec(ev, args.judge)
     if args.action == "queue":
-        runs = args.run or report_mod.default_runs(ev)
+        runs = args.run or _default_runs(ev)
         if not runs:
             sys.exit("no runs to sample from; run the agent first (aot-evals run)")
         path, picked = labels_mod.make_queue(ev, spec, runs, args.n, args.seed)
@@ -582,7 +606,7 @@ def cmd_agreement(args) -> int:
 
     from . import agreement as ag
 
-    ev = _evals(args)
+    ev = _target(args)
     what = args.what or ["measure"]
     if what[0] == "label":
         action = what[1] if len(what) > 1 else "status"
@@ -602,7 +626,7 @@ def cmd_agreement(args) -> int:
                 runs = args.run or cand
                 print(f"{len(only)} case(s) whose verdict moved: {', '.join(sorted(only)[:10])}")
             else:
-                runs = args.run or report_mod.default_runs(ev)
+                runs = args.run or _default_runs(ev)
             if not runs:
                 sys.exit("no runs to sample from; run a baseline first (aot-evals run --purpose baseline)")
             path, items = ag.make_queue(ev, runs, per_case=args.per_case, n=args.n, seed=args.seed,
@@ -694,7 +718,7 @@ def cmd_replay(args) -> int:
 def cmd_calibrate(args) -> int:
     from . import calibrate as cal_mod
 
-    ev = _evals(args)
+    ev = _target(args)
     spec = _spec(ev, args.judge)
     backends = args.backend or list(spec.backends)
     pending = cal_mod.pending_calls(ev, spec, backends)
@@ -723,9 +747,9 @@ def cmd_reliability(args) -> int:
 def cmd_judge(args) -> int:
     from .judging import apply_to_run
 
-    ev = _evals(args)
+    ev = _target(args)
     spec = _spec(ev, args.judge)
-    runs = args.run or report_mod.default_runs(ev)
+    runs = args.run or _default_runs(ev)
     for rid in runs:
         res = apply_to_run(ev, spec.id, rid, backend=args.backend, log=_progress(ev, "C10"))
         print(f"{rid}: judged {res['judged']} attempt(s), {res['already_judged']} already judged")

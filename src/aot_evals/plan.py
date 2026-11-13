@@ -110,6 +110,9 @@ def _need(ev: Eval, spec: Spec, rule: dict, *, rate: float | None, flip_rate: fl
             if f is None:
                 out["reason"] = f"judge {j} is no better than chance (J <= 0): no number of cases helps"
                 return out
+            if r is not None and f > max_inf:
+                # the report would refuse it (measurement.judge_floor reads its lower bounds)
+                out["judges"][-1]["over_max_inflation"] = True
             factor = max(factor, f)
         n = math.ceil(out["n_code"] * factor - 1e-9)
         out.update({"inflation": factor, "need": n,
@@ -136,7 +139,7 @@ def _need(ev: Eval, spec: Spec, rule: dict, *, rate: float | None, flip_rate: fl
             if f is None:
                 f = max_inf
             out["judges"].append({"check": j, "catch": r[0] if r else None, "clean": r[1] if r else None,
-                                  "inflation": f, "source": src})
+                                  "inflation": f, "source": src, "over_max_inflation": f > max_inf})
             factor = max(factor, f)
         out.update({"inflation": factor, "need": math.ceil(out["n_code"] * factor - 1e-9),
                     "rule": f"paired_n(flip rate {flip_rate:g}, margin {margin:g}, α {alpha:g}, power {power:g})"})

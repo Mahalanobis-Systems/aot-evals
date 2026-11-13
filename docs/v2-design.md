@@ -279,11 +279,25 @@ carry no `draw` and never enter θ̂ (rule 5); a `draw` on one is ignored, with 
 Code checks are unchanged (`check(start, end, case) -> (bool, detail)`; `USES_AGENT_REPORT` is
 refused). Judge files keep their front matter, with these changes:
 
-- `min_tpr` and `min_tnr` go. A judge's floor comes from `measurement.max_inflation` and the
-  eval's failure rate: the judge passes when its inflation factor at the current rate, computed
-  from its lower confidence bounds on catch and clean, is at or under the limit.
+- `min_tpr` and `min_tnr` go (a 2.0 judge that still sets them gets a note). A judge's floor comes
+  from `measurement.max_inflation` and the eval's failure rate: the judge passes when its inflation
+  factor at the current rate, computed from its lower confidence bounds on catch and clean, is at or
+  under the limit (`measurement.judge_floor`).
+  - **The bounds** are one-sided Wilson lower bounds at the decision rule's α.
+  - **The current rate** is the mode's failure rate in the report's runs (the weighted Hájek mean
+    over the counted quality cases of the use cases the mode applies to), corrected with the
+    judge's point rates and kept half a failure away from 0 and 1 over the trials it rests on.
+  - **A judge with no current calibration** (none, stale, or labels of one kind only) has unknown
+    error rates and does not count either (rule 13). With no scored run yet the floor is `unknown`,
+    and `plan` counts the judge at `max_inflation`.
+  - A counted judge that feeds the quantity (its mode's check, for `failure_rate:<mode>`; every
+    counted judge, for `pass_rate`) and does not count leaves θ̂ null with the reason.
 - Calibration reports **catch rate** and **clean pass rate** (1.x TNR and TPR), each with its
-  interval and its count of labels per kind, plus the inflation factor and the J it implies.
+  interval, its one-sided lower bound and its count of labels per kind (`labels_per_kind:
+  {fail, pass}`), plus J and the inflation factor its lower bounds imply at 50%, 20%, 10% and 3%
+  (`inflation_at_lower_bounds`). The 1.x `tpr`/`tnr` keys stay beside them. A 2.0 calibration's
+  `status` is `calibrated` when it has labels of both kinds and a verdict on each. Whether the
+  judge may count is the floor above, read by `report`, since it depends on the eval's rate.
 - A judge belongs to one eval. Copying a judge into another eval copies its definition, not its
   calibration.
 
@@ -301,8 +315,15 @@ The manifest becomes `aot-evals/run-manifest@2`:
 `outcomes.jsonl` attempt lines rename `category` to `use_case` and `set` to `pool`. Check lines add
 `counted`: true for a failure mode's counted check, false for a diagnostic (rule 12). An attempt's
 `passed` is its counted code checks' verdict. The agent contract's per-result fields keep their
-names. `run` takes k from `measurement.trials` (3 while it is `auto`), `--use-case` in place of
-`--category`, and for a component eval invokes the component through `eval.yaml`'s `invoke`.
+names. `run` takes k from `measurement.trials`, `--use-case` in place of `--category`, and for a
+component eval invokes the component through `eval.yaml`'s `invoke`.
+
+**`trials: auto`** (rule 16) runs k = 3 until a baseline under the current spec measures the split
+of variance between cases and within them (`stats.variance_components`). From then on k is the
+two-stage optimum k* = √(case_cost × within ÷ between) (Cochran 1977 §10.6), with `case_cost` = 1
+(a new case is taken to cost one trial more than its own trials), clamped to [3, 10]
+(`stats.trials_for_split`). The manifest records `trials: {spec, recommended, source, k}`, and an
+explicit `--k` still wins.
 
 **Which runs can be compared.** The spec says what a run's number means, so two runs compare only
 when they measured the same thing. `spec_sha` holds one hash per part, `{estimand, design,
@@ -334,7 +355,7 @@ values are null with a reason, never 0, and nothing is pre-rounded.
 | `estimate` | the headline: `{theta, ci, ci_method, se, quantity, weights{use_case: w}, weights_source, estimator: "hajek", corrected, n_cases, n_clusters, k, null_reason}` | Estimand, design |
 | `use_cases` | one row per use case and pool: 1.x category rows, with `share`, `cost`, `weight`, `inclusion_prob_range`, and `estimate` (the use case's Hájek μ̂ of the quantity, quality pool only) | Estimand, design |
 | `design` | `{quality{n, drawn, frame, seed, oversample, strata, skips[], refused[]}, bug_finding{n, coverage}, clusters{n, n_bug_finding, cluster_key, design_effect, icc, largest, mean_size, shared_with_bug_finding}, cases_without_pool[]}` | Design |
-| `measurement` | `{failure_modes[{id, check, catch, clean, j, inflation, corrected_rate}], eval_vs_people{catch, clean, labels{fail, pass}}, person_anchored{ppi}, variance{icc, between, within}, people{ac1, specific_agreement}}` | Measurement |
+| `measurement` | `{failure_modes[{id, check, type, use_cases, observed_rate, catch, clean, j, labels{fail, pass}, inflation, inflation_at_lower_bounds, floor{status, reason, rate, max_inflation}, corrected_rate, feeds_estimate}], eval_vs_people{catch, clean, all, labels{fail, pass}, labels_needed, floor, failure_rate, stale}, person_anchored{ppi}, variance{icc, between, within, k_recommended}, people{pairs[{ac1, kappa, pass_agreement, fail_agreement}]}, trials, max_inflation, correction, gates[{id, detail}]}` | Measurement |
 | `decision` | `{test, quantity, bar, margin, alpha, power, looks, result: "pass" \| "fail" \| "insufficient", interval, detectable_effect, cases_needed, gates[{use_case, result, p, p_adjusted}], also_requires[{eval, result}], constraints{status, breaches[]}}` | Decision rule |
 | `comparison` | as 1.x, with the verdict read from the paired sign-flip test and `variance_band` removed | Decision rule |
 | `coverage`, `redundancy`, `cases`, `conditions`, `next_actions` | as 1.x (`conditions.simulator` removed) | |
@@ -348,10 +369,28 @@ quality cases that count (a valid draw, screened, committed). Its interval is no
 case's linearized variance summed over clusters and floored at an Agresti–Caffo-adjusted binomial
 variance (`stats.stratified_hajek`, statistics §2.3). `theta` is null, with `null_reason`, when the
 spec blocks the estimate, a weight is unstated, there is no run, a use case with weight has no
-scored case, or the runs are refused. `refused` is set when a run's manifest is not v2 or its
+scored case, the runs are refused, a counted judge that feeds the quantity does not count (§4), or
+the correction lacks its measurement. `refused` is set when a run's manifest is not v2 or its
 `estimand`, `design` or `measurement` hash differs from the current spec's: those numbers are a
-different quantity. Until judge corrections land, `corrected` is false and `corrected_reason` names
-the counted judges.
+different quantity. `corrected` says whether the correction was applied, and `corrected_reason`
+says why not (`correction: none`, or a code check that has nothing to correct).
+
+**The correction** (`measurement.correction`) applies after the uncorrected θ̂, which stays in
+`estimate.uncorrected`. `rogan_gladen` is linear, so it corrects the weighted θ̂ as a whole and each
+use case's μ̂ on its own (`use_cases[].estimate_corrected`), with a delta-method interval that adds
+the calibration's uncertainty (`stats.rogan_gladen_rate`). Its grader is the quantity's judge for
+`failure_rate:<mode>` (the judge's calibration), and the eval against people for `pass_rate` (every
+whole-run label, `eval_vs_people.all`). `ppi` combines the trials a person labeled with every graded
+trial, each weighted by its case's share of θ̂ (`stats.ppi_weighted`, PPI++ with power tuning);
+its labels are the whole-run labels for `pass_rate` and the quantity judge's labels that name a
+trial of the report's runs for `failure_rate`, and it assumes they were drawn at random. A
+`failure_rate` whose check is code has nothing to correct. A correction whose measurement is missing
+leaves θ̂ null with the reason, never silently uncorrected.
+
+**The measurement gates** (`measurement.gates`) each have an id, so a fixture can trigger exactly
+one: `judge_floor` (refused, or no rate to read it at yet), `judge_calibration` (no current
+calibration), `people_unmeasured`, `people_stale`, and agreement.json's own: `people_labels` (a kind
+short of its count), `people_disputes`, `people_floor`, `people_triage`.
 
 **Removed from v1:** `validity` (compounded validity), `online` (always null), `regime`,
 `sets` (now `estimate`, `design` and `use_cases`), `categories` (now `use_cases`), the `simple`
@@ -360,7 +399,12 @@ evidence checks that remain (manifest integrity, screening, trial completeness, 
 by part.
 
 `report/agreement.json` keeps its file and its role (gates read it), renames `catch`/`clean`
-consistently, and adds `labels_per_kind` and the margin-based evidence.
+consistently, and adds `labels_per_kind`, `labels_needed`, the margin-based evidence and `gates`.
+For a 2.0 eval its floors come from `measurement.people`. A stated floor is met when the dev
+point estimate reaches it and its 95% lower bound is within `margin` of it (statistics §4.2,
+`stats.floor_evidence`). A null floor is the `max_inflation` reading, as for a judge, at the eval's
+whole-run failure rate. `labels_per_kind: auto` fixes each kind's count before looking: the Wilson
+±margin size at the stated floor, or at 50% (the widest) where the floor is null.
 
 ## 7. Commands
 
@@ -376,7 +420,8 @@ Unchanged in purpose: `start`, `doctor`, `init`, `status`, `validate`, `import`,
 | `validate`, `status` | on an agent folder with 2.0 evals, read the specs: each missing, invalid and (with `--warnings`) noted field, and the defaults filled |
 | `draw [--n UC=N] [--skip ID --reason R] [--prune] [--dry-run]` | new: seeded stratified draw of the quality set from the frame, with π (§3) |
 | `plan [--assumed-rate R] [--flip-rate D] [--total N] [--write]` | replaces `allocate`; targets from the decision rule (§2) |
-| `screen`, `run`, `report` | read a 2.0 eval: `run --use-case`, k from `measurement.trials`; `report` writes the §6 keys so far (`--candidate` and `--html` not yet) |
+| `screen`, `run`, `report` | read a 2.0 eval: `run --use-case`, k from `measurement.trials` (`auto`: §5); `screen --judges` with the eval's calibrated judges; `report` writes the §6 keys so far (`--candidate` and `--html` not yet) |
+| `label`, `calibrate`, `judge`, `agreement` | read a 2.0 eval: per-judge labels and calibration in catch and clean pass rates (§4); whole-run labels, rulings and triage in `<eval>/labels/` (§6) |
 | `migrate --to 2` | new: 1.x suite to a 2.0 end-to-end eval ([§8](#8-migration-from-1x)) |
 | `build`, `components`, `discovery-page` | rewritten around the four parts (stage 7) |
 | `demo` | the online store ([§9](#9-the-online-store-example)) |
