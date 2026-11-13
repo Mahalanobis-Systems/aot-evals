@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from statistics import NormalDist
 
 Z95 = 1.959963984540054
 Z80_POWER = 0.8416212335729143
@@ -110,6 +111,41 @@ def weighted_estimate(strata: Sequence[tuple[float, float, int]]) -> dict | None
             "weights": {}, "n": sum(n for _, _, n in usable)}
 
 
+def hajek_mean(values: Sequence[float], inclusion_probs: Sequence[float]) -> dict | None:
+    """The Hájek mean of one use case's quality cases: Horvitz-Thompson normalized by its own
+    weights, sum(y_i / pi_i) / sum(1 / pi_i) (Hájek 1971; docs/statistics.md §2.1, estimators §7).
+
+    y_i is case i's outcome averaged over its trials (and corrected, where a correction applies);
+    pi_i is its recorded inclusion probability. Dividing by the sum of the weights rather than by
+    the frame size makes it approximately unbiased and more stable than Horvitz-Thompson itself.
+    With equal pi it is the plain mean.
+
+    `se` is the linearized (Taylor) standard error, treating the draw as with replacement (no
+    finite-population correction, so it errs wide), and `n_effective` is Kish's effective sample
+    size (sum w)^2 / sum w^2: how many equally weighted cases the weighted ones are worth. None
+    when there is no case, or a pi is missing or outside (0, 1]: a case without a recorded pi
+    does not enter a rate (rule 5).
+    """
+    ys, ps = list(values), list(inclusion_probs)
+    if not ys or len(ys) != len(ps):
+        return None
+    if any(not isinstance(p, (int, float)) or not 0 < p <= 1 for p in ps):
+        return None
+    if any(not isinstance(y, (int, float)) for y in ys):
+        return None
+    w = [1 / p for p in ps]
+    sw = sum(w)
+    point = sum(wi * yi for wi, yi in zip(w, ys, strict=True)) / sw
+    n = len(ys)
+    se = None
+    if n > 1:
+        resid = sum((wi * (yi - point)) ** 2 for wi, yi in zip(w, ys, strict=True))
+        se = math.sqrt(n / (n - 1) * resid) / sw
+    return {"point": point, "se": se, "n": n, "sum_weights": sw,
+            "n_effective": sw ** 2 / sum(wi * wi for wi in w), "estimator": "hajek",
+            "se_method": "linearized, with replacement"}
+
+
 def sample_size_for_halfwidth(halfwidth: float, p: float = 0.5) -> int:
     """Cases needed for a 95% interval of +/- halfwidth on a proportion near p."""
     return math.ceil(Z95**2 * p * (1 - p) / halfwidth**2)
@@ -186,7 +222,8 @@ def cases_to_surface(rate: float, probability: float = 0.95) -> int | None:
 
 def labels_for_halfwidth(rate: float, halfwidth: float = 0.10, limit: int = 100_000) -> int | None:
     """The fewest items of one kind for a Wilson 95% interval no wider than +/- halfwidth at
-    `rate`. TPR and TNR are each measured on one kind of label, so this is per class."""
+    `rate`. The catch rate is measured only on runs a person failed and the clean pass rate only
+    on runs a person passed, so this is per kind (docs/statistics.md §3.4)."""
     if not 0 <= rate <= 1 or halfwidth <= 0:
         return None
     for n in range(1, limit + 1):
@@ -255,29 +292,179 @@ def agreement_stats(pairs: Sequence[tuple[bool, bool]]) -> dict | None:
 
 # ---- correcting a rate for a measured judge (M32) -------------------------------------------
 
-def rogan_gladen(q_k: int, q_n: int, tpr_k: int, tpr_n: int, tnr_k: int, tnr_n: int) -> dict | None:
-    """The true rate of the positive class, corrected for a judge's measured error
-    (Rogan & Gladen 1978), with a delta-method 95% interval.
+def rogan_gladen(fail_k: float, n: int, catch_k: float, catch_n: int, clean_k: float, clean_n: int) -> dict | None:
+    """The true failure rate, corrected for a grader's measured error (Rogan & Gladen 1978), with a
+    delta-method 95% interval (docs/statistics.md §3.2).
 
-    q = q_k / q_n is the share of items the judge calls positive; TPR = P(judge positive | truly
-    positive) and TNR = P(judge negative | truly negative), measured on human labels. Then
-    pi = (q + TNR - 1) / (TPR + TNR - 1). The interval carries the uncertainty of all three
-    inputs, so a judge calibrated on few labels gives a wide one. Undefined (None) unless
-    TPR + TNR > 1: a judge no better than chance cannot be corrected.
+    f_obs = fail_k / n is the share of runs the grader fails. The catch rate (catch_k of the
+    catch_n runs a person failed, the grader failed too) and the clean pass rate (clean_k of the
+    clean_n runs a person passed, the grader passed too) are measured on labels. Then
+    f = (f_obs + clean - 1) / J, with J = catch + clean - 1. The interval carries the uncertainty
+    of all three inputs, so a judge calibrated on few labels gives a wide one. Undefined (None)
+    unless J > 0: a grader no better than chance cannot be corrected.
+
+    Failure is the positive class here, as everywhere in 2.0. The 1.x signature took a generic
+    positive class with TPR and TNR; for pass as the positive, TPR is the clean pass rate and TNR
+    the catch rate, and the corrected pass rate is one minus this one.
     """
-    if min(q_n, tpr_n, tnr_n) <= 0:
+    if min(n, catch_n, clean_n) <= 0:
         return None
-    q, tpr, tnr = q_k / q_n, tpr_k / tpr_n, tnr_k / tnr_n
-    j = tpr + tnr - 1
+    f_obs, catch, clean = fail_k / n, catch_k / catch_n, clean_k / clean_n
+    j = catch + clean - 1
     if j <= 0:
         return None
-    pi = (q + tnr - 1) / j
-    var = (q * (1 - q) / q_n + (1 - pi) ** 2 * tnr * (1 - tnr) / tnr_n
-           + pi ** 2 * tpr * (1 - tpr) / tpr_n) / j ** 2
+    f = (f_obs + clean - 1) / j
+    var = (f_obs * (1 - f_obs) / n + (1 - f) ** 2 * clean * (1 - clean) / clean_n
+           + f ** 2 * catch * (1 - catch) / catch_n) / j ** 2
     se = math.sqrt(max(var, 0.0))
-    point = min(1.0, max(0.0, pi))
-    return {"point": point, "ci": [max(0.0, pi - Z95 * se), min(1.0, pi + Z95 * se)],
-            "observed": q, "youden_j": j, "method": "rogan_gladen_delta"}
+    point = min(1.0, max(0.0, f))
+    # `youden_j` is the 1.x key, kept beside `j` until stage 8.
+    return {"point": point, "ci": [max(0.0, f - Z95 * se), min(1.0, f + Z95 * se)],
+            "observed": f_obs, "catch": catch, "clean": clean, "j": j, "youden_j": j,
+            "method": "rogan_gladen_delta"}
+
+
+# ---- what a grader's error costs in cases (docs/statistics.md §3.3) --------------------------
+
+def judge_inflation(p: float, catch: float, clean: float) -> float | None:
+    """How many times more cases a grader's errors cost at a true failure rate p, compared with a
+    grader that never errs: q(1 - q) / (J^2 p(1 - p)), where q = (1 - clean) + J p is the rate
+    the grader reports and J = catch + clean - 1 (Bross 1954; Rubin, Rosenbaum & Cobb 1956).
+
+    Near p = 50% it is about 1 / J^2; for rare failures it is far larger, because false flags
+    on good runs swamp the few real failures: catch 0.90 and clean 0.90 cost 1.6x at 50% and
+    5.8x at 3%. A code check (catch = clean = 1) costs 1x. None when J <= 0 (the grader is no
+    better than chance) or p is not strictly between 0 and 1.
+
+    Pass lower confidence bounds on catch and clean for the conservative reading a judge floor
+    uses (docs/v2-design.md §4). It treats the rates as known: their own uncertainty adds a term
+    that shrinks only with more labels (statistics §3.3, third caution).
+    """
+    if not 0 < p < 1 or not (0 <= catch <= 1 and 0 <= clean <= 1):
+        return None
+    j = catch + clean - 1
+    if j <= 0:
+        return None
+    q = (1 - clean) + j * p
+    return q * (1 - q) / (j ** 2 * p * (1 - p))
+
+
+def cases_needed(n: int, p: float, catch: float = 1.0, clean: float = 1.0) -> int | None:
+    """A case count sized for an error-free grader (a code check or a person), multiplied by the
+    inflation factor of the grader that will actually grade the cases at failure rate p
+    (`judge_inflation`), rounded up. This is how every count in statistics §4.1 takes the
+    grader's error into account. For a threshold test, `threshold_n` writes the judge's error
+    into the test itself, which is exact rather than a variance ratio at one rate."""
+    if n is None or n < 0:
+        return None
+    factor = judge_inflation(p, catch, clean)
+    return None if factor is None else math.ceil(n * factor - 1e-9)
+
+
+# ---- the threshold test: a rate against a fixed bar (docs/statistics.md §3.3, §4.1) ----------
+
+def _z(p: float) -> float:
+    return NormalDist().inv_cdf(p)
+
+
+def binom_cdf(k: int, n: int, p: float) -> float:
+    """P(X <= k) for X ~ Binomial(n, p), through the incomplete beta function."""
+    if k < 0:
+        return 0.0
+    if k >= n:
+        return 1.0
+    if p <= 0:
+        return 1.0
+    if p >= 1:
+        return 0.0
+    return betainc_regularized(n - k, k + 1, 1 - p)
+
+
+def _bisect(f, lo: float = 0.0, hi: float = 1.0, steps: int = 100) -> float:
+    """The root of a function that is positive at lo and negative at hi."""
+    for _ in range(steps):
+        mid = (lo + hi) / 2
+        if f(mid) > 0:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def _grader_scale(rate: float, catch: float, clean: float) -> float:
+    """The rate a grader reports when the true failure rate is `rate`: (1 - clean) + J * rate."""
+    return (1 - clean) + (catch + clean - 1) * rate
+
+
+def threshold_test(failures: int, n: int, bar: float, alpha: float = 0.05, catch: float = 1.0,
+                   clean: float = 1.0, side: str = "below") -> dict | None:
+    """One-sided exact binomial test of a failure rate against a fixed bar, with the grader's
+    error written into the test (statistics §3.3; Feng et al. 2026 for the judge-aware form).
+
+    `failures` of `n` independent cases were failed by the grader. side "below" tests that the
+    true failure rate is under `bar` (H0: rate >= bar), as in "refunds break the policy less than
+    5% of the time"; "above" tests that it is over (H0: rate <= bar). A pass-rate bar is the
+    same test on the failure rate 1 - bar.
+
+    A grader with catch rate c and clean pass rate s reports failures at q = (1 - s) + J * rate,
+    so the test runs on the reported rate against q0 = (1 - s) + J * bar. With a code check
+    (c = s = 1) and no failures, it is the zero-failure rule: 59 clean cases clear a 5% bar.
+    A judge that wrongly flags good runs never returns a clean run, so it needs this form; see
+    `threshold_n` for how many cases it takes.
+
+    `bound` is the one-sided 1 - alpha Clopper-Pearson bound on the true rate (upper for
+    "below", lower for "above"), mapped through the grader; `estimate` is the Rogan-Gladen point.
+    `passed` is p <= alpha, which is the same as the bound clearing the bar. catch and clean are
+    taken as known; pass their lower confidence bounds for a conservative test. Cases must be
+    independent: with clusters, pass counts of clusters (docs/statistics.md §2.4). None when the
+    inputs cannot support a test, including J <= 0.
+    """
+    if side not in ("below", "above") or n <= 0 or not 0 <= failures <= n or not 0 < bar < 1:
+        return None
+    if not 0 < alpha < 1 or not (0 <= catch <= 1 and 0 <= clean <= 1):
+        return None
+    j = catch + clean - 1
+    if j <= 0:
+        return None
+    q0 = _grader_scale(bar, catch, clean)
+    k = failures
+    if side == "below":
+        p = binom_cdf(k, n, q0)
+        q_bound = 1.0 if k == n else _bisect(lambda u: binom_cdf(k, n, u) - alpha)
+    else:
+        p = 1 - binom_cdf(k - 1, n, q0)
+        q_bound = 0.0 if k == 0 else _bisect(lambda u: alpha - (1 - binom_cdf(k - 1, n, u)))
+    observed = k / n
+    estimate = min(1.0, max(0.0, (observed - (1 - clean)) / j))
+    bound = min(1.0, max(0.0, (q_bound - (1 - clean)) / j))
+    return {"test": "threshold", "side": side, "bar": bar, "alpha": alpha, "n": n, "failures": k,
+            "observed": observed, "estimate": estimate, "bound": bound, "p": p, "passed": p <= alpha,
+            "catch": catch, "clean": clean, "j": j, "grader_bar": q0,
+            "method": "exact binomial on the grader's scale" if j < 1 else "exact binomial"}
+
+
+def threshold_n(bar: float, rate: float, alpha: float = 0.05, power: float = 0.80, catch: float = 1.0,
+                clean: float = 1.0) -> int | None:
+    """Cases a threshold test needs: power `power` to show the failure rate is on the right side
+    of `bar` when it truly is `rate`, at one-sided level `alpha`, through a grader with the given
+    catch and clean pass rates (statistics §3.3, §4.1).
+
+    The normal approximation on the grader's scale: with q0 and q1 the reported rates at the bar
+    and at the true rate, n = ((z_a sqrt(q0(1 - q0)) + z_b sqrt(q1(1 - q1))) / (q0 - q1))^2,
+    rounded up. A bar of 5% at a true rate of 1% takes 123 cases with a code check, 863 with a
+    judge at catch 0.80 and clean 0.90, and 176 at catch 0.95 and clean 0.99. The test is exact
+    binomial, whose power saw-tooths in n around this value, so read it as the size to plan for,
+    not a guarantee at every n. The side is set by whether `rate` is below or above `bar`.
+    """
+    if not (0 < bar < 1 and 0 < rate < 1) or rate == bar:
+        return None
+    if not (0 < alpha < 1 and 0 < power < 1) or not (0 <= catch <= 1 and 0 <= clean <= 1):
+        return None
+    if catch + clean - 1 <= 0:
+        return None
+    q0, q1 = _grader_scale(bar, catch, clean), _grader_scale(rate, catch, clean)
+    num = _z(1 - alpha) * math.sqrt(q0 * (1 - q0)) + _z(power) * math.sqrt(q1 * (1 - q1))
+    return math.ceil((num / (q0 - q1)) ** 2 - 1e-9)
 
 
 # ---- combining a few human labels with many automatic verdicts (M33) ------------------------
@@ -470,6 +657,48 @@ def sign_flip_interval(deltas: Sequence[float], clusters: Sequence[str | None] |
     return [bound(-1), bound(+1)]
 
 
+def non_inferiority_test(deltas: Sequence[float], margin: float, alpha: float = 0.05,
+                         clusters: Sequence[str | None] | None = None, draws: int = 20_000,
+                         seed: int = 0) -> dict | None:
+    """Is the candidate no worse than the baseline by more than `margin`? A one-sided sign-flip
+    test on paired per-case deltas (statistics §4.4, §4.5; rule 19).
+
+    `deltas` are candidate minus baseline per case, on a scale where higher is better (a pass
+    rate; negate failure-rate deltas). H0: mean delta <= -margin. Under H0's boundary each case's
+    delta + margin is symmetric about zero, so the observed sum of (delta + margin) is compared
+    with its sum under every sign pattern, one-sided: exact up to 16 units, Monte Carlo above.
+    With `clusters`, signs flip per cluster, with Webb weights at 6-9 clusters (§2.4).
+
+    "No significant difference" is not this test: 4 fixes and 4 breaks on 50 cases give an
+    interval of about +/-11 points, which shows nothing about a 5-point margin.
+
+    `passed` is p <= alpha. `lower` is the lower end of the inverted sign-flip interval at
+    2 * alpha (a one-sided 1 - alpha bound), shown beside it; it is None when there are too few
+    clusters for any interval. A one-sided test on G units cannot return p below 1 / 2^G
+    (`min_attainable_p`), so at four clusters or fewer it cannot pass at 5%.
+    """
+    if not deltas or margin is None or margin <= 0 or not 0 < alpha < 0.5:
+        return None
+    n = len(deltas)
+    units = _cluster_sums(deltas, clusters, mu=-margin)
+    g = len(units)
+    sums = [x for x in units if x != 0]
+    w = "webb" if clusters is not None and 6 <= g < 10 else "rademacher"
+    if not sums:
+        p = 1.0
+    else:
+        patterns, exact = _sign_patterns(len(sums), draws, seed, w)
+        obs = sum(sums)
+        eps = 1e-12 * (1 + abs(obs))
+        hits = sum(sum(s * x for s, x in zip(pat, sums, strict=True)) >= obs - eps for pat in patterns)
+        p = hits / len(patterns) if exact else (hits + 1) / (len(patterns) + 1)
+    interval = sign_flip_interval(deltas, clusters=clusters, alpha=2 * alpha, seed=seed)
+    return {"test": "non_inferiority", "margin": margin, "alpha": alpha, "mean": sum(deltas) / n,
+            "lower": interval[0] if interval else None, "p": p, "passed": p <= alpha, "n": n,
+            "n_clusters": g, "min_attainable_p": 1 / 2 ** g, "weights": w,
+            "method": "one-sided sign-flip, per cluster" if clusters is not None else "one-sided sign-flip"}
+
+
 def mcnemar_midp(gains: int, losses: int) -> float:
     """McNemar's test with the mid-p correction: the exact two-sided p-value minus the
     probability of the observed split itself. The exact conditional test is conservative (its
@@ -646,6 +875,22 @@ def benjamini_hochberg(pvalues: Sequence[float | None]) -> list[float | None]:
     return out
 
 
+def holm(pvalues: Sequence[float | None]) -> list[float | None]:
+    """Holm step-down adjusted p-values (Holm 1979), None left in place: the familywise error
+    rate, the chance of any false alarm among the gates, held at alpha with no assumption about
+    how the p-values depend on each other. Stricter than Benjamini-Hochberg, which controls only
+    the share of false alarms among the gates that fire (statistics §4.6; rule 22). The i-th
+    smallest of m p-values is adjusted to max over j <= i of (m - j + 1) * p_(j), capped at 1."""
+    idx = sorted((p, i) for i, p in enumerate(pvalues) if p is not None)
+    m = len(idx)
+    out: list[float | None] = [None] * len(pvalues)
+    running = 0.0
+    for rank, (p, i) in enumerate(idx, start=1):
+        running = max(running, min(1.0, (m - rank + 1) * p))
+        out[i] = running
+    return out
+
+
 # ---- Student t (the standard library has none) ----------------------------------------------
 
 def _betacf(a: float, b: float, x: float) -> float:
@@ -800,6 +1045,70 @@ def neyman_allocation(strata: dict[str, tuple[float, float]], total: int, floor:
     for c in sorted(raw, key=lambda c: raw[c] - math.floor(raw[c]), reverse=True)[:max(rest, 0)]:
         out[c] += 1
     return out
+
+
+def optimum_allocation(strata: dict[str, dict], total: int,
+                       minimums: dict[str, int] | None = None) -> dict | None:
+    """Split a budget of `total` cases across use cases by optimum allocation, n_s proportional
+    to w_s * sigma_s / sqrt(c_s) (Neyman 1934, with unequal costs, Cochran 1977 §5.5), around
+    each use case's minimum (statistics §2.3; rule 8).
+
+    `strata` maps a use case to {"weight": w, "pass_rate": p, "cost": c}: its weight in theta, its
+    expected pass rate (sigma = sqrt(p(1 - p)), floored at 0.05 so a use case at 0% or 100% is
+    not starved), and the cost of running one of its cases. Before a baseline the spreads are
+    unknown: when any pass rate is missing, all spreads are taken as equal, which is proportional
+    allocation (n_s proportional to w_s). Likewise when any cost is missing, costs are taken as
+    equal. The result says which was assumed.
+
+    `minimums` are the counts each gated use case's decision rule needs (§4.1). A use case the
+    formula gives less than its minimum is fixed at its minimum and the rest of the budget is
+    spread by the same formula over the others, repeated until every minimum holds: the
+    narrowest interval on theta the budget allows, given the minimums. Counts are whole cases,
+    rounded by largest remainder. When the minimums alone exceed the budget, each use case gets
+    its minimum and `shortfall` says how many cases over budget that is.
+
+    None when a weight is missing or negative (an unstated weight is unknown, never 1), or the
+    budget is negative.
+    """
+    if not strata or total is None or total < 0:
+        return None
+    mins = {s: int((minimums or {}).get(s) or 0) for s in strata}
+    if any(v < 0 for v in mins.values()):
+        return None
+    weights = {s: (v or {}).get("weight") for s, v in strata.items()}
+    if any(not isinstance(w, (int, float)) or w < 0 for w in weights.values()):
+        return None
+    rates = {s: (v or {}).get("pass_rate") for s, v in strata.items()}
+    costs = {s: (v or {}).get("cost") for s, v in strata.items()}
+    spread_known = all(isinstance(p, (int, float)) and 0 <= p <= 1 for p in rates.values())
+    cost_known = all(isinstance(c, (int, float)) and c > 0 for c in costs.values())
+    score = {}
+    for s in strata:
+        sigma = math.sqrt(max(rates[s] * (1 - rates[s]), 0.0025)) if spread_known else 1.0
+        score[s] = weights[s] * sigma / (math.sqrt(costs[s]) if cost_known else 1.0)
+    base = {"spread": "measured" if spread_known else "assumed_equal",
+            "cost": "measured" if cost_known else "assumed_equal"}
+    need = sum(mins.values())
+    if need >= total:
+        return {"allocation": dict(mins), "at_minimum": sorted(strata), "shortfall": need - total,
+                **base, "method": "minimums only: the budget does not cover them"}
+    free, fixed = set(strata), set()
+    while True:
+        budget = total - sum(mins[s] for s in fixed)
+        s_free = sum(score[s] for s in free)
+        raw = {s: (budget * score[s] / s_free if s_free > 0 else budget / len(free)) for s in free}
+        under = {s for s in free if raw[s] < mins[s]}
+        if not under:
+            break
+        fixed |= under
+        free -= under
+    out = {s: mins[s] for s in fixed}
+    out.update({s: math.floor(raw[s]) for s in free})
+    rest = total - sum(out.values())
+    for s in sorted(free, key=lambda s: (-(raw[s] - math.floor(raw[s])), s))[:max(rest, 0)]:
+        out[s] += 1
+    return {"allocation": out, "at_minimum": sorted(fixed), "shortfall": 0, **base,
+            "method": "optimum allocation (Neyman, unequal costs) with minimums"}
 
 
 def stratified_draw(population: dict[str, Sequence[str]], n_by_stratum: dict[str, int], seed: int) -> dict:
