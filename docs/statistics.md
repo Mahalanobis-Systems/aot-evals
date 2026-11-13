@@ -327,7 +327,7 @@ Four generators are worth knowing, all for the bug-finding set:
   shrink each failure to the smallest case that still fails.
 
 Synthetic and model-written cases are elicitation by construction. They can be good: crowdworkers
-agreed with 90–100% of the labels in Perez et al. (2022). But their selection probability is
+agreed with 90–100% of the labels in Perez et al. (2023). But their selection probability is
 undefined, so they never join the quality set.
 
 **Rare failures.** Don't wait for random cases to find a rare, costly failure; write cases that
@@ -520,7 +520,7 @@ cases (Ba, Mancenido & Pan 2026).
 Only labels measure validity, so self-consistency and cross-family agreement are reported next to
 the catch and clean pass rates, never in their place.
 
-For pairwise grading, position bias flips many verdicts on hard items (Wang et al. 2023; Shi et al.
+For pairwise grading, position bias flips many verdicts on hard items (Wang et al. 2024; Shi et al.
 2025), so judge both orders and record a flip as no verdict. Judges can also favor their own outputs (Panickssery, Bowman & Feng 2024; Zheng et al. 2023 saw
 signs of it but could not establish it), so a pairwise judge comes from a different family than
 both sides.
@@ -556,7 +556,7 @@ expected answer, a gap in the standard, a missing check) and fix that.
 people grade a few runs and are the reference. **Prediction-powered inference** combines the two
 into an estimate of what people would say about all of them, with a valid interval (Angelopoulos et
 al. 2023). The estimate is the labels' mean, plus a correction for how far the eval's verdicts on the
-labeled runs sit from its verdicts on the rest. PPI++ (Angelopoulos, Duchi & Zrnic 2023) weighs the
+labeled runs sit from its verdicts on the rest. PPI++ (Angelopoulos, Duchi & Zrnic 2026) weighs the
 eval's contribution by how well it tracks the labels: an eval that agrees with people narrows the
 interval well below labels alone, and one that doesn't is given no weight, so the estimate is never
 meaningfully worse than the labels alone. Stratified PPI does the same per segment (Fisch et al.
@@ -916,29 +916,29 @@ articles the check used the abstract; for books, standard bibliographic records.
 - Ba, Y., Mancenido, M. V. & Pan, R. (2026). Can we trust this evaluation? Instance-level reliability of LLM-as-a-judge. arXiv:2610.14029
 - Begg, C. B. & Greenes, R. A. (1983). Assessment of diagnostic tests when disease verification is subject to selection bias. *Biometrics* 39(1):207–215. doi:10.2307/2530820
 - Bross, I. (1954). Misclassification in 2 × 2 tables. *Biometrics* 10(4):478–486. doi:10.2307/3001619
-- Calderon, N., Reichart, R. & Dror, R. (2025). The alternative annotator test for LLM-as-a-judge: How to statistically justify replacing human annotators with LLMs. arXiv:2501.10970
+- Calderon, N., Reichart, R. & Dror, R. (2025). The alternative annotator test for LLM-as-a-judge: How to statistically justify replacing human annotators with LLMs. *ACL 2025*. doi:10.18653/v1/2025.acl-long.782. arXiv:2501.10970
 - Chen, Y. T., Guo, M. & Li, S. (2026). Power analysis for prediction-powered inference. arXiv:2603.16041
 - Cook, J., Rocktäschel, T., Foerster, J., Aumiller, D. & Wang, A. (2024). TICKing all the boxes: Generated checklists improve LLM evaluation and generation. arXiv:2410.03608
 - Dorner, F. E., Nastl, V. Y. & Hardt, M. (2025). Limits to scalable evaluation at the frontier: LLM as judge won't beat twice the data. *ICLR 2025*. arXiv:2410.13341
-- Feng, C., Shen, M., Balashankar, A., Gerner-Beuerle, C. & Rodrigues, M. R. D. (2026). Noisy but valid: Robust statistical evaluation of LLMs with imperfect judges. arXiv:2601.20913
+- Feng, C., Shen, M., Balashankar, A., Gerner-Beuerle, C. & Rodrigues, M. R. D. (2026). Noisy but valid: Robust statistical evaluation of LLMs with imperfect judges. *ICLR 2026*. arXiv:2601.20913
 - Fiedler, J. (2026). Bias and uncertainty in LLM-as-a-judge estimation. arXiv:2605.06939
-- Furuhashi, M., Nakayama, K., Kodama, T. & Sugawara, S. (2025). Are checklists really useful for automatic evaluation of generative tasks? *EMNLP 2025*. arXiv:2508.15218
+- Furuhashi, M., Nakayama, K., Kodama, T. & Sugawara, S. (2025). Are checklists really useful for automatic evaluation of generative tasks? *EMNLP 2025*. doi:10.18653/v1/2025.emnlp-main.538. arXiv:2508.15218
 - Hársfalvi, P. & Reiczigel, J. (2024). The effect of misclassification on sample size for one and two-sample tests with binary endpoints. *Journal of Biopharmaceutical Statistics* 36(3):561–572. doi:10.1080/10543406.2024.2444231
 - Kim, J. P. (2026). Augmenting human evaluation with LLM judges: How many human reviews do you need? arXiv:2605.16354
 - Kumar, A., Liang, P. & Ma, T. (2019). Verified uncertainty calibration. *NeurIPS 2019*. arXiv:1909.10155
 - Kumar, V., Rathore, D. & Moitra, A. (2026). All verdicts are not equal: Rethinking LLM judge reliability. *AACL-IJCNLP 2026*. arXiv:2610.12083
-- Panickssery, A., Bowman, S. R. & Feng, S. (2024). LLM evaluators recognize and favor their own generations. arXiv:2404.13076
+- Panickssery, A., Bowman, S. R. & Feng, S. (2024). LLM evaluators recognize and favor their own generations. *NeurIPS 2024*. doi:10.52202/079017-2197. arXiv:2404.13076
 - Rogan, W. J. & Gladen, B. (1978). Estimating prevalence from the results of a screening test. *American Journal of Epidemiology* 107(1):71–76. doi:10.1093/oxfordjournals.aje.a112510
-- Rubin, T., Rosenbaum, A. S. & Cobb, S. (1956). The use of interview data for the detection of associations in field studies. *Journal of Chronic Diseases* 4(3):253–266. doi:10.1016/0021-9681(56)90028-5
-- Shi, L., Ma, C., Liang, W., Diao, X., Ma, W. & Vosoughi, S. (2025). Judging the judges: A systematic study of position bias in LLM-as-a-judge. *AACL-IJCNLP 2025*. arXiv:2406.07791
-- Wang, P., Li, L., Chen, L. et al. (2023). Large language models are not fair evaluators. arXiv:2305.17926
+- Rubin, T., Rosenbaum, J. & Cobb, S. (1956). The use of interview data for the detection of associations in field studies. *Journal of Chronic Diseases* 4(3):253–266. doi:10.1016/0021-9681(56)90028-5
+- Shi, L., Ma, C., Liang, W., Diao, X., Ma, W. & Vosoughi, S. (2025). Judging the judges: A systematic study of position bias in LLM-as-a-judge. *AACL-IJCNLP 2025*. doi:10.18653/v1/2025.ijcnlp-long.18. arXiv:2406.07791
+- Wang, P., Li, L., Chen, L. et al. (2024). Large language models are not fair evaluators. *ACL 2024*. doi:10.18653/v1/2024.acl-long.511. arXiv:2305.17926
 - Zheng, L., Chiang, W.-L., Sheng, Y. et al. (2023). Judging LLM-as-a-judge with MT-Bench and Chatbot Arena. *NeurIPS 2023 Datasets and Benchmarks*. arXiv:2306.05685
 
 **Combining judges with human labels.**
 - Angelopoulos, A. N., Bates, S., Fannjiang, C., Jordan, M. I. & Zrnic, T. (2023). Prediction-powered inference. *Science* 382(6671):669–674. doi:10.1126/science.adi6000. arXiv:2301.09633
-- Angelopoulos, A. N., Duchi, J. C. & Zrnic, T. (2023). PPI++: Efficient prediction-powered inference. arXiv:2311.01453
-- Fisch, A., Maynez, J., Hofer, R. A., Dhingra, B., Globerson, A. & Cohen, W. W. (2024). Stratified prediction-powered inference for hybrid language model evaluation. arXiv:2406.04291
-- Gligorić, K., Zrnic, T., Lee, C., Candès, E. J. & Jurafsky, D. (2025). Can unconfident LLM annotations be used for confident conclusions? *NAACL 2025*. arXiv:2408.15204
+- Angelopoulos, A. N., Duchi, J. C. & Zrnic, T. (2026). PPI++: Efficient prediction-powered inference. *The Annals of Applied Statistics* 20(3):2235–2252. doi:10.1214/26-AOAS2215. arXiv:2311.01453
+- Fisch, A., Maynez, J., Hofer, R. A., Dhingra, B., Globerson, A. & Cohen, W. W. (2024). Stratified prediction-powered inference for hybrid language model evaluation. *NeurIPS 2024*, 111489–111514, published as "Stratified prediction-powered inference for effective hybrid evaluation of language models". doi:10.52202/079017-3541. arXiv:2406.04291
+- Gligorić, K., Zrnic, T., Lee, C., Candès, E. J. & Jurafsky, D. (2025). Can unconfident LLM annotations be used for confident conclusions? *NAACL 2025*. doi:10.18653/v1/2025.naacl-long.179. arXiv:2408.15204
 - Zrnic, T. & Candès, E. J. (2024). Active statistical inference. *ICML 2024*. arXiv:2403.03208
 
 **Agreement between people.**
@@ -947,13 +947,13 @@ articles the check used the abstract; for books, standard bibliographic records.
 - Dawid, A. P. & Skene, A. M. (1979). Maximum likelihood estimation of observer error-rates using the EM algorithm. *JRSS C* 28(1):20–28. doi:10.2307/2346806
 - Feinstein, A. R. & Cicchetti, D. V. (1990). High agreement but low kappa: I. The problems of two paradoxes. *Journal of Clinical Epidemiology* 43(6):543–549. doi:10.1016/0895-4356(90)90158-L
 - Gwet, K. L. (2008). Computing inter-rater reliability and its variance in the presence of high agreement. *British Journal of Mathematical and Statistical Psychology* 61(1):29–48. doi:10.1348/000711006X126600
-- Shankar, S., Zamfirescu-Pereira, J. D., Hartmann, B., Parameswaran, A. G. & Arawjo, I. (2024). Who validates the validators? Aligning LLM-assisted evaluation of LLM outputs with human preferences. *UIST 2024*. arXiv:2404.12272
+- Shankar, S., Zamfirescu-Pereira, J. D., Hartmann, B., Parameswaran, A. G. & Arawjo, I. (2024). Who validates the validators? Aligning LLM-assisted evaluation of LLM outputs with human preferences. *UIST 2024*. doi:10.1145/3654777.3676450. arXiv:2404.12272
 
 **Psychometrics.**
 - Brennan, R. L. (2001). *Generalizability Theory.* New York: Springer. doi:10.1007/978-1-4757-3456-0
 - Cronbach, L. J., Gleser, G. C., Nanda, H. & Rajaratnam, N. (1972). *The Dependability of Behavioral Measurements: Theory of Generalizability for Scores and Profiles.* New York: Wiley.
 - Kolen, M. J. & Brennan, R. L. (2014). *Test Equating, Scaling, and Linking: Methods and Practices* (3rd ed.). New York: Springer. doi:10.1007/978-1-4939-0317-7
-- Lalor, J. P., Wu, H. & Yu, H. (2016). Building an evaluation scale using item response theory. *EMNLP 2016*. arXiv:1605.08889
+- Lalor, J. P., Wu, H. & Yu, H. (2016). Building an evaluation scale using item response theory. *EMNLP 2016*. doi:10.18653/v1/D16-1062. arXiv:1605.08889
 - Maia Polo, F., Weber, L., Choshen, L., Sun, Y., Xu, G. & Yurochkin, M. (2024). tinyBenchmarks: Evaluating LLMs with fewer examples. *ICML 2024*. arXiv:2402.14992
 - van der Linden, W. J. (2005). *Linear Models for Optimal Test Design.* New York: Springer. doi:10.1007/0-387-29054-0
 - Vania, C., Htut, P. M., Huang, W. et al. (2021). Comparing test sets with item response theory. *ACL-IJCNLP 2021*, 1141–1158. doi:10.18653/v1/2021.acl-long.92
@@ -963,18 +963,18 @@ articles the check used the abstract; for books, standard bibliographic records.
 - Chen, T. Y., Cheung, S. C. & Yiu, S. M. (1998). Metamorphic testing: A new approach for generating next test cases. Technical Report HKUST-CS98-01, Hong Kong University of Science and Technology. arXiv:2002.12543
 - Claessen, K. & Hughes, J. (2000). QuickCheck: A lightweight tool for random testing of Haskell programs. *ICFP 2000*, 268–279. doi:10.1145/351240.351266
 - DeMillo, R. A., Lipton, R. J. & Sayward, F. G. (1978). Hints on test data selection: Help for the practicing programmer. *Computer* 11(4):34–41. doi:10.1109/C-M.1978.218136
-- Gardner, M. et al. (2020). Evaluating models' local decision boundaries via contrast sets. *Findings of EMNLP 2020*. arXiv:2004.02709
-- Gururangan, S. et al. (2018). Annotation artifacts in natural language inference data. *NAACL 2018*. arXiv:1803.02324
+- Gardner, M. et al. (2020). Evaluating models' local decision boundaries via contrast sets. *Findings of EMNLP 2020*. doi:10.18653/v1/2020.findings-emnlp.117. arXiv:2004.02709
+- Gururangan, S. et al. (2018). Annotation artifacts in natural language inference data. *NAACL 2018*. doi:10.18653/v1/N18-2017. arXiv:1803.02324
 - Hughes, J. (2007). QuickCheck testing for fun and profit. *Practical Aspects of Declarative Languages (PADL)*, LNCS, 1–32. doi:10.1007/978-3-540-69611-7_1
-- Hyun, S., Guo, M. & Babar, M. A. (2024). METAL: Metamorphic testing framework for analyzing large-language model qualities. *ICST 2024*. arXiv:2312.06056
+- Hyun, S., Guo, M. & Babar, M. A. (2024). METAL: Metamorphic testing framework for analyzing large-language model qualities. *ICST 2024*. doi:10.1109/ICST60714.2024.00019. arXiv:2312.06056
 - Just, R., Jalali, D., Inozemtseva, L., Ernst, M. D., Holmes, R. & Fraser, G. (2014). Are mutants a valid substitute for real faults in software testing? *FSE 2014*, 654–665. doi:10.1145/2635868.2635929
 - Kuhn, D. R., Wallace, D. R. & Gallo, A. M. (2004). Software fault interactions and implications for software testing. *IEEE Transactions on Software Engineering* 30(6):418–421. doi:10.1109/TSE.2004.24
 - Mirzadeh, I. et al. (2025). GSM-Symbolic: Understanding the limitations of mathematical reasoning in large language models. *ICLR 2025*. arXiv:2410.05229
 - Northcutt, C. G., Athalye, A. & Mueller, J. (2021). Pervasive label errors in test sets destabilize machine learning benchmarks. *NeurIPS 2021 Datasets and Benchmarks*. arXiv:2103.14749
 - Oren, Y., Meister, N., Chatterji, N., Ladhak, F. & Hashimoto, T. B. (2024). Proving test set contamination in black box language models. *ICLR 2024*. arXiv:2310.17623
 - Ostrand, T. J. & Balcer, M. J. (1988). The category-partition method for specifying and generating functional tests. *Communications of the ACM* 31(6):676–686. doi:10.1145/62959.62964
-- Perez, E. et al. (2022). Discovering language model behaviors with model-written evaluations. arXiv:2212.09251
-- Poliak, A., Naradowsky, J., Haldar, A., Rudinger, R. & Van Durme, B. (2018). Hypothesis only baselines in natural language inference. \*SEM 2018. arXiv:1805.01042
+- Perez, E. et al. (2023). Discovering language model behaviors with model-written evaluations. *Findings of ACL 2023*. doi:10.18653/v1/2023.findings-acl.847. arXiv:2212.09251
+- Poliak, A., Naradowsky, J., Haldar, A., Rudinger, R. & Van Durme, B. (2018). Hypothesis only baselines in natural language inference. \*SEM 2018. doi:10.18653/v1/S18-2023. arXiv:1805.01042
 - Yang, S. et al. (2023). Rethinking benchmark and contamination for language models with rephrased samples. arXiv:2311.04850
 - Yoo, S. & Harman, M. (2012). Regression testing minimization, selection and prioritization: A survey. *Software Testing, Verification and Reliability* 22(2):67–120. doi:10.1002/stv.430
 - Zhu, Y. et al. (2025). Establishing best practices for building rigorous agentic benchmarks. arXiv:2507.02825

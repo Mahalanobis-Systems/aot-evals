@@ -440,51 +440,92 @@ from:
 ## 12. Prior work
 
 Every part has precedent, and recent work combines several of them for language models and agents.
-aot-evals builds on all of it.
+aot-evals builds on all of it. The closest work, against the four parts (✓ covers it; ~ partly;
+– not addressed), judged from each paper's full text where it was available and its abstract
+otherwise (November 2026):
+
+| Work | Estimand | Sampling design | Grader error | Decision rule | Grader error in power | Rules for building a suite |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| Miller (2024) | ✓ | ✓ clustered | – | ✓ paired tests, power | – | – |
+| Chouldechova et al. (2024) | ✓ | ✓ | – | – | – | – |
+| Binette and Reiter (2024) | ✓ | ✓ | ~ annotation as part of data acquisition | ~ intervals only | – | – |
+| Huang (2026) | ✓ | – | ~ verifier error, reported | ~ practical margin | – | ~ reporting guidance |
+| Feng et al. (2026) | ~ one failure rate | – | ✓ | ✓ threshold test | ✓ | – |
+| Chen, Guo and Li (2026) | – | – | ✓ via PPI | ✓ power, sample size | ✓ via PPI's variance | – |
+| Kim (2026) | – | ✓ two-stage, known π | ~ via R² | ~ precision target | ✓ | – |
+| Fiedler (2026) | – | – | ✓ incl. differential error | – | – | – |
+| Schultzberg (2026) | – | – | ~ | ✓ ship, test or stop | – | – |
+| Kotawala (2026) | – | ~ clusters | – | ✓ paired, multiplicity, anytime-valid | – | – |
+| Reuel et al. (2024); Zhu et al. (2025) | – | – | – | – | – | ~ checklists, not derived |
+| **aot-evals 2.0** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ derived from the four parts |
+
+What the table describes:
 
 - Miller (2024) treats eval questions as a draw from a larger population, with clustered standard
-  errors, paired comparisons and power analysis. It does not model grading error.
+  errors, paired comparisons and power analysis, and does not model grading error.
 - Chouldechova et al. (2024) define the population an eval measures, and argue that an eval sampled
-  by red-teaming would overstate how often failures occur in normal use. They offer no error model
-  for annotators and no decision rule.
+  by red-teaming would overstate how often failures occur in normal use.
 - Binette and Reiter (2024) bring clinical-trial estimands to ML evaluation (metric, population, how
-  data and labels are acquired, aggregation), with intervals but no thresholds or power.
+  data and labels are acquired, aggregation).
 - Huang (2026) asks what an agent leaderboard rank actually compares: the estimand, the agent
   configuration as the unit, the verifier's error rates and a practical margin.
-- Prediction-powered inference (Angelopoulos et al. 2023) corrects a judge's scores with human
-  labels and gives valid intervals. Boyeau et al. (2024) apply it to model evaluation, and Fisch et
-  al. (2024) stratify it.
-- Judge error in power and sample size is old in epidemiology (Rubin, Rosenbaum & Cobb 1956;
-  Hársfalvi & Reiczigel 2024) and recent for LLM judges: a threshold test whose critical value and
-  power are written in the judge's error rates (Feng et al. 2026), power for prediction-powered
-  inference (Chen, Guo & Li 2026), and how to split a budget between human and judge labels (Kim
-  2026).
-- Wallach et al. (2025) and Salaudeen et al. (2025) set out validity frameworks for AI evaluation,
-  conceptually rather than as a statistical object.
+- Feng et al. (2026) give a threshold test whose critical value and power are written in the judge's
+  error rates; Chen, Guo and Li (2026) give power and sample size for prediction-powered inference;
+  Kim (2026) splits a budget between human and judge labels under a stratified two-stage design.
+- Fiedler (2026) shows that correcting two versions with one shared estimate of a judge's error
+  rates, when its rates differ between them, can reverse a comparison with apparent confidence; Li
+  (2026) measures judge error that changes with the agent's version.
+- Schultzberg (2026) gives a closed-form rule for when offline evals alone justify shipping;
+  Kotawala (2026) gives resolution diagnostics for paired comparisons.
+- Reuel et al. (2024) and Zhu et al. (2025) give checklists for building benchmarks, as practice
+  rather than derivation.
+
+**Wider related work.** Correcting a judge's rates with human labels is prediction-powered inference
+(Angelopoulos et al. 2023; Angelopoulos, Duchi & Zrnic 2026), applied to model evaluation by Boyeau et
+al. (2024) and stratified by Fisch et al. (2024); related corrections and reporting standards for
+LLM judges are Lee et al. (2026), Chen et al. (2026), Collot et al. (2026), Messing (2026) and
+Arawjo (2026). Design-based prevalence estimation with LLM labels is in industrial use (Dobi et al.
+2026). Validity frameworks for AI evaluation are conceptual rather than statistical (Wallach et al.
+2025; Salaudeen et al. 2025; Weidinger et al. 2025), and a review of 445 LLM benchmarks found
+patterns in what they measure and how they score it that undermine the validity of their claims
+(Bean et al. 2025). Power analysis came to NLP with Card et al. (2020).
+
+**Grader error in power is old outside AI.** Misclassification shrinks a difference between
+proportions (Bross 1954) and costs a test efficiency (Rubin, Rosenbaum & Cobb 1956; Walsh 1963; Mote
+& Anderson 1965; Quade et al. 1980; Lagakos 1988); sample sizes that compensate for it are worked out
+by Tavaré, Sobel and Gilles (1995) and in closed form by Hársfalvi and Reiczigel (2024). The factor
+sensitivity + specificity − 1 is Youden's index (Youden 1950), and the corrected prevalence's
+variance scales with its inverse square (Rogan & Gladen 1978; Lang & Reiczigel 2014).
 
 Two results limit what the measurement model can do. Dorner, Nastl and Hardt (2025) show that
 correcting a judge that is no stronger than the model being judged saves at most half the human
-labels, so labels don't become free. And correcting two versions with one shared estimate of a
-judge's error rates, when its rates differ between them, can reverse a comparison with apparent
-confidence (Fiedler 2026), which is why a changed judge, or a changed agent under the same judge,
-calls for fresh labels (rule 13).
+labels, so labels don't become free. And the shared-calibration reversal above (Fiedler 2026) is why
+a changed judge, or a changed agent under the same judge, calls for fresh labels (rule 13).
 
 ## 13. References
 
 - AERA, APA & NCME (2014). *Standards for Educational and Psychological Testing.* Washington, DC: American Educational Research Association.
 - Angelopoulos, A. N., Bates, S., Fannjiang, C., Jordan, M. I. & Zrnic, T. (2023). Prediction-powered inference. *Science* 382(6671):669–674. doi:10.1126/science.adi6000
+- Angelopoulos, A. N., Duchi, J. C. & Zrnic, T. (2026). PPI++: Efficient prediction-powered inference. *The Annals of Applied Statistics* 20(3):2235–2252. doi:10.1214/26-AOAS2215. arXiv:2311.01453
+- Arawjo, I. (2026). How to run statistics over LLM judges and trust the results: Calibrated inference for small-sample AI evaluation with evalstats. arXiv:2609.35815
+- Bean, A. M. et al. (2025). Measuring what matters: Construct validity in large language model benchmarks. *NeurIPS 2025, Datasets and Benchmarks Track*. doi:10.52202/085713-0590. arXiv:2511.04703
 - Binette, O. & Reiter, J. P. (2024). Improving the validity and practical usefulness of AI/ML evaluations using an estimands framework. arXiv:2406.10366
 - Boyeau, P., Angelopoulos, A. N., Yosef, N., Malik, J. & Jordan, M. I. (2024). AutoEval done right: Using synthetic data for model evaluation. arXiv:2403.07008
+- Bross, I. (1954). Misclassification in 2 × 2 tables. *Biometrics* 10(4):478–486. doi:10.2307/3001619
+- Card, D., Henderson, P., Khandelwal, U., Jia, R., Mahowald, K. & Jurafsky, D. (2020). With little power comes great responsibility. *EMNLP 2020*, 9263–9274. doi:10.18653/v1/2020.emnlp-main.745
 - Chen, Y. T., Guo, M. & Li, S. (2026). Power analysis for prediction-powered inference. arXiv:2603.16041
+- Chen, Y. T., Lu, S., Li, S., Guo, M. & Li, S. (2026). Efficient inference for noisy LLM-as-a-judge evaluation. arXiv:2601.05420
 - Chouldechova, A. et al. (2024). A shared standard for valid measurement of generative AI systems' capabilities, risks, and impacts. NeurIPS 2024 Workshop on Statistical Foundations of LLMs and Foundation Models. arXiv:2412.01934
 - Cochran, W. G. (1977). *Sampling Techniques* (3rd ed.). New York: Wiley.
 - Cohen, J. (1960). A coefficient of agreement for nominal scales. *Educational and Psychological Measurement* 20(1):37–46. doi:10.1177/001316446002000104
+- Collot, S., Fraser, C., Zhao, J., Shen, W. F., Willi, T. & Leontiadis, I. (2026). Balanced accuracy: The right metric for evaluating LLM judges, explained through Youden's J statistic. *EACL 2026, Industry Track*, 927–936. arXiv:2512.08121
 - Cronbach, L. J. & Meehl, P. E. (1955). Construct validity in psychological tests. *Psychological Bulletin* 52(4):281–302. doi:10.1037/h0040957
+- Dobi, A., Manickavasagam, A., Thompson, B., Yang, X. & Farooq, F. (2026). Measuring the prevalence of policy violating content with ML assisted sampling and LLM labeling. arXiv:2602.18518
 - Dorner, F. E., Nastl, V. Y. & Hardt, M. (2025). Limits to scalable evaluation at the frontier: LLM as judge won't beat twice the data. *ICLR 2025*. arXiv:2410.13341
 - Dwork, C., Feldman, V., Hardt, M., Pitassi, T., Reingold, O. & Roth, A. (2015). The reusable holdout: Preserving validity in adaptive data analysis. *Science* 349(6248):636–638. doi:10.1126/science.aaa9375
-- Feng, C., Shen, M., Balashankar, A., Gerner-Beuerle, C. & Rodrigues, M. R. D. (2026). Noisy but valid: Robust statistical evaluation of LLMs with imperfect judges. arXiv:2601.20913
+- Feng, C., Shen, M., Balashankar, A., Gerner-Beuerle, C. & Rodrigues, M. R. D. (2026). Noisy but valid: Robust statistical evaluation of LLMs with imperfect judges. *ICLR 2026*. arXiv:2601.20913
 - Fiedler, J. (2026). Bias and uncertainty in LLM-as-a-judge estimation. arXiv:2605.06939
-- Fisch, A., Maynez, J., Hofer, R. A., Dhingra, B., Globerson, A. & Cohen, W. W. (2024). Stratified prediction-powered inference for hybrid language model evaluation. arXiv:2406.04291
+- Fisch, A., Maynez, J., Hofer, R. A., Dhingra, B., Globerson, A. & Cohen, W. W. (2024). Stratified prediction-powered inference for hybrid language model evaluation. *NeurIPS 2024*, 111489–111514, published as "Stratified prediction-powered inference for effective hybrid evaluation of language models". doi:10.52202/079017-3541. arXiv:2406.04291
 - Frankl, P. G., Hamlet, R. G., Littlewood, B. & Strigini, L. (1998). Evaluating testing methods by delivered reliability. *IEEE Transactions on Software Engineering* 24(8):586–601. doi:10.1109/32.707695
 - Haberman, S. J. (2008). When can subscores have value? *Journal of Educational and Behavioral Statistics* 33(2):204–229. doi:10.3102/1076998607302636
 - Hájek, J. (1971). Comment on "An essay on the logical foundations of survey sampling, part one" by D. Basu. In V. P. Godambe & D. A. Sprott (Eds.), *Foundations of Statistical Inference* (p. 236). Toronto: Holt, Rinehart and Winston.
@@ -493,13 +534,28 @@ calls for fresh labels (rule 13).
 - Huang, W.-J. (2026). What does an LLM-agent leaderboard rank actually compare? arXiv:2609.07785
 - Kim, J. P. (2026). Augmenting human evaluation with LLM judges: How many human reviews do you need? arXiv:2605.16354
 - Kish, L. (1965). *Survey Sampling.* New York: Wiley.
+- Kotawala, A. (2026). Resolution diagnostics for paired LLM evaluation. ICML 2026 Workshop on Hypothesis Testing. arXiv:2605.30315
+- Lagakos, S. W. (1988). Effects of mismodelling and mismeasuring explanatory variables on tests of their association with a response variable. *Statistics in Medicine* 7(1–2):257–274. doi:10.1002/sim.4780070126
+- Lang, Z. & Reiczigel, J. (2014). Confidence limits for prevalence of disease adjusted for estimated sensitivity and specificity. *Preventive Veterinary Medicine* 113(1):13–22. doi:10.1016/j.prevetmed.2013.09.015
+- Lee, C., Zeng, T., Jeong, J., Sohn, J. & Lee, K. (2026). How to correctly report LLM-as-a-judge evaluations. *ICML 2026*. arXiv:2511.21140
+- Li, J. (2026). Frozen judges, moving agents: Version-dependent LLM-judge error and the limits of judge-assisted agent evaluation. arXiv:2609.34198
 - Messick, S. (1989). Validity. In R. L. Linn (Ed.), *Educational Measurement* (3rd ed., pp. 13–103). New York: American Council on Education / Macmillan.
+- Messing, S. (2026). Hidden measurement error in LLM pipelines distorts annotation, evaluation, and benchmarking. *NeurIPS 2026*. arXiv:2604.11581
 - Miller, E. (2024). Adding error bars to evals: A statistical approach to language model evaluations. arXiv:2411.00640
+- Mote, V. L. & Anderson, R. L. (1965). An investigation of the effect of misclassification on the properties of χ²-tests in the analysis of categorical data. *Biometrika* 52(1–2):95–109. doi:10.1093/biomet/52.1-2.95
 - Musa, J. D. (1993). Operational profiles in software-reliability engineering. *IEEE Software* 10(2):14–32. doi:10.1109/52.199724
-- Neyman, J. (1934). On the two different aspects of the representative method: The method of stratified sampling and the method of purposive selection. *JRSS* 97(4):558–625. doi:10.2307/2342192
 - Neyman, J. & Pearson, E. S. (1933). On the problem of the most efficient tests of statistical hypotheses. *Phil. Trans. R. Soc. A* 231:289–337. doi:10.1098/rsta.1933.0009
+- Neyman, J. (1934). On the two different aspects of the representative method: The method of stratified sampling and the method of purposive selection. *JRSS* 97(4):558–625. doi:10.2307/2342192
+- Quade, D., Lachenbruch, P. A., Whaley, F. S., McClish, D. K. & Haley, R. W. (1980). Effects of misclassifications on statistical inferences in epidemiology. *American Journal of Epidemiology* 111(5):503–515. doi:10.1093/oxfordjournals.aje.a112930
+- Reuel, A., Hardy, A., Smith, C., Lamparth, M., Hardy, M. & Kochenderfer, M. J. (2024). BetterBench: Assessing AI benchmarks, uncovering issues, and establishing best practices. *NeurIPS 2024, Datasets and Benchmarks Track*. doi:10.52202/079017-0685. arXiv:2411.12990
 - Rogan, W. J. & Gladen, B. (1978). Estimating prevalence from the results of a screening test. *American Journal of Epidemiology* 107(1):71–76. doi:10.1093/oxfordjournals.aje.a112510
-- Rubin, T., Rosenbaum, A. S. & Cobb, S. (1956). The use of interview data for the detection of associations in field studies. *Journal of Chronic Diseases* 4(3):253–266. doi:10.1016/0021-9681(56)90028-5
+- Rubin, T., Rosenbaum, J. & Cobb, S. (1956). The use of interview data for the detection of associations in field studies. *Journal of Chronic Diseases* 4(3):253–266. doi:10.1016/0021-9681(56)90028-5
 - Salaudeen, O. et al. (2025). Measurement to meaning: A validity-centered framework for AI evaluation. arXiv:2505.10573
+- Schultzberg, M. (2026). When can you ship on evals alone? Trial-level surrogacy for offline evaluation of LLM systems. arXiv:2610.10142
+- Tavaré, C. J., Sobel, E. L. & Gilles, F. H. (1995). Misclassification of a prognostic dichotomous variable: Sample size and parameter estimate adjustment. *Statistics in Medicine* 14(12):1307–1314. doi:10.1002/sim.4780141204
 - Wald, A. (1947). *Sequential Analysis.* New York: Wiley.
 - Wallach, H. et al. (2025). Position: Evaluating generative AI systems is a social science measurement challenge. *ICML 2025*. arXiv:2502.00561
+- Walsh, J. E. (1963). Loss in test efficiency due to misclassification for 2 × 2 tables. *Biometrics* 19(1):158–162. doi:10.2307/2527579
+- Weidinger, L. et al. (2025). Toward an evaluation science for generative AI systems. arXiv:2503.05336
+- Youden, W. J. (1950). Index for rating diagnostic tests. *Cancer* 3(1):32–35. doi:10.1002/1097-0142(1950)3:1<32::aid-cncr2820030106>3.0.co;2-3
+- Zhu, Y. et al. (2025). Establishing best practices for building rigorous agentic benchmarks. arXiv:2507.02825
