@@ -54,7 +54,7 @@ moves it 2.3 points.
 
 **The fix.** Before you measure, say how much each kind of mistake costs compared with the others
 (equal is a fine answer, if it's true). Weight the score by it. A kind of request that matters but
-is too rare to move the score, even weighted, gets a check of its own.
+is too rare to move the score, even weighted, gets a decision rule of its own.
 
 **Picture.** 1,000 dots, one per request, colored by kind. The 2 new bad refunds are circled. Beside
 them, two gauges: the plain pass rate, which hasn't visibly moved, and the cost-weighted one, which
@@ -93,7 +93,8 @@ row goes down (90% → 74%).
 > that can be sampled and replayed. The subagent's sampling frame is the distribution of handoffs
 > the orchestrator induces, drawn from end-to-end traces with inclusion probabilities. When a
 > sub-score earns its own report (Haberman's added-value test). A non-inferiority test on the
-> end-to-end eval for every part change, and a multiplicity correction when several evals gate it.
+> end-to-end eval for every part change; a change that must pass both evals needs no multiplicity
+> correction (intersection–union), only enough cases for each.
 > *Rules* 1, 3, 4, 22. *Statistics* §1.3, §4.5, §4.6.
 
 ### 3. Keep the test current
@@ -361,5 +362,6 @@ the 85% line there's a "stop here?" flag, and the true 80% is drawn as a dashed 
 
 > **Under the hood.** Optional stopping and always-valid sequential intervals; adaptive data
 > analysis, the reusable holdout and the Ladder; overoptimization of proxy graders (Goodhart).
-> Benjamini–Hochberg for many gates. Isolation of the cases from the agent. *Rules* 21, 22, 23.
+> Holm or Benjamini–Hochberg when any one of many tests can trigger a claim; none for gates that
+> must all pass (intersection–union). Isolation of the cases from the agent. *Rules* 21, 22, 23.
 > *Statistics* §4.6, §4.7.

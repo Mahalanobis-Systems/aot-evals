@@ -7,7 +7,7 @@ estimand:
     kind: component                # system | component
     component: refund-subagent     # for a component: what it is, named in agent.yaml
     boundary: handoff from the orchestrator's refund route
-  quantity: pass_rate              # pass_rate | failure_rate:<failure mode id>
+  quantity: failure_rate:breaks-policy   # pass_rate | failure_rate:<failure mode id>
   population:
     frame: refund-handoffs-2026-10 # an import id in data/export.manifest.json
     window: 2026-10-01/2026-10-31
@@ -52,7 +52,7 @@ measurement:
       check: policy-judge          # the one check that counts (rule 12)
       diagnostics: []              # other checks on this mode, reported, never counted
     - id: wrong-amount
-      use_cases: ["*"]
+      use_cases: "*"
       check: amount-matches
     - id: unrequested-change
       use_cases: "*"
@@ -62,20 +62,21 @@ measurement:
   correction: ppi                  # none | rogan_gladen | ppi
   max_inflation: 2.0               # how many times more cases a judge may cost (statistics §3.3)
   people:
-    margin: 0.10                   # floors are shown with this non-inferiority margin (§4.2)
+    floors: {catch: null, clean: null}   # the eval against people; null: from max_inflation, as for a judge
+    margin: 0.10                   # floors are shown with this non-inferiority margin (statistics §4.2)
     labels_per_kind: auto          # or a number; auto sizes from the margin
 
 decision_rule:
   test: threshold                  # superiority | non_inferiority | threshold
-  quantity: failure_rate:breaks-policy   # defaults to estimand.quantity
+  quantity: failure_rate:breaks-policy   # defaults to estimand.quantity; must match it
   bar: 0.05                        # threshold only
   margin: null                     # non_inferiority and superiority: the smallest change that matters
   alpha: 0.05
   power: 0.80
   looks: fixed                     # fixed | sequential | optimizer_holdout
-  multiplicity: none               # none | benjamini_hochberg | holm; required when gates > 1
+  multiplicity: none               # none | holm | benjamini_hochberg; needed only when one gate alone can act (statistics §4.6)
   use_case_gates: []                # use cases with their own rule (rule 20); each: {use_case, test, ...}
-  also_requires:                   # other evals that must pass for this decision (estimators §1 rule 6)
+  also_requires:                   # other evals that must pass for this decision (estimators rule 27)
     - eval: end-to-end
       test: non_inferiority
       margin: 0.02

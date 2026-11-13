@@ -78,7 +78,7 @@ decision_rule:
   alpha: 0.05
   power: 0.80
   looks: fixed
-  multiplicity: holm               # θ and the refund gate
+  multiplicity: none               # θ and the refund gate must both pass: no correction (statistics §4.6)
   use_case_gates:
     - use_case: refund
       test: non_inferiority

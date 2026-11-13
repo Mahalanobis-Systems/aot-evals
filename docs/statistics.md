@@ -99,8 +99,9 @@ detects about 11. Weighting helps less than it seems: even at 60 times the weigh
 use case's 10-point drop moves the score only 5.5 points (`stats.blind_spot`).
 
 So a use case that matters and is blind gets its own decision rule: a non-inferiority test on that
-use case alone, sized in §4.1. That makes it a second gate, so the gates need a multiplicity
-correction (§4.6), and it only makes sense when someone would act on that use case by itself (rule 20).
+use case alone, sized in §4.1. That makes it a second gate. When a change ships only if both gates
+pass, neither needs a multiplicity correction, but each needs enough cases of its own (§4.6). And it
+only makes sense when someone would act on that use case by itself (rule 20).
 If no one would, the use case's row is a diagnostic.
 
 ### 1.3 Units: where an eval goes
@@ -123,7 +124,8 @@ Three statistical facts follow for a component behind a context boundary:
 - **A better component isn't a better system.** The component's estimand and the system's are
   different quantities. A change that improves one can hurt the other through the interface between
   them, so a component change also needs a non-inferiority test on the end-to-end eval (§4.5).
-- **Two evals gating one change are two tests** (§4.6).
+- **Two evals gating one change are two tests.** When both must pass, neither needs a correction,
+  and each needs its own power (§4.6).
 
 ### 1.4 When the population moves
 
@@ -409,8 +411,8 @@ valid interval (§3.6).
 
 **Choosing a probabilistic judge's threshold.** Maximizing catch + clean (Youden's J) treats a missed
 failure and a false alarm as equally costly and ignores the base rate. Decision theory puts the
-optimal threshold where the ROC slope equals (cost of a false pass ÷ cost of a false fail) ×
-((1 − p) ÷ p), with p the failure rate. The costs come from the estimand's weights (§1.1). Choose
+optimal threshold where the ROC slope equals (cost of a false fail ÷ cost of a false pass) ×
+((1 − p) ÷ p), with p the failure rate and a failure as the positive. The costs come from the estimand's weights (§1.1). Choose
 the threshold on one part of the labels and score it on another (out of fold), or the rates will be
 optimistic.
 
@@ -467,7 +469,7 @@ Three cautions. Comparisons between versions behave the same way as a single rat
 assumes the judge errs the same way on both versions being compared; a judge that is better at
 grading one version than the other biases the comparison, which no number of cases fixes (Fiedler
 2026). And it treats catch and clean as known: their uncertainty adds a term that shrinks only with
-more labels, and grows as 1/J⁴ (Fiedler 2026; §3.4).
+more labels, not more cases, and is scaled by the same 1/J² (Fiedler 2026; §3.4).
 
 ### 3.4 How many labels, and which ones
 
@@ -728,8 +730,8 @@ the time when the true rate sits at the floor:
 
 | Measured | Point | 95% lower bound | Meets the point floor | Within 10 pts of the floor at the lower bound |
 |---|---:|---:|:---:|:---:|
-| Catch 13 of 15 (floor 85%) | 87% | 62% | yes | no; about 48 needed at this rate |
-| Clean 23 of 30 (floor 75%) | 77% | 59% | yes | no; about 61 needed |
+| Catch 13 of 15 (floor 85%) | 87% | 62% | yes | no; about 53 needed at this rate |
+| Clean 23 of 30 (floor 75%) | 77% | 59% | yes | no; about 65 needed |
 | Catch 15 of 15 | 100% | 80% | yes | yes |
 | Catch 90 of 100 | 90% | 83% | yes | yes |
 
@@ -795,7 +797,9 @@ paired test already handles, and its width depends on k. The band belongs to dri
 difference. On 50 cases with 4 fixes and 4 breaks, the 95% interval on Δ runs about ±11 points. To
 claim "no worse", state a margin Δ in advance and test it: the lower bound of θ_new − θ_old must sit
 above −Δ (rule 19). To show the cheaper model is within 5 points at that flip rate takes about 500
-cases (`stats.cases_for_flip_rate(0.16, 0.05)` = 503). Non-inferiority is the standard design for
+cases (`stats.cases_for_flip_rate(0.16, 0.05)` = 503), at one-sided α = 0.025, the regulatory
+convention for non-inferiority (the lower bound of a two-sided 95% interval); at one-sided α = 0.05,
+about 400. Non-inferiority is the standard design for
 "cheaper and no worse" in clinical trials, and the same arithmetic applies.
 
 Non-inferiority is also how a component change is checked against the system (§1.3) and how a
@@ -803,13 +807,21 @@ blind use case is guarded (§1.2).
 
 ### 4.6 Many gates
 
-**Statistics.** Each gate is a test, and each test at α = 0.05 is a 1-in-20 chance of a false
-alarm. Ten gates with no real change flag at least one about 40% of the time (1 − 0.95¹⁰). That holds
-for per-use-case gates, and for several evals gating one change (§1.3). Control it (rule 22):
-Benjamini–Hochberg controls the share of false discoveries among the gates that fire, when the
-p-values are independent or positively dependent (Benjamini & Hochberg 1995); Holm controls the
-chance of any (Holm 1979). Per-use-case rows that don't gate are diagnostics,
-and their p-values are shown adjusted.
+**Statistics.** Whether several tests need a correction depends on how they combine into the
+action (rule 22).
+
+- **All must pass.** A change ships only when every gate passes: the headline, each gated use case,
+  each eval it also requires. Shipping a bad change needs every gate to pass wrongly, so testing each
+  at α keeps that chance at α or below. This is the intersection–union test (Berger 1982). No
+  correction is needed; the cost is power, since the change needs enough cases to pass every gate.
+- **Any one acts.** A regression flagged in any use case blocks a change, or an improvement in any
+  use case is claimed. Each test at α = 0.05 is a 1-in-20 chance of a false alarm, and ten tests with
+  no real change flag at least one about 40% of the time (1 − 0.95¹⁰). Holm controls the chance of
+  any false alarm (Holm 1979), which fits a decision. Benjamini–Hochberg controls the share of false
+  discoveries among the tests that fire, when the p-values are independent or positively dependent
+  (Benjamini & Hochberg 1995), which fits a list of findings to follow up rather than one action.
+
+Per-use-case rows that don't gate are diagnostics, and their p-values are shown adjusted.
 
 ### 4.7 Looks: stop peeking
 
@@ -910,6 +922,7 @@ articles the check used the abstract; for books, standard bibliographic records.
 **Measurement error and judges.**
 - Ba, Y., Mancenido, M. V. & Pan, R. (2026). Can we trust this evaluation? Instance-level reliability of LLM-as-a-judge. arXiv:2610.14029
 - Begg, C. B. & Greenes, R. A. (1983). Assessment of diagnostic tests when disease verification is subject to selection bias. *Biometrics* 39(1):207–215. doi:10.2307/2530820
+- Berger, R. L. (1982). Multiparameter hypothesis testing and acceptance sampling. *Technometrics* 24(4):295–300. doi:10.2307/1267823
 - Bross, I. (1954). Misclassification in 2 × 2 tables. *Biometrics* 10(4):478–486. doi:10.2307/3001619
 - Calderon, N., Reichart, R. & Dror, R. (2025). The alternative annotator test for LLM-as-a-judge: How to statistically justify replacing human annotators with LLMs. *ACL 2025*. doi:10.18653/v1/2025.acl-long.782. arXiv:2501.10970
 - Chen, Y. T., Guo, M. & Li, S. (2026). Power analysis for prediction-powered inference. arXiv:2603.16041
