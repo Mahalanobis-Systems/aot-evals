@@ -441,12 +441,13 @@ def corrected_trigger_rate(rate: float | None, n_cases: int, judge: dict | None)
     cm = (judge or {}).get("confusion")
     if rate is None or not cm or n_cases <= 0:
         return None
-    pass_k = round((1 - rate) * n_cases)
-    r = stats.rogan_gladen(pass_k, n_cases, cm["tp"], cm["tp"] + cm["fn"], cm["tn"], cm["tn"] + cm["fp"])
+    fail_k = n_cases - round((1 - rate) * n_cases)
+    # The confusion matrix takes pass as the positive: tn (both fail) is the catch, tp the clean pass.
+    r = stats.rogan_gladen(fail_k, n_cases, cm["tn"], cm["tn"] + cm["fp"], cm["tp"], cm["tp"] + cm["fn"])
     if r is None:
         return {"point": None, "ci": None, "observed": rate,
                 "reason": "TPR + TNR <= 1 on the labels: the judge is no better than chance"}
-    return {"point": 1 - r["point"], "ci": [1 - r["ci"][1], 1 - r["ci"][0]], "observed": rate,
+    return {"point": r["point"], "ci": r["ci"], "observed": rate,
             "n_cases": n_cases, "calibrated": (judge or {}).get("status") == "calibrated",
             "method": r["method"]}
 
