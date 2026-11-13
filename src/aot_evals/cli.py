@@ -3,8 +3,9 @@
     aot-evals demo [DIR]                a toy agent with a finished suite, to try it in minutes
     aot-evals doctor                    check the environment (paste into bug reports)
     aot-evals init                      create the agent's suite, evals/agents/<agent>/, with templates
+    aot-evals --eval ID init [--component NAME]   2.0: create one eval folder with its eval.yaml
     aot-evals status [--gates|--json]   the phase, trust per category, what changed, the next step
-    aot-evals validate                  every problem and warning, across all gates
+    aot-evals validate                  every problem and warning, across all gates (2.0: the eval spec)
     aot-evals import FILE ...           C0: copy an export into evals/data/, record provenance
     aot-evals allocate [--write]        C5: size both case sets, print the arithmetic
     aot-evals screen [--read-by NAME]   C7: reference / do-nothing / claim screens per case
@@ -68,7 +69,28 @@ def _evals(args) -> Evals:
     if args.cmd not in ("init", "build") and not ev.exists():
         sys.exit(f"no suite at {ev.root}; run `aot-evals --agent NAME init` in the repository "
                  "root, or pass --evals PATH")
+    if args.cmd not in V2_READY and (getattr(args, "eval", None) or (ev.has_evals and not ev.has_v1_suite)):
+        sys.exit(f"`aot-evals {args.cmd}` does not read 2.0 evals (eval.yaml) yet; so far a 2.0 eval "
+                 "can be created (init --eval), validated and shown by status (docs/v2-design.md §7)")
     return ev
+
+
+# Commands that work on an agent folder holding 2.0 evals (docs/v2-design.md §1). The rest read a
+# 1.x suite only, until their stage of the 2.0 refactor.
+V2_READY = {"init", "validate", "status", "import", "log", "activity", "snapshot"}
+
+
+def _v2(args, ev: Evals) -> bool:
+    """Whether this command works on the agent's 2.0 evals rather than its 1.x suite."""
+    return bool(getattr(args, "eval", None)) or (ev.has_evals and not ev.has_v1_suite)
+
+
+def _selected_evals(args, ev: Evals) -> list:
+    """--eval names one; otherwise every eval of the agent."""
+    try:
+        return [ev.eval(args.eval)] if args.eval else ev.evals()
+    except ContractError as e:
+        sys.exit(str(e))
 
 
 def _unmet_before(ev: Evals, upto: str) -> list[str]:
@@ -84,6 +106,23 @@ def _unmet_before(ev: Evals, upto: str) -> list[str]:
 
 def cmd_init(args) -> int:
     ev = _evals(args)
+    if args.component and not args.eval:
+        args.eval = args.component  # a component eval is named for its component by default
+    if args.eval:
+        from .scaffold import init_eval
+
+        created = init_eval(ev, args.eval, args.component)
+        print(f"eval at {ev.p(args.eval)}")
+        for c in created:
+            print(f"  created {c}")
+        if not created:
+            print("  nothing to create; every file already exists")
+        print(f"next: fill {args.eval}/eval.yaml, then aot-evals --eval {args.eval} validate")
+        return 0
+    if ev.has_evals and not ev.has_v1_suite:
+        names = ", ".join(e.id for e in ev.evals())
+        sys.exit(f"{ev.root} holds 2.0 evals ({names}); pass --eval ID to create another, so no 1.x "
+                 "suite files are written beside them")
     created = init(ev)
     print(f"suite at {ev.root}")
     for c in created:
@@ -98,6 +137,20 @@ def cmd_status(args) -> int:
     from . import trust as trust_mod
 
     ev = _evals(args)
+    if _v2(args, ev):
+        specs = [e.spec() for e in _selected_evals(args, ev)]
+        if args.json:
+            print(json.dumps({"agent": str(ev.root),
+                              "evals": [{"eval": s.eval_id, **s.as_dict()} for s in specs]}, indent=2))
+            return 0
+        print(f"agent at {ev.root}")
+        for s in specs:
+            state = "complete" if s.complete else f"{len(s.missing)} missing, {len(s.invalid)} invalid"
+            blocked = sorted({b for i in (*s.missing, *s.invalid) for b in i.blocks})
+            print(f"  {s.eval_id:<20} {state}" + (f"  (blocks {', '.join(blocked)})" if blocked else ""))
+        if not all(s.complete for s in specs):
+            print("\nnext: aot-evals validate, for each missing or invalid field")
+        return 0
     gs = gates_mod.evaluate(ev)
     nxt = gates_mod.next_unmet(gs)
     if args.json:
@@ -152,7 +205,21 @@ def _grouped(problems: list[str], show: int = 5) -> list[str]:
 
 
 def cmd_validate(args) -> int:
+    from . import spec as spec_mod
+
     ev = _evals(args)
+    if _v2(args, ev):
+        n_problems = 0
+        for e in _selected_evals(args, ev):
+            s = e.spec()
+            if not args.warnings:
+                s.notes = []
+            print(spec_mod.render(s))
+            if args.warnings and s.defaults:
+                print("  defaults: " + ", ".join(f"{d['field']} = {d['value']}" for d in s.defaults))
+            n_problems += len(s.missing) + len(s.invalid)
+        print(f"\n{n_problems} problem(s)")
+        return 1 if n_problems else 0
     n_problems = 0
     for g in gates_mod.evaluate(ev):
         if not g.problems and not (args.warnings and g.info):
@@ -815,6 +882,8 @@ def main(argv: list[str] | None = None) -> int:
                     "with --agent (default: found from evals/ upward)")
     ap.add_argument("--agent", help="the agent's suite, evals/agents/AGENT/ (needed when the "
                     "repository holds several)")
+    ap.add_argument("--eval", help="2.0: one eval of the agent, evals/agents/AGENT/EVAL/ (needed when "
+                    "the agent has several)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("start", help="the banner and the two phases; shown before anything else"
@@ -834,16 +903,22 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--open", action="store_true", help="open it in the default browser")
     s.set_defaults(fn=cmd_discovery_page)
 
-    sub.add_parser("init", help="create the agent's suite (evals/agents/AGENT/) with templates"
-                   ).set_defaults(fn=cmd_init)
+    s = sub.add_parser("init", help="create the agent's suite (evals/agents/AGENT/) with templates; "
+                       "with --eval, one 2.0 eval folder with its eval.yaml")
+    s.add_argument("--eval", default=argparse.SUPPRESS,
+                   help="2.0: create this eval, evals/agents/AGENT/EVAL/ (same as the global --eval)")
+    s.add_argument("--component", help="2.0: the eval's unit is this component, behind a context "
+                   "boundary (default eval id: the component's name)")
+    s.set_defaults(fn=cmd_init)
 
     s = sub.add_parser("status", help="the phase, trust per category, what changed, and the next step")
     s.add_argument("--gates", action="store_true", help="the gate table (C0-C19) instead")
     s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_status)
 
-    s = sub.add_parser("validate", help="every problem across all gates")
-    s.add_argument("--warnings", action="store_true", help="also print warnings and info")
+    s = sub.add_parser("validate", help="every problem across all gates; for 2.0 evals, the eval spec")
+    s.add_argument("--warnings", action="store_true", help="also print warnings and info (2.0: notes "
+                   "and the defaults filled)")
     s.add_argument("--all", action="store_true", help="one line per problem, instead of grouping cases")
     s.set_defaults(fn=cmd_validate)
 

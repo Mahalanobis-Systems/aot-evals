@@ -137,6 +137,12 @@ with one agent may keep the suite in `evals/` itself. Pass `--agent NAME` to the
 are several. Suites made before that layout live in `evals/<agent>/`; they are read as they are,
 and `aot-evals migrate` moves them.
 
+**2.0 evals (preview).** An agent folder may instead hold 2.0 evals, one folder per eval with its
+`eval.yaml` ([v2-design.md §1](v2-design.md#1-layout)). `aot-evals --eval ID init [--component
+NAME]` creates one, and `validate` and `status` read its spec: every missing or invalid field, and
+the numbers it blocks. The other commands refuse such a folder until the 2.0 refactor reaches them;
+a 1.x suite is read as before.
+
 ```
 evals/agents/<agent>/
   discovery.md               # Assess: the discovery report

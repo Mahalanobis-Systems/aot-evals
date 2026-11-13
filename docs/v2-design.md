@@ -69,6 +69,21 @@ filled. An incomplete eval still runs; its report lists the missing fields under
 and the numbers that depend on them are null with the reason. That replaces most of 1.x's
 command gates: the question is "what is missing from the spec", not "which numbered step is unmet".
 
+The loader (`spec.py`) sorts what it finds into four lists, each entry `{field, why, blocks[]}`,
+where `blocks` names the report keys and commands the field is needed for (`run`, `draw`, `plan`,
+`estimate`, `use_cases`, `measurement`, `decision`, `comparison`):
+
+- **missing**: a required field left out or empty, or a reference to something not there yet (a
+  frame with no import in `data/export.manifest.json`, a check with no file, an eval named in
+  `also_requires` that doesn't exist).
+- **invalid**: a field that is there but cannot mean anything (shares that don't sum to 1, an
+  unknown test, two counted checks on one mode, a decision rule on another quantity).
+- **notes**: block nothing (an unknown key, with the field it probably meant; a `bar` a
+  non-inferiority test ignores; a correction where every gate must pass).
+- **defaults**: each stated default the loader filled, so the report can say "α 0.05 by default".
+
+An eval is complete when `missing` and `invalid` are both empty.
+
 The values below are the store's refund eval ([§9](#9-the-online-store-example)).
 
 ```yaml
@@ -147,7 +162,8 @@ decision_rule:
   alpha: 0.05
   power: 0.80
   looks: fixed                     # fixed | sequential | optimizer_holdout
-  multiplicity: none               # none | holm | benjamini_hochberg; needed only when one gate alone can act (statistics §4.6)
+  combine: all                     # all: every gate must pass | any: one gate alone triggers the action
+  multiplicity: none               # none | holm | benjamini_hochberg; needed only with combine: any (statistics §4.6)
   use_case_gates: []                # use cases with their own rule (rule 20); each: {use_case, test, ...}
   also_requires:                   # other evals that must pass for this decision (estimators rule 27)
     - eval: end-to-end
@@ -179,11 +195,20 @@ invoke:                            # component evals only; the system eval uses 
 | `measurement.failure_modes[]` | Measurement | yes | exactly one counted `check` per mode |
 | `measurement.trials` | Measurement | yes | ≥ 3, or `auto` |
 | `measurement.correction` | Measurement | when any check is a judge | |
-| `measurement.max_inflation` | Measurement | when any check is a judge | sets the floor on each judge (statistics §3.3) |
+| `measurement.max_inflation` | Measurement | when any check is a judge | sets the floor on each judge (statistics §3.3); default 2.0 |
+| `measurement.failure_modes[].side_effect` | Measurement | on at least one mode | that mode's counted check catches changes nobody asked for |
 | `decision_rule.test` | Decision rule | yes | |
 | `decision_rule.margin` or `bar` | Decision rule | yes | whichever the test needs |
-| `decision_rule.alpha` | Decision rule | yes | one-sided; default 0.05; 0.025 where a bad change is costly or hard to reverse (statistics §4.5) |
-| `decision_rule.multiplicity` | Decision rule | when one gate alone can trigger the action | `none` when every gate must pass (statistics §4.6) |
+| `decision_rule.quantity` | Decision rule | no | defaults to `estimand.quantity`; any other value is invalid |
+| `decision_rule.alpha` | Decision rule | yes | one-sided, above 0 and below 0.5; default 0.05; 0.025 where a bad change is costly or hard to reverse (statistics §4.5) |
+| `decision_rule.power` | Decision rule | yes | default 0.80 |
+| `decision_rule.looks` | Decision rule | yes | default `fixed` |
+| `decision_rule.combine` | Decision rule | yes | `all` (default): the action needs every gate (the headline and each use case gate) to pass; `any`: one gate alone triggers it. `also_requires` always must pass (rule 27) |
+| `decision_rule.multiplicity` | Decision rule | when one gate alone can trigger the action | required with `combine: any` and more than one gate, and `none` is then invalid; otherwise defaults to `none`, the intersection–union case (statistics §4.6) |
+| `decision_rule.also_requires` | Decision rule | for a component eval | must name the agent's end-to-end eval (rule 27) |
+| `measurement.people.floors` | Measurement | no | `{catch, clean}`, each a rate or null; null (the default) means from `max_inflation`, as for a judge |
+| `measurement.people.margin`, `labels_per_kind` | Measurement | no | defaults 0.10 and `auto` |
+| `invoke` | Agent contract | for a component eval | `command` as argv; a system eval has none (it uses `agent.yaml`) |
 | `decision_rule.constraints` | Decision rule | no | budget keys as in 1.x `budgets.yaml` |
 
 **What the generated plan holds.** `plan.yaml` (1.x `allocation.yaml`) is written by
@@ -264,7 +289,7 @@ values are null with a reason, never 0, and nothing is pre-rounded.
 |---|---|---|
 | `schema`, `generated`, `runs`, `refused` | as 1.x | |
 | `eval` | `{id, version, unit, quantity, decision}` | Estimand |
-| `spec` | `{complete, missing[{field, why, blocks[]}]}` | all |
+| `spec` | `{complete, missing[{field, why, blocks[]}], invalid[…], notes[…], defaults[{field, value}]}` (§2) | all |
 | `estimate` | the headline: `{theta, ci, ci_method, weights{use_case: w}, weights_source, estimator: "hajek", corrected, n_cases, n_clusters, k}` | Estimand, design |
 | `use_cases` | one row per use case and pool: 1.x category rows, with `share`, `cost`, `weight`, `inclusion_prob_range` | Estimand, design |
 | `design` | `{quality{n, drawn, seed, skips[]}, bug_finding{n, coverage}, clusters{n, design_effect, largest}}` | Design |
@@ -293,7 +318,8 @@ Unchanged in purpose: `start`, `doctor`, `init`, `status`, `validate`, `import`,
 | 2.0 | Change |
 |---|---|
 | `--eval <id>` | new global option |
-| `init [--eval <id> --component <name>]` | scaffolds an eval folder with `eval.yaml` |
+| `init [--eval <id> --component <name>]` | scaffolds an eval folder with `eval.yaml`, and the agent system's shared files if missing; `--component` alone names the eval for the component; refuses a second system eval and an id that names a shared folder |
+| `validate`, `status` | on an agent folder with 2.0 evals, read the specs: each missing, invalid and (with `--warnings`) noted field, and the defaults filled |
 | `draw` | new: seeded stratified draw of the quality set from the frame, with π |
 | `plan` | replaces `allocate`; targets from the decision rule |
 | `migrate --to 2` | new: 1.x suite to a 2.0 end-to-end eval ([§8](#8-migration-from-1x)) |
