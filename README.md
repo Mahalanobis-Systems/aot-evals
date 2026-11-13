@@ -105,7 +105,7 @@ Under the hood:
   question being asked.
 - **A local catalog of over 350 public agent benchmarks** ([references/benchmarks.md](references/benchmarks.md)).
   Assess matches your agent against it without a web search, and says what each fit is good for:
-  a grading design, a case template, a user simulator, a sandbox design or a baseline number.
+  a grading design, a case template, a sandbox design or a baseline number.
   The matches also set the columns of the report's golden test case grid: the situations
   (unanswerable, ambiguous, forbidden, multi-turn, …) that benchmarks were built to test, laid
   against your agent's own task types, so the empty cells are visible before a case is written.

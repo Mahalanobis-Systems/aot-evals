@@ -64,7 +64,6 @@ NON_BLOCKING = NOT_IMPLEMENTED | {"C9", "C10", "C11"}
 
 REQUIRED_AGENT_FIELDS = ("id", "surface", "triggers", "instructions", "tools", "harness",
                          "models", "version_history", "stable_window", "invoke")
-OTHER_IDS = ("other", "misc", "uncategorized", "uncategorised")
 
 
 @dataclass
@@ -202,7 +201,6 @@ def c3(ev: Evals) -> Gate:
         return _gate("C3", ["categories.yaml has no categories"])
     problems = []
     total = 0.0
-    other_share = 0.0
     for c in cats:
         cid = c.get("id", "?")
         for k in ("id", "definition", "example"):
@@ -210,11 +208,6 @@ def c3(ev: Evals) -> Gate:
                 problems.append(f"category {cid}: {k} missing")
         if c.get("worth") not in WORTHS:
             problems.append(f"category {cid}: worth must be one of {WORTHS}")
-        if not isinstance(c.get("simple"), bool):
-            problems.append(f"category {cid}: simple must be true or false")
-        if c.get("simple") and not c.get("heuristic"):
-            problems.append(f"category {cid}: a simple category needs the heuristic that "
-                            "identifies it")
         if not isinstance(c.get("cost"), dict) or not c.get("cost"):
             problems.append(f"category {cid}: cost matrix row missing")
         share = c.get("observed_share")
@@ -222,15 +215,11 @@ def c3(ev: Evals) -> Gate:
             problems.append(f"category {cid}: observed_share not measured")
         else:
             total += share
-            if cid in OTHER_IDS or c.get("other"):
-                other_share += share
         if not c.get("share_source"):
             problems.append(f"category {cid}: share_source (export id the share was counted "
                             "from) missing")
     if cats and not problems and abs(total - 1.0) > 0.02:
         problems.append(f"observed shares sum to {total:.3f}, not 1")
-    if other_share >= 0.10:
-        problems.append(f"'Other' is {other_share:.1%} of traffic; must be under 10%")
     return _gate("C3", problems, [f"{len(cats)} categories"])
 
 
@@ -667,7 +656,7 @@ def c18(ev: Evals) -> Gate:
         return _gate("C18", ["report/report.json missing (aot-evals report)"])
     problems = []
     ids = {g.get("id") for g in r.get("gates") or []}
-    missing = [f"G{i}" for i in range(1, 14) if f"G{i}" not in ids]
+    missing = [f"G{i}" for i in range(1, 14) if i != 9 and f"G{i}" not in ids]  # G9 was removed in 2.0
     if missing:
         problems.append(f"report.json lacks gate status for {missing}")
     latest = ev.latest_run()

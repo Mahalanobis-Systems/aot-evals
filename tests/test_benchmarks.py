@@ -81,3 +81,12 @@ def test_situations_for_the_grid_are_the_universal_ones_plus_what_the_matches_te
         [{**m, "year": 2025, "by": "b", "score": 1, "status": "active", "fit": "f", "caveats": "c",
           "good_for": [], "grading": [], "data": "synthetic", "pii": "none", "license": "MIT", "links": {},
           "why": {"workloads": [], "words": []}} for m in matches[2:]], vocab)
+
+
+def test_a_user_simulator_is_no_longer_something_to_borrow():
+    """Simulated users are out of scope in 2.0: the catalog may say a benchmark drives its agent
+    with one (`interaction`), but never offers one to borrow (`good_for`)."""
+    assert "user-simulator" not in benchmarks.GOOD_FOR
+    assert "multi-turn-simulated-user" in benchmarks.INTERACTIONS
+    entry = dict(benchmarks.load()[0], good_for=["user-simulator"])
+    assert any("good_for" in p for p in benchmarks.validate([entry]))

@@ -143,7 +143,7 @@ evals/agents/<agent>/
   agent.yaml                 # identity, triggers, tools, model per call site, stable window,
                              #   and how to invoke it (references/agent-contract.md)
   taxonomy.yaml              # the coverage list (§2.4): entries, the source document, the date read
-  categories.yaml            # trace categories: definition, worth, simple flag, cost matrix, observed share
+  categories.yaml            # trace categories: definition, worth, cost matrix, observed share
   failure_modes.yaml         # per failure mode: >=1 check, >=1 category, a cost-matrix cell
   budgets.yaml               # plane B: cost / latency / token / error-rate budgets per category
   allocation.yaml            # C5's plan: sizes, and each unfilled cell scheduled or out of scope
@@ -221,9 +221,9 @@ gate and the first unmet one.
 | C0 | `import` | Import your data as an export (trace dump, dataset download, CSV/JSONL from your observability stack) into `data/`, with an `export.manifest.json` entry: source, query, window, row count, date. | Every downstream number traces to an export manifest entry; no command calls a live vendor API. |
 | C1 | `inventory` | Write `agent.yaml`: surface, triggers, instructions, tools (credential names only), harness, the model actually used per call site, version history, the stable window, and the invocation command. | Stable window stated with evidence; model per call site observable; `invoke.cwd` exists; the agent runs once end to end from its command. |
 | C2 | `taxonomy` | Build the coverage list from a source outside the suite: the product spec, API/tool surface, help-centre topics or job description. The owner edits it; the source document is recorded. | `taxonomy.yaml` names a source outside `cases/` and a date, and its commit precedes the first case. |
-| C3 | `categorize` | Sort traces into categories, one per trace. Give each a worth and a per-failure-kind cost matrix. Count observed share. | Every category has a definition, an example, worth, a simple flag, a cost row and a measured share. "Other" is under 10%. |
+| C3 | `categorize` | Sort traces into categories, one per trace. Give each a worth and a per-failure-kind cost matrix. Count observed share. | Every category has a definition, an example, worth, a cost row and a measured share. |
 | C4 | `decompose` | Within each category: feature → scenario → failure mode. Mark each failure mode code-checkable, judge-needed or monitor-only, and set plane-B budgets. | Every failure mode names its category, check type and cost cell; `budgets.yaml` covers every category. |
-| C5 | `allocate` | Size both case sets and print the arithmetic. Error-finding: ≥10 per category, 3 for simple ones, with the rarest failure each target surfaces (M30). Quality-estimate: proportional to observed share, sized by the interval the owner needs (M14). | Both budgets printed with target intervals and the minimum detectable effect (M7); every cell filled, scheduled, or declared out of scope with a reason. |
+| C5 | `allocate` | Size both case sets and print the arithmetic. Error-finding: ≥10 per category, with the rarest failure each target surfaces (M30). Quality-estimate: proportional to observed share, sized by the interval the owner needs (M14). | Both budgets printed with target intervals and the minimum detectable effect (M7); every cell filled, scheduled, or declared out of scope with a reason. |
 | C6 | `author` | Write the labelling standard, then cases: frozen inputs, start state, trigger, scripted follow-ups, expected end state, and requirements walked rule by rule from the standard. Prefer self-verifying pairs where state allows. Scrub before writing. | The standard exists; every case has a set, a category, failure modes, provenance, requirements covering every rule that applies to it, and no secrets. |
 | C7 | `screen` | Per case: a human read; the checks must pass on start → expected end (reference) and fail on start → start (do nothing); a third pass, do-nothing plus a success claim, catches checks that trust the agent's report (G10). With a reference answer: other correct wordings must pass, the reference answer with nothing changed must fail, and an answer with every number wrong is reported if it passes. Drop cases that fail, and record the drop. | Screens recorded per case; drop rate reported. |
 | C8 | `checks` | Implement plane-A checks: code state diffs first, graded against the goal rather than one path; binary judges only where code cannot decide; side-effect checks on every agent; a grounding check for every fact a prose answer states. A check never uses the agent's own report of success. | Every failure mode has at least one binary check; side-effect checks present; every requirement names a check that runs on its case, or why it is unchecked. |
@@ -270,9 +270,9 @@ re-derives the hard-case set, and a shift in category mix re-opens C3 and C5.
 
 **How comparisons work (C13).** Each side's verdict on a case is its majority over k trials. Gains
 and losses are majority flips, tested with McNemar's exact test; a bootstrap CI covers the mean
-per-case delta. A change is `better` or `worse` only when it is significant and outside the
-baseline's variance band; otherwise `indistinguishable`. Reported beside the verdict, and not
-deciding it: a paired sign-flip test on every change in a case's pass rate (the test M7's
+per-case delta. A change is `better` or `worse` only when it is significant; otherwise `indistinguishable`.
+Reported beside the verdict, and not deciding it: the baseline's variance band (M5, data for
+drift), a paired sign-flip test on every change in a case's pass rate (the test M7's
 detectable effect describes), the detectable effect implied by the comparison's own per-case
 deltas, Benjamini–Hochberg adjusted p-values per category, the flips (b pass→fail, c fail→pass,
 flip rate d) with the interval they imply, McNemar's mid-p, the inverted sign-flip interval, and,
@@ -441,7 +441,7 @@ are guidance for the online regime and are not yet computed by the CLI.
 | M2 | A | Pass rate | mean over trials and cases, per category, with a cluster-robust CI over cases (Wilson when that collapses) | never reported suite-wide without the per-category table |
 | M3 | A | `pass^k` | fraction of cases passing all their trials | reliability across repeats; 75% per trial ≈ 42% at k = 3 |
 | M4 | A | Flakiness | per case: 0 < passes < k | reported as a finding; sets the k budget |
-| M5 | A | Variance band | same build, ≥3 repeats, spread per category | no change inside the band is called drift or improvement |
+| M5 | A | Variance band | same build, ≥3 repeats, spread per category | no change inside the band is called drift; reported beside a comparison, never its verdict |
 | M6 | A | Paired difference | per-case paired delta, McNemar and bootstrap CI, gains and losses listed separately | a net delta alone is not reported |
 | M7 | A | Minimum detectable effect | from N, k and per-case variance at 80% power | printed before an experiment runs |
 | M8 | C | Judge TPR / TNR | against that judge's labels, separately, with CIs | raw agreement is not reported: an always-pass judge agrees 95% of the time at a 95% base rate |
@@ -459,9 +459,6 @@ are guidance for the online regime and are not yet computed by the CLI.
 | M20 | B | Tokens and cache | input, output and cached tokens; cache-hit rate | a cost jump at an unchanged pass rate usually means a prompt-prefix edit broke the cache. Compare dollars, not tokens |
 | M21 | B | Errors and retries | count and rate (Wilson interval) per outcome code, over every attempt including retries | needs no judge; the cheapest regression signal |
 | M22 | C | Case validity | reference pass, do-nothing fail, human read; drop rate at C7 | unscreened cases do not count toward gated numbers (G8) |
-| M23 † | C | Fake fidelity | contract test of each fake against the real API | a drifted fake looks the same as a regression |
-| M24 | C | Simulated-user sensitivity | the same suite under ≥2 user simulators, reported per simulator | G9 |
-| M25 | C | Compounded validity | product of stated stage validities (task × simulator × judge) | printed in the report header; 70% × 70% × 70% ≈ 34% |
 | M26 | A | Leakage screen | overlap of case provenance with likely training or benchmark sources | required for cases built from a public source |
 | M27 † | B | Online fingerprints | per agent: unanswered requests, time to first response, tokens and cost per turn, tool calls per turn, category mix, model id per call | drift in the part of the system that cannot be sandboxed |
 | M29 | C | Whole-run agreement | catch rate (share of runs a person fails that the suite fails) and clean pass rate (share a person passes that the suite passes), each with a Wilson interval, dev and holdout; a run with no verdict counts as wrong either way | C19, G14. Per-check validity (M8, M22) does not imply it: a suite can clear every screen and miss what a person fails runs for |
@@ -494,7 +491,6 @@ No comparison runs before E1. Experiments marked † are guidance only.
 | E9 | Redundancy / prune | classify every case over ≥2 versions; propose prunes | M13, M11, a smaller suite with the same detectable effect |
 | E10 | Weight sensitivity | for composite scores only: vary the weights and check whether the ranking holds | whether the composite is stable |
 | E11 † | Shadow / canary | the candidate states what it would do; compare with what happened; then a fraction of live traffic | the gate before write access, for agents with no sandbox |
-| E12 † | Fake contract test | replay each fake against the live API on a schedule; diff | M23 |
 | E13 † | Drift watch | the frozen set on a schedule, plus M27 on a control chart with M5's limits | the standing check for provider-side and self-inflicted changes |
 | E15 | Suite validity | whole-run human labels on baseline runs, the suite re-graded on them; iterate on dev disagreements by cause; check holdout once; label a fresh batch before a new claim | M29, a triaged list of what the suite misses and why |
 | E14 | Operational sweep | plane B only, no labels or judges: budgets vs actuals per category | M18–M21; can run in week one, from an export |
@@ -516,16 +512,15 @@ renamed.
   "conditions": { "agent_commit": "...", "evals_commit": "...", "harness": "...", "k": 5,
                   "judge_backends": [ { "check": "...", "backend": "...", "model": "...",
                                         "family": "...", "version": "..." } ],
-                  "simulator": null, "cost_usd": 0.0,
+                  "cost_usd": 0.0,
                   "data_exports": [ { "source": "...", "window": "...", "rows": 0 } ] },
-  "regime":  "offline",
   "taxonomy": { "name": "...", "source": "...|MISSING", "read_on": "...", "entries": [] },
   "sets":    { "error_finding": { "n": 0, "mde_at_80_power": 0.0, "variance_components": {},
                                   "dependence": { "cochran_q": {}, "overdispersion": null,
                                                   "clusters": null, "note": "..." } },
                "quality_estimate": { "n": 0, "weights_source": "...", "estimate": {},
                                      "variance_components": {}, "dependence": {} } },
-  "categories": [ { "id": "...", "worth": "high", "simple": false,
+  "categories": [ { "id": "...", "worth": "high",
                     "observed_share": 0.0, "n_cases": 0,
                     "pass_rate": { "point": 0.0, "ci": [0, 0], "n": 0, "n_cases": 0, "k": 5,
                                    "set": "...", "ci_method": "..." },
@@ -570,7 +565,6 @@ renamed.
                   "per_category": { "...": { "test": { "p": 0.0, "p_adjusted_bh": 0.0 } } },
                   "operational_delta": { "cost_per_success": 0.0, "latency_p90": 0, "error_rate": 0.0 },
                   "verdict": "better|worse|indistinguishable|trade", "verdict_reasons": [] },
-  "validity": { "stages": { "task": null, "simulator": null, "judge": null }, "compounded": null },
   "gates":   [ { "id": "G5", "status": "pass|fail|not_applicable", "detail": "...", "blocks": [] } ],
   "next_actions": [],
   "cases":   [ { "id": "...", "set": "...", "category": "...", "provenance": "...",
@@ -604,9 +598,9 @@ into it (the `report` skill).
 
 | id | Panel | Shows |
 |---|---|---|
-| P0 | Conditions | agent and commits, every model id, harness, k, N per set, regime, data exports, date, total cost |
+| P0 | Conditions | agent and commits, every model id, harness, k, N per set, data exports, date, total cost |
 | P1 | Gates | every gate in §10, pass/fail, and what each failure blocks; above the results |
-| P2 | Validity | task × simulator × judge and the compounded product (M25) |
+| P2 | Detectable effect | the minimum detectable effect per set (M7) |
 | P3 | Correctness by category | pass rate with CI and `pass^k`, ordered by worth; variance band shaded; n, k and set on every row |
 | P4 | Operational by category | plane B against `budgets.yaml`; over-budget cells flagged. Next to P3, never merged with it |
 | P5 | Coverage | taxonomy entry × failure mode counts; empty cells outlined; source in the caption |
@@ -615,7 +609,6 @@ into it (the `report` skill).
 | P8 | Judges | per judge: backend and family vs the agent's, confusion matrix, TPR/TNR with CIs, labels, κ, threshold, cost; reliability in a separate column group. Uncalibrated judges greyed |
 | P9 | Flakiness | per case, k marks in run order: pass, fail, operational failure |
 | P10 † | Drift | the frozen set over time against M5's band |
-| P11 † | Online | fingerprints on control charts, sampling rate, referent |
 | P12 | Case detail | inputs, start state, expected end state, actual state diff, each check's verdict, plane-B counters, trace reference, provenance, screen status |
 | P13 | Next actions | empty coverage cells, judges under 60 labels, categories under their k budget, prune candidates, over-budget categories; each with the command that clears it |
 
@@ -666,7 +659,6 @@ Visual style follows [brand/README.md](../brand/README.md).
 | G6 | Headline pass rate from the error-finding set | the word "quality"; offers the weighted estimate instead |
 | G7 | Comparison without a paired test, or with undeclared manifest differences | the comparison |
 | G8 | Cases that have not passed the reference / do-nothing screen | their inclusion in any gated number |
-| G9 | Simulated user present, results not reported per simulator | the aggregate score |
 | G10 | A check that relies on the agent's own report of success | the check |
 | G11 | A "better" verdict while plane B regressed beyond budget | the verdict; it becomes "trade", with both numbers |
 | G12 | A number whose data does not trace to an export manifest entry or a committed case | that number |

@@ -22,7 +22,7 @@ SCHEMA = "aot-evals/report@1"
 
 # The fields that name the build that ran (the agent and how it was invoked), as opposed to
 # what measured it (cases, checks, judges).
-BUILD_FIELDS = ("agent_commit", "harness", "model_ids", "invoke", "fakes_sha256", "simulator")
+BUILD_FIELDS = ("agent_commit", "harness", "model_ids", "invoke", "fakes_sha256")
 
 
 def manifest_view(m: dict) -> dict:
@@ -35,7 +35,6 @@ def manifest_view(m: dict) -> dict:
         "model_ids_observed": (m.get("agent") or {}).get("model_ids_observed"),
         "invoke": dict(m.get("invoke") or {}),
         "fakes_sha256": m.get("fakes_sha256"),
-        "simulator": m.get("simulator"),
         "case_set": (m.get("case_set") or {}).get("files") or (m.get("case_set") or {}).get("sha256"),
         "checks": m.get("checks"),
         "judges": sorted((j.get("check"), j.get("model"), j.get("judge_sha"), j.get("backend"))
@@ -349,7 +348,6 @@ def category_rows(ctx: Context) -> list[dict]:
         row = {
             "id": cid,
             "worth": cat.get("worth"),
-            "simple": cat.get("simple"),
             "observed_share": cat.get("observed_share"),
             "n_cases": len({a["case_id"] for a in gated_finals}),
             **correctness(ctx, gated_finals, set_name),
@@ -638,12 +636,6 @@ def evaluate_gates(ctx: Context) -> list[dict]:
                     f"{unscreened[:10]}" if unscreened else "every case in the run passed the screen",
                     [f"case:{c}" for c in unscreened]))
 
-    # G9: simulated user not reported per simulator
-    sims = {m.get("simulator") for m in ctx.manifests if m.get("simulator")}
-    gates.append(_g("G9", None if not sims else len(sims) == 1,
-                    "no simulated user" if not sims else f"simulators: {sorted(map(str, sims))}",
-                    [] if len(sims) <= 1 else ["aggregate"]))
-
     # G10: checks relying on the agent's own report
     declared = [c for fm in ev.failure_modes() for c in fm.get("checks") or []
                 if ev.check_type(c) == "code" and declares_agent_report(ev.code_check_path(c))]
@@ -739,7 +731,7 @@ def build(ev: Evals, run_ids: list[str] | None = None, candidate_runs: list[str]
             "agent_commit": m0.get("agent_commit"), "agent_dirty": m0.get("agent_dirty"),
             "evals_commit": m0.get("evals_commit"), "evals_dirty": m0.get("evals_dirty"),
             "harness": m0.get("harness"), "k": ctx.k,
-            "judge_backends": m0.get("judge_backends") or [], "simulator": m0.get("simulator"),
+            "judge_backends": m0.get("judge_backends") or [],
             "judge_cost_usd": _judge_cost(ctx),
             "fakes_sha256": m0.get("fakes_sha256"),
             "cost_usd": sum(costs) if costs else None,
@@ -748,7 +740,6 @@ def build(ev: Evals, run_ids: list[str] | None = None, candidate_runs: list[str]
             "data_exports": [{"id": e.get("id"), "source": e.get("source"),
                               "window": e.get("window"), "rows": e.get("rows")} for e in exports],
         },
-        "regime": "offline",
         "taxonomy": {"name": ev.taxonomy().get("name"),
                      "source": _taxonomy_source(ev.taxonomy()) if status["G5"] == "pass" else "MISSING",
                      "read_on": ev.taxonomy().get("read_on"),
@@ -761,8 +752,6 @@ def build(ev: Evals, run_ids: list[str] | None = None, candidate_runs: list[str]
         "redundancy": suite.redundancy(ev),
         "comparison": comparison,
         "agreement": _agreement_summary(ev),
-        "online": None,
-        "validity": _validity(agent),
         "gates": gates,
         "cases": None,
         "next_actions": None,
@@ -892,20 +881,6 @@ def _judge_cost(ctx: Context) -> float | None:
     costs = [line["cost_usd"] for line in ctx.check_lines
              if line.get("type") == "judge" and line.get("cost_usd") is not None]
     return sum(costs) if costs else None
-
-
-def _validity(agent: dict) -> dict:
-    v = agent.get("validity") or {}
-    stages = {k: v.get(k) for k in ("task", "simulator", "judge")}
-    known = [x for x in stages.values() if isinstance(x, (int, float))]
-    return {"stages": stages, "compounded": _prod(known) if known else None}
-
-
-def _prod(xs):
-    out = 1.0
-    for x in xs:
-        out *= x
-    return out
 
 
 def write(ev: Evals, report: dict) -> str:

@@ -269,9 +269,9 @@ def _artifacts(ev: Evals) -> list[str]:
     cats = ev.categories()
     if cats:
         out.append(_panel("categories", f"C3 · Categories of real traffic ({len(cats)})", _table(
-            ["Category", "Definition", "Worth", "Simple", "Share", "Cost of each failure kind"],
-            [[c.get("id"), c.get("definition"), c.get("worth"), c.get("simple"),
-              _pct(c.get("observed_share")), c.get("cost")] for c in cats], num={4}, cls="full"),
+            ["Category", "Definition", "Worth", "Share", "Cost of each failure kind"],
+            [[c.get("id"), c.get("definition"), c.get("worth"),
+              _pct(c.get("observed_share")), c.get("cost")] for c in cats], num={3}, cls="full"),
             "Share is measured from the imported traffic. Worth and costs are the owner's call."))
 
     fms = ev.failure_modes()

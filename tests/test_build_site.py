@@ -37,10 +37,11 @@ def built(tmp_path_factory):
 def test_every_command_gate_measurement_experiment_and_panel_is_parsed(built):
     _, doc = built
     assert [c["id"] for c in doc["commands"]] == [f"C{i}" for i in [*range(13), 19, *range(13, 19)]]
-    assert [g["id"] for g in doc["gates"]] == [f"G{i}" for i in range(1, 15)]
-    assert {m["id"] for m in doc["measurements"]} == {f"M{i}" for i in range(1, 38)}
-    assert {e["id"] for e in doc["experiments"]} == {f"E{i}" for i in range(1, 17)}
-    assert [p["id"] for p in doc["panels"]] == [f"P{i}" for i in range(14)]
+    # Ids of items removed in 2.0 stay retired: G9, M23-M25, E12, P11.
+    assert [g["id"] for g in doc["gates"]] == [f"G{i}" for i in range(1, 15) if i != 9]
+    assert {m["id"] for m in doc["measurements"]} == {f"M{i}" for i in range(1, 38) if i not in (23, 24, 25)}
+    assert {e["id"] for e in doc["experiments"]} == {f"E{i}" for i in range(1, 17) if i != 12}
+    assert [p["id"] for p in doc["panels"]] == [f"P{i}" for i in range(14) if i != 11]
     assert [p["id"] for p in doc["planes"]] == ["A", "B", "C"]
     for rows, fields in [(doc["commands"], ("command", "does", "exit_gate")), (doc["gates"], ("condition", "refuses")),
                          (doc["measurements"], ("name", "plane", "definition", "use")),
@@ -55,7 +56,7 @@ def test_guidance_only_items_are_flagged_and_their_mark_dropped(built):
     _, doc = built
     flagged = {r["id"] for key in ("commands", "measurements", "experiments", "panels") for r in doc[key]
                if r["guidance_only"]}
-    assert {"C16", "C17", "M17", "M23", "M27", "M28", "E7", "E11", "E12", "E13", "P10", "P11"} == flagged
+    assert {"C16", "C17", "M17", "M27", "M28", "E7", "E11", "E13", "P10"} == flagged
     assert not any("†" in r["id"] for key in ("measurements", "experiments", "panels") for r in doc[key])
 
 

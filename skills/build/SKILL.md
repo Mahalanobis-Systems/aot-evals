@@ -110,7 +110,7 @@ Here, and only here, search the web for public benchmarks newer than the catalog
 grading designs and situations, never of cases.
 
 **Allocation** (`aot-evals allocate`): two sets sized by different arithmetic. Error-finding:
-about 10 per category, 3 for simple ones. Quality-estimate: in proportion to traffic, sized by the
+about 10 per category. Quality-estimate: in proportion to traffic, sized by the
 interval the owner needs. Only the second may be called quality. Show the smallest detectable
 change before anything runs, and say what the error-finding targets can find: `allocate` prints
 the rarest failure each one surfaces (10 cases: a failure in about one run in four). Where a rare
