@@ -6,6 +6,18 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+- **The 2.0 eval spec** (stage 3, docs/v2-design.md §1–§2). `aot-evals --eval ID init [--component
+  NAME]` creates a 2.0 eval: `evals/agents/<agent>/<eval>/` with its `eval.yaml`, cases, checks,
+  labels, runs and report, beside the agent system's shared `env/`, `data/` and labeling standard.
+  `validate` and `status` read each eval's spec and list every missing or invalid field with the
+  numbers it blocks (`spec.missing`, `spec.invalid`), plus notes and the defaults filled: one-sided
+  α 0.05, power 0.80, fixed looks, `max_inflation` 2.0 when a judge counts, and the eval-vs-people
+  floors, margin 0.10 and labels per kind. The loader checks that the decision rule decides on the
+  estimand's quantity, that a multiplicity correction is set exactly when one gate alone can trigger
+  the action (new `decision_rule.combine: all | any`, default `all`), that a component eval also
+  requires the end-to-end eval, and that an agent has one end-to-end eval. The global `--eval`
+  option selects an eval. 1.x suites load and run as before; the other commands refuse an agent
+  folder that holds only 2.0 evals until they read them.
 - **2.0 deletions** (stage 2a). Removed, with their tests:
   - Simulated users and fake fidelity: the run manifest's `simulator` field, report gate G9, the
     `simulator` compare variable, `agent.yaml` `simulator`, `user-simulator` as a benchmark's

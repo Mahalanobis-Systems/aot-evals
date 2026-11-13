@@ -279,3 +279,117 @@ class Evals:
     def latest_run(self, purpose: str | None = None) -> dict | None:
         runs = [r for r in self.runs(purpose) if r.get("finished")]
         return runs[-1] if runs else None
+
+    # ---- 2.0 evals (docs/v2-design.md §1) --------------------------------------------------
+
+    def eval_dirs(self) -> list[Path]:
+        """The agent's 2.0 evals: each folder inside it that holds an eval.yaml."""
+        if not self.root.is_dir():
+            return []
+        return sorted(p.parent for p in self.root.glob(f"*/{EVAL_FILE}")
+                      if p.parent.name not in SHARED_DIRS)
+
+    @property
+    def has_evals(self) -> bool:
+        return bool(self.eval_dirs())
+
+    @property
+    def has_v1_suite(self) -> bool:
+        """1.x suite files beside the evals (a suite `migrate --to 2` has not converted yet)."""
+        return any(self.p(f).exists() for f in V1_FILES)
+
+    def eval(self, eval_id: str | None = None) -> Eval:
+        """One eval of this agent. With one eval the id is optional; with several, the eval whose
+        folder holds the working directory is the default."""
+        dirs = self.eval_dirs()
+        if eval_id:
+            for d in dirs:
+                if d.name == eval_id:
+                    return Eval(self, d)
+            known = ", ".join(d.name for d in dirs) or "none yet"
+            raise ContractError(f"no eval '{eval_id}' in {self.root} (evals: {known}); "
+                                f"`aot-evals --eval {eval_id} init` creates it")
+        if len(dirs) == 1:
+            return Eval(self, dirs[0])
+        here = Path.cwd().resolve()
+        for d in dirs:
+            if here == d.resolve() or d.resolve() in here.parents:
+                return Eval(self, d)
+        if dirs:
+            names = ", ".join(d.name for d in dirs)
+            raise ContractError(f"{self.root} holds several evals ({names}); pass --eval ID")
+        raise ContractError(f"no eval in {self.root}; `aot-evals --eval end-to-end init` creates "
+                            "the end-to-end eval")
+
+    def evals(self) -> list[Eval]:
+        return [Eval(self, d) for d in self.eval_dirs()]
+
+
+EVAL_FILE = "eval.yaml"
+# Folders of the agent system that its evals share (docs/v2-design.md §1); never an eval id.
+SHARED_DIRS = ("env", "data", "labels", "journal")
+# Also reserved: the 1.x suite's folders, so an eval never collides with one before `migrate`.
+RESERVED_EVAL_IDS = (*SHARED_DIRS, "cases", "checks", "runs", "report", "pulled")
+V1_FILES = ("categories.yaml", "failure_modes.yaml", "taxonomy.yaml", "allocation.yaml")
+
+
+@dataclass
+class Eval:
+    """One eval of an agent system: evals/agents/<agent>/<eval>/ (docs/v2-design.md §1).
+
+    Its cases, checks, judges, labels, runs and report are its own; the sandbox (`env/`), the
+    frames (`data/`), the labeling standard and the journal belong to the agent system."""
+
+    agent: Evals
+    root: Path
+
+    @property
+    def id(self) -> str:
+        return self.root.name
+
+    def p(self, *parts: str) -> Path:
+        """A path inside this eval's folder."""
+        return self.root.joinpath(*parts)
+
+    def shared(self, *parts: str) -> Path:
+        """A path in the agent system's folder, shared by its evals."""
+        return self.agent.p(*parts)
+
+    @property
+    def spec_path(self) -> Path:
+        return self.p(EVAL_FILE)
+
+    @property
+    def env_dir(self) -> Path:
+        return self.shared("env")
+
+    @property
+    def standard_path(self) -> Path:
+        return self.shared("labels", "standard.md")
+
+    @property
+    def repo_root(self) -> Path:
+        """Where `invoke.cwd` starts, as for agent.yaml."""
+        return self.agent.repo_root
+
+    def exports(self) -> list[dict]:
+        return self.agent.exports()
+
+    def code_check_path(self, check_id: str) -> Path:
+        return self.p("checks", "code", f"{check_id}.py")
+
+    def judge_check_path(self, check_id: str) -> Path:
+        return self.p("checks", "judge", f"{check_id}.md")
+
+    def check_type(self, check_id: str) -> str | None:
+        if self.code_check_path(check_id).exists():
+            return "code"
+        if self.judge_check_path(check_id).exists():
+            return "judge"
+        return None
+
+    def spec(self):
+        """The eval spec, loaded and validated (`spec.Spec`)."""
+        from .spec import load
+
+        return load(self)

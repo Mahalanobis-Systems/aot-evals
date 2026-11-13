@@ -1,0 +1,71 @@
+# The eval spec (docs/v2-design.md §2): this eval's four parts, written down. Fill every field;
+# `aot-evals --eval __EVAL__ validate` lists what is missing and which numbers it blocks. An empty
+# field is reported as missing, never read as 0 or 1.
+eval: __EVAL__
+version: "1.0"                     # major.minor; a change to the estimand, weights, design or checks is a new major
+
+estimand:
+  unit:
+__UNIT__
+  quantity: pass_rate              # pass_rate | failure_rate:<failure mode id>
+  population:
+    frame:                         # an import id in ../data/export.manifest.json (aot-evals import --id)
+    window:                        # start/end, e.g. 2026-10-01/2026-10-31
+    environment: env/              # the sandbox; its hash goes in every manifest
+  use_cases:                       # a partition of the population; shares sum to 1
+    - id:
+      definition:
+      example:                     # a trace id from the frame
+      share:
+      cost:                        # what one failure costs, relative to the others (needed for weights: cost)
+  share_source:                    # where the shares were measured
+  weights: traffic                 # traffic (w = share) | cost (w ∝ share × cost) | {use_case: w}
+  decision:
+    action:                        # what this number decides, e.g. ship a change to the prompt
+    owner:
+    cadence:
+
+design:
+  quality_set:
+    selection: stratified_random   # the only selection allowed for the quality set
+    seed:                          # any integer; the draw repeats from it
+    oversample: {}                 # {use_case: k}: draw a use case at k times its share
+  bug_finding_set:
+    coverage: coverage.yaml        # the external list it is checked against
+  cluster_key: id                  # case field that marks related cases; id: every case its own
+
+measurement:
+  failure_modes:                   # exactly one counted check per mode (checks/code/<id>.py or checks/judge/<id>.md)
+    - id:
+      description:
+      use_cases: "*"
+      check:
+      diagnostics: []              # other checks on this mode: reported, never counted
+    - id: unrequested-change
+      description: Something changed that the request didn't ask for.
+      use_cases: "*"
+      check:
+      side_effect: true            # at least one counted side-effect check is required
+  trials: 3                        # 3 or more, or auto (from the measured variance split)
+  correction:                      # none | rogan_gladen | ppi; required when a judge counts
+  max_inflation: 2.0               # how many times the cases of a code check a judge may cost
+  people:
+    floors: {catch: null, clean: null}   # null: from max_inflation, as for a judge
+    margin: 0.10
+    labels_per_kind: auto
+
+decision_rule:
+  test:                            # superiority | non_inferiority | threshold
+  bar:                             # threshold only
+  margin:                          # non_inferiority and superiority: the smallest change that matters
+  alpha: 0.05                      # one-sided; 0.025 where a bad change is costly or hard to reverse
+  power: 0.80
+  looks: fixed                     # fixed | sequential | optimizer_holdout
+  combine: all                     # all: every gate must pass | any: one gate alone triggers the action
+  multiplicity: none               # holm or benjamini_hochberg, needed only with combine: any
+  use_case_gates: []               # [{use_case, test, margin}] for a use case decided on separately
+__ALSO__
+  constraints:
+    default: {}                    # cost_per_success_usd, latency_p90_ms, ... as in 1.x budgets.yaml
+    use_cases: {}
+__INVOKE__

@@ -74,7 +74,8 @@ decision_rule:
   alpha: 0.05
   power: 0.80
   looks: fixed                     # fixed | sequential | optimizer_holdout
-  multiplicity: none               # none | holm | benjamini_hochberg; needed only when one gate alone can act (statistics §4.6)
+  combine: all                     # all: every gate must pass | any: one gate alone triggers the action
+  multiplicity: none               # none | holm | benjamini_hochberg; needed only with combine: any (statistics §4.6)
   use_case_gates: []                # use cases with their own rule (rule 20); each: {use_case, test, ...}
   also_requires:                   # other evals that must pass for this decision (estimators rule 27)
     - eval: end-to-end
