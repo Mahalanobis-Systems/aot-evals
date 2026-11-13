@@ -6,6 +6,22 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+- **2.0 deletions** (stage 2a). Removed, with their tests:
+  - Simulated users and fake fidelity: the run manifest's `simulator` field, report gate G9, the
+    `simulator` compare variable, `agent.yaml` `simulator`, `user-simulator` as a benchmark's
+    `good_for` (the `multi-turn-simulated-user` interaction stays: it describes the benchmark),
+    and method rows M23, M24 and E12. `env/` fakes, `fakes_sha256` and the resume refusal on
+    changed fakes are unchanged.
+  - Compounded validity: `agent.yaml` `validity`, report `validity`, method row M25. Report panel
+    P2 now shows only the detectable effect per set.
+  - The category `simple` flag and its 3-case error-finding target: every category's target is
+    10. `heuristic` is no longer required.
+  - The rule that "Other" must be under 10% of traffic (C3).
+  - The variance band as part of the compare verdict: a significant change is now `better` or
+    `worse` even when it lies inside the baseline's band. The band is still reported, as data for
+    drift.
+  - Report keys `online` (always null), `regime` and `conditions.simulator`, the category
+    `simple` field, and panel P11. These key removals ship with the report schema v2 in 2.0.
 - **The 2.0 statistics library** (`aot_evals.stats`, docs/statistics.md): `hajek_mean` (the
   per-use-case estimate weighted by 1/π), `optimum_allocation` (Neyman with unequal costs, around
   each use case's minimum), `judge_inflation` and `cases_needed` (the extra cases a grader's errors

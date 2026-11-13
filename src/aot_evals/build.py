@@ -74,7 +74,7 @@ def prepare(ev: Evals) -> list[str]:
     if not ev.categories():
         tts = task_types(ev)
         if tts:
-            cats = [{"id": _slug(t["name"]), "definition": t["name"], "worth": "medium", "simple": False,
+            cats = [{"id": _slug(t["name"]), "definition": t["name"], "worth": "medium",
                      "cost": {"incorrect": "medium"}, "observed_share": t["share"],
                      "share_source": "discovery", "draft": "from the discovery report's task types; "
                      "confirm worth and costs with the owner, and add an example trace"} for t in tts]

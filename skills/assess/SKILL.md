@@ -107,8 +107,8 @@ point, and where the records are.
    only, never a web search**: once the task types from subagent 3 are known, run
    `aot-evals benchmarks --workload TAG --task "<task type>" ...` (one `--task` per task type;
    `aot-evals benchmarks` alone lists the workload tags) and keep the top fits with the reason
-   each might fit, what to borrow from it (grading design, case template, user simulator,
-   sandbox design, baseline number) and its caveats. Say which of the agent's task types each
+   each might fit, what to borrow from it (grading design, case template, sandbox
+   design, baseline number) and its caveats. Say which of the agent's task types each
    one informs. The command also prints the **situations to cover**: the columns of the golden
    test case grid, each with which matched benchmark tests it. Keep that list. Then map every
    existing case file into the grid: for each task type, how many cases are plain requests and

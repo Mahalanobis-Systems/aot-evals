@@ -55,6 +55,11 @@ def test_good_agent_clears_every_phase1_gate(make_repo):
         assert math.isclose(row["zero_failure_bound"], 1 - 0.05 ** (1 / row["n_cases"]))
     assert r["sets"]["quality_estimate"]["estimate"]["point"] == 1.0
     assert r["coverage"]["list"] == "external"
+    # Removed in 2.0: simulators (G9), compounded validity, the online and regime keys
+    assert "G9" not in {g["id"] for g in r["gates"]}
+    assert not {"validity", "online", "regime"} & set(r) and "simulator" not in r["conditions"]
+    assert all("simple" not in row for row in r["categories"])
+    assert all("simulator" not in json.loads(m.read_text()) for m in (repo.evals / "runs").glob("*/manifest.json"))
     assert r["coverage"]["empty_cells"] > 0  # reschedule-meeting has no cases
     assert r["coverage"]["cells"][0]["n"] == 0  # empty cells listed first
 
@@ -494,3 +499,22 @@ def test_gate_checks_cost_the_same_git_calls_however_many_cases(make_repo, monke
     for path in sorted((repo.evals / "cases").glob("*/*.json")):
         rel = str(path.relative_to(repo.root))
         assert added[rel] == util.git_adding_commit(repo.root, rel)
+
+
+def test_categories_need_no_simple_flag_and_other_may_carry_any_share(make_repo):
+    """C3 and C5 in 2.0: no `simple` flag (and no 3-case targets), and no 10% cap on "Other"."""
+    from aot_evals import allocate
+
+    repo = make_repo()
+    data = repo.yaml("categories.yaml")
+    for c in data["categories"]:
+        c.pop("simple", None)
+        c.pop("heuristic", None)
+    data["categories"][-1]["other"] = True  # nothing-to-do: 40% of traffic
+    repo.write_yaml("categories.yaml", data)
+    repo.commit("categories without simple")
+    ev = Evals(repo.evals)
+    c3 = next(g for g in gates.evaluate(ev) if g.id == "C3")
+    assert c3.status == "met", c3.problems
+    ef = {c["category"]: c["target"] for c in allocate.plan(ev)["cells"] if c["set"] == "error_finding"}
+    assert set(ef.values()) == {allocate.EF_PER_CATEGORY}

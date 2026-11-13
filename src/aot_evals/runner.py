@@ -111,7 +111,6 @@ def build_manifest(ev: Evals, run_id: str, purpose: str, k: int, cases: list[dic
         "k": k,
         "window": (agent.get("stable_window") or {}).get("since"),
         "judge_backends": _judge_backends(ev, cases),
-        "simulator": agent.get("simulator"),
         "fakes_sha256": sha256_tree(ev.p("env")),
         "case_set": {"ids": [c.get("id") for c in cases],
                      "files": {c.get("id"): sha256_file(ev.p(c["_path"]))[:16] for c in cases if "_path" in c},

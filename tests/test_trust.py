@@ -81,7 +81,7 @@ def test_changes_since_the_baseline_name_the_short_path(make_repo):
     (d / "move-001.json").write_text(json.dumps(case))
     cats = repo.yaml("categories.yaml")
     cats["categories"].append({"id": "reschedule", "definition": "move a meeting", "example": "t",
-                               "worth": "high", "simple": False, "cost": {"incorrect": "high"},
+                               "worth": "high", "cost": {"incorrect": "high"},
                                "observed_share": 0.0, "share_source": "traces"})
     repo.write_yaml("categories.yaml", cats)
     ch = {c["kind"]: c for c in trust.changes(ev)}

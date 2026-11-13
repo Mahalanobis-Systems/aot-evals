@@ -1,7 +1,7 @@
 """C5 `allocate`: size both case sets, show the arithmetic, and record the plan.
 
-- **Error-finding set** (docs/method.md §2.3): flat across categories, at least 10 per category and 3 per
-  simple category. Its pass rate is not a quality estimate.
+- **Error-finding set** (docs/method.md §2.3): flat across categories, at least 10 per category.
+  Its pass rate is not a quality estimate.
 - **Quality-estimate set**: proportional to each category's observed share, sized by the
   interval the owner needs on the share-weighted pass rate (M14).
 
@@ -21,7 +21,6 @@ from .screen import passes as screen_passes
 from .util import dump_yaml, now_iso
 
 EF_PER_CATEGORY = 10
-EF_PER_SIMPLE = 3
 
 
 def plan(ev: Evals, halfwidth: float = 0.05, assumed_rate: float = 0.5, k: int = 3) -> dict:
@@ -46,7 +45,7 @@ def plan(ev: Evals, halfwidth: float = 0.05, assumed_rate: float = 0.5, k: int =
         cid = c.get("id")
         if not cid:
             continue
-        ef_target = EF_PER_SIMPLE if c.get("simple") else EF_PER_CATEGORY
+        ef_target = EF_PER_CATEGORY
         share = shares.get(cid)
         if isinstance(share, (int, float)) and share_total > 0:
             qe_target = math.ceil(qe_total * share / share_total) if share > 0 else 0
@@ -73,7 +72,7 @@ def plan(ev: Evals, halfwidth: float = 0.05, assumed_rate: float = 0.5, k: int =
         "assumptions": {"assumed_pass_rate": assumed_rate, "k": k,
                         "quality_halfwidth": halfwidth, "confidence": 0.95, "power": 0.80},
         "error_finding": {
-            "rule": f"flat: {EF_PER_CATEGORY} per category, {EF_PER_SIMPLE} per simple category",
+            "rule": f"flat: {EF_PER_CATEGORY} per category",
             "n": ef_n,
             "mde_unpaired_upper_bound": stats.mde(ef_n, assumed_rate),
             "per_category_ci_halfwidth_at_target": {

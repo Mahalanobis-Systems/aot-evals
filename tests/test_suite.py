@@ -100,9 +100,24 @@ def test_undeclared_difference_is_refused_by_g7(make_repo):
 def test_a_declared_variable_must_cover_the_difference(make_repo):
     repo = make_repo()
     baseline(repo)
-    candidate(repo, variable="simulator=v2", break_cases=["book-001"])
+    candidate(repo, variable="environment=v2", break_cases=["book-001"])
     c = comparison(repo)
-    assert c["refused"] and "declared variable 'simulator=v2'" in c["refused"]
+    assert c["refused"] and "declared variable 'environment=v2'" in c["refused"]
+
+
+def test_the_variance_band_is_data_not_the_verdict(make_repo, monkeypatch):
+    """A significant change is called one even when the baseline's band is wider than it: the
+    band moves to drift (2.0), and stays in the comparison as data."""
+    from aot_evals import compare as compare_mod
+
+    monkeypatch.setattr(compare_mod, "band", lambda ctx: [0.0, 1.0])
+    repo = make_repo()
+    baseline(repo)
+    candidate(repo, break_cases=BOOKING[:6])
+    c = comparison(repo)
+    assert c["test"]["p"] < 0.05 and c["verdict"] == "worse", c["verdict_reasons"]
+    assert c["variance_band"]["baseline"] == [0.0, 1.0]
+    assert not any("band" in r for r in c["verdict_reasons"])
 
 
 def test_better_correctness_beyond_cost_budget_is_a_trade(make_repo):

@@ -4,7 +4,7 @@
 `assess` skill) matches an agent against it with `aot-evals benchmarks`, from this copy alone:
 no web search, no model call, so it costs no time or tokens. The point is not to run these
 benchmarks. In this method, public benchmarks are a source of grading designs, case templates,
-user simulators, sandbox designs and baseline numbers; the cases themselves come from the
+sandbox designs and baseline numbers; the cases themselves come from the
 agent's own traffic (docs/method.md §1, principle 1).
 
 ## Matching
@@ -41,7 +41,7 @@ The result says why each fits, so the reader can judge the match rather than tru
 | `harness` | runnable implementations | `inspect_evals`, `hal`, `agentbeats`, `own-repo`, `none` |
 | `status` | | `active`, `frozen` (no new results accepted), `saturated` (top scores above about 90%), `deprecated` |
 | `links` | `paper`, `github`, `website`, `leaderboard`; at least one of the first three | |
-| `good_for` | what a team can borrow | `grading-design`, `case-template`, `baseline`, `user-simulator`, `sandbox-design`, `privacy-pattern`, `taxonomy` |
+| `good_for` | what a team can borrow | `grading-design`, `case-template`, `baseline`, `sandbox-design`, `privacy-pattern`, `taxonomy` |
 | `situations` | the situations it was built to test (optional) | ids from `references/situations.yaml` |
 | `fit` | which production agents it helps and why, 1 or 2 sentences | |
 | `caveats` | what's wrong with it, 1 sentence | |

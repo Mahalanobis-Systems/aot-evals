@@ -30,8 +30,7 @@ ENVIRONMENTS = {"static", "api-sandbox", "database", "browser", "desktop", "mobi
 GRADING = {"exact-match", "state-diff", "unit-tests", "programmatic-check", "llm-judge", "human", "pass^k",
            "trajectory-check"}
 HARNESS = {"inspect_evals", "hal", "agentbeats", "own-repo", "none"}
-GOOD_FOR = {"grading-design", "case-template", "baseline", "user-simulator", "sandbox-design", "privacy-pattern",
-            "taxonomy"}
+GOOD_FOR = {"grading-design", "case-template", "baseline", "sandbox-design", "privacy-pattern", "taxonomy"}
 STATUS = {"active", "frozen", "saturated", "deprecated"}
 DATA = {"synthetic", "real-public", "real-scraped", "mixed"}
 PII = {"none", "possible", "yes"}

@@ -74,8 +74,7 @@ the time (12–13% critically) versus 16% (6%) when constrained by tools
 simulator's model [Lost in Simulation]; personas written by hand matched
 real users on only 6–8% of stylistic dimensions, and grounding simulators in
 real conversations raised that to 45% and exposed hidden failures
-[RealUserSim]. Validity compounds: task × simulator × judge each at 70% is
-about 34% overall [Validity]. Before trusting an environment, a trivial agent
+[RealUserSim]. Before trusting an environment, a trivial agent
 should score ~0 and a reference solution ~100 [ABC checklist].
 
 ## 5. When the world can't be faked
@@ -305,8 +304,7 @@ several are cited in more than one.
   https://arxiv.org/abs/2508.15218. Gains hold in pairwise settings, less in
   direct scoring.
 - **[Validity]** Caban, "Measurement Without Validity", 2026-08, preprint.
-  https://arxiv.org/abs/2608.00794. Validity compounds across task ×
-  simulator × judge; 82% of 55 papers report broken inter-rater statistics;
+  https://arxiv.org/abs/2608.00794. 82% of 55 papers report broken inter-rater statistics;
   proposes ICC ≥ 0.70.
 
 ---

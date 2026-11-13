@@ -207,7 +207,6 @@
     leaderboard: null
   good_for:
   - case-template
-  - user-simulator
   situations: [ambiguous]
   fit: Fits coding agents and any agent that should ask before acting on vague requests. Borrow the recipe
     of stripping details from SWE-bench Verified issues and scoring both the resolve rate and how many
@@ -817,7 +816,6 @@
     github: https://github.com/xingyaoww/mint-bench
     leaderboard: null
   good_for:
-  - user-simulator
   - baseline
   situations: [multi-turn, tool-error]
   fit: Fits agents that iterate with a user on code or quantitative answers. The useful part is the GPT-4
@@ -1509,7 +1507,6 @@
     leaderboard: https://www.vals.ai/
   good_for:
   - grading-design
-  - user-simulator
   fit: Fits app-builder agents; borrow the idea of grading a deployed app by having a browser agent walk
     964 scripted workflows instead of unit tests.
   caveats: Half the specs are held out and the code is not released, so you cannot run it yourself; several
@@ -2239,7 +2236,6 @@
     github: https://github.com/XiaoduoAILab/ECom-Bench
     leaderboard: null
   good_for:
-  - user-simulator
   - grading-design
   - privacy-pattern
   fit: Fits e-commerce after-sales support agents. Borrow the persona files (consumption habits, personality)
@@ -2321,7 +2317,6 @@
     github: https://github.com/plurai-ai/intellagent
     leaderboard: null
   good_for:
-  - user-simulator
   - case-template
   - taxonomy
   fit: Fits any policy-bound chat agent whose team wants to generate their own test cases from a prompt
@@ -2453,7 +2448,6 @@
     leaderboard: null
   good_for:
   - grading-design
-  - user-simulator
   - case-template
   situations: [forbidden]
   fit: Fits support or booking agents that must follow a written policy while talking to a customer and
@@ -2545,7 +2539,6 @@
     leaderboard: https://taubench.com
   good_for:
   - grading-design
-  - user-simulator
   - case-template
   - sandbox-design
   situations: [forbidden, multi-turn, dual-control]
@@ -2597,7 +2590,6 @@
     leaderboard: https://taubench.com
   good_for:
   - grading-design
-  - user-simulator
   - sandbox-design
   situations: [forbidden, multi-turn]
   fit: Fits support agents that must answer from a knowledge base as well as act on a backend, and voice
@@ -4807,7 +4799,6 @@
     github: null
     leaderboard: https://snorkel.ai/leaderboard/snorkel-underwrite/
   good_for:
-  - user-simulator
   - grading-design
   fit: Fits insurance and lending agents that must collect information before deciding. Borrow the imperfect
     simulated user and the pass^k reliability drop as a reported metric.
@@ -4885,7 +4876,6 @@
     github: https://github.com/GAIR-NLP/AgencyBench
     leaderboard: null
   good_for:
-  - user-simulator
   - grading-design
   - baseline
   fit: Fits long-running coding or deliverable-building agents that take iterative feedback. Borrow the
@@ -5268,7 +5258,6 @@
   - sandbox-design
   - grading-design
   - taxonomy
-  - user-simulator
   fit: Fits personal and workplace assistants that must act on time and cope with events arriving during
     a task. Borrow the write-action verifier against oracle events and the capability splits (execution,
     search, ambiguity, adaptability, time, noise, agent-to-agent).
@@ -5348,7 +5337,6 @@
     github: https://github.com/microsoft/lost_in_conversation
     leaderboard: null
   good_for:
-  - user-simulator
   - grading-design
   fit: Fits any chat agent whose users reveal requirements gradually. Borrow the sharded instruction format,
     the simulator that reveals one shard per turn, and the split of results into aptitude (90th percentile)
@@ -5516,7 +5504,6 @@
     leaderboard: https://the-agent-company.com/#/leaderboard
   good_for:
   - sandbox-design
-  - user-simulator
   - grading-design
   - baseline
   situations: [ambiguous, multi-turn]
@@ -5558,7 +5545,6 @@
   good_for:
   - case-template
   - taxonomy
-  - user-simulator
   fit: Fits assistants that must ask for missing information before calling an API. The action vocabulary
     (request, clarify, fail inform) and the API-graph trick for generating dependent calls are worth copying
     into a case generator.
@@ -5726,7 +5712,6 @@
     github: https://github.com/SamuelSchmidgall/AgentClinic
     leaderboard: https://agentclinic.github.io/
   good_for:
-  - user-simulator
   - case-template
   fit: Fits diagnostic or triage assistants that must gather information by asking questions rather than
     reading a full vignette. Borrow the four-agent setup (patient, doctor, measurement, moderator), the
@@ -6192,7 +6177,6 @@
     leaderboard: null
   good_for:
   - case-template
-  - user-simulator
   fit: Fits end-to-end clinical workflow agents where an early mistake (wrong specialty, missed question)
     should hurt later stages. Borrow the five-stage sequential case format and the per-stage metrics (accuracy
     and IoU for referral and history, LLM scoring for diagnosis).
@@ -6723,7 +6707,6 @@
   good_for:
   - case-template
   - grading-design
-  - user-simulator
   fit: Fits retrieval-augmented support or helpdesk assistants that hold a conversation over a knowledge
     base. Borrow its conversation-plus-corpus case format, its unanswerable and non-standalone question
     labels, and its separate retrieval and generation scoring.
@@ -8235,7 +8218,6 @@
   good_for:
   - sandbox-design
   - grading-design
-  - user-simulator
   fit: Fits mobile agents in shopping and workplace apps. Borrow the backend-database checks for state
     and the user-interaction tasks.
   caveats: New and single-vendor; apps are open-source stand-ins, not the real products; best framework
@@ -8307,7 +8289,6 @@
     github: https://github.com/openai/evals
     leaderboard: null
   good_for:
-  - user-simulator
   - grading-design
   fit: Fits payment or negotiation agents that talk to other agents or users and must not be manipulated
     (or manipulate). Borrow the two-model setup where the outcome (money moved) is checked programmatically
@@ -10162,7 +10143,6 @@
   good_for:
   - sandbox-design
   - grading-design
-  - user-simulator
   situations: [forbidden]
   fit: Fits internal workplace or devops agents that act on real services. Borrow the Docker company sandbox
     from TheAgentCompany, the rule-based final-state checker paired with a four-label trajectory judge,
@@ -10535,7 +10515,6 @@
     github: https://github.com/Bairong-Xdynamics/Benchmarking-LLM-Realistic-Selling-Skill
     leaderboard: null
   good_for:
-  - user-simulator
   - grading-design
   - baseline
   fit: 'Fits outbound or inbound sales chat agents with no backend actions. Borrow CustomerLM, a fine-tuned
@@ -11589,7 +11568,6 @@
     github: null
     leaderboard: null
   good_for:
-  - user-simulator
   - case-template
   fit: Fits shopping assistants with budget or promotion logic. Borrow the intent-grounded instruction
     generation from sampled products.
@@ -11872,7 +11850,6 @@
     github: https://github.com/bird-bench/BIRD-Interact
     leaderboard: https://bird-interact.github.io/
   good_for:
-  - user-simulator
   - grading-design
   - case-template
   situations: [ambiguous, multi-turn, tool-error]
@@ -12248,7 +12225,6 @@
   good_for:
   - grading-design
   - taxonomy
-  - user-simulator
   fit: Fits assistants that must refuse or ask back when a request is ambiguous or unservable, not just
     call tools; borrow its Normal / Special / Agent split and its rule-based scoring with end-state and
     process accuracy for the multi-turn subset.
@@ -13021,7 +12997,6 @@
     github: https://github.com/Mysterchan/learning_to_ask
     leaderboard: null
   good_for:
-  - user-simulator
   - grading-design
   - case-template
   situations: [tool-error]
@@ -13298,7 +13273,6 @@
     github: https://github.com/tangqiaoyu/ToolAlpaca
     leaderboard: null
   good_for:
-  - user-simulator
   - sandbox-design
   - privacy-pattern
   fit: Fits teams that need to test an agent against APIs that do not exist yet or cannot be hit in test;
@@ -13463,7 +13437,6 @@
   good_for:
   - grading-design
   - sandbox-design
-  - user-simulator
   - taxonomy
   fit: 'Fits assistant agents whose tools have hidden state dependencies (one call only works after another).
     Borrow the milestone and minefield grading: required world-state checkpoints in a partial order, forbidden
@@ -14413,7 +14386,6 @@
     leaderboard: https://mcgill-nlp.github.io/weblinx/
   good_for:
   - case-template
-  - user-simulator
   fit: Fits chat-driven browser copilots where a human gives instructions turn by turn. Borrow the demonstration
     format of paired user utterances and browser actions.
   caveats: Offline replay only, no live execution; size is about 2,300 demos (100K steps); data license

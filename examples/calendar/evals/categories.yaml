@@ -3,7 +3,6 @@ categories:
     definition: The user asks for a meeting at a stated time
     example: trace-1
     worth: high
-    simple: false
     cost: {incorrect: high, unexecuted_claim: high, no_response: medium}
     observed_share: 0.6
     share_source: traces
@@ -11,8 +10,6 @@ categories:
     definition: No scheduling request
     example: trace-2
     worth: low
-    simple: true
-    heuristic: the trigger contains no "Book '...' on <date> at <time>" request
     cost: {incorrect: medium, unexecuted_claim: low, no_response: none}
     observed_share: 0.4
     share_source: traces

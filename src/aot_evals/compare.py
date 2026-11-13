@@ -8,7 +8,7 @@ comparable:
   case's majority verdict flips fail -> pass) and losses (pass -> fail) are listed separately;
   a net delta is never reported alone (M6);
 - **McNemar's exact test** on the flips, and a **bootstrap 95% CI** on the mean per-case delta;
-- the baseline's **variance band**: a change inside it is not called a change (M5);
+- the baseline's **variance band**, reported as data for drift (M5); it does not decide the verdict;
 - the **minimum detectable effect** at 80% power from the baseline's within-case variance (M7);
 - **plane-B deltas** per category against budgets. A correctness gain with a new budget breach
   is a "trade" (G11); an operational regression at unchanged correctness is a "worse".
@@ -41,7 +41,6 @@ VARIABLES = {
     "harness": {"agent_commit", "invoke", "harness"},
     "environment": {"fakes_sha256"},
     "fakes": {"fakes_sha256"},
-    "simulator": {"simulator"},
 }
 SIGNIFICANCE = 0.05
 BOOTSTRAP = 10_000
@@ -308,12 +307,10 @@ def compare(ev: Evals, baseline_runs: list[str], candidate_runs: list[str]) -> d
     cluster_of = {cid: c.get("cluster") for cid, c in cand.cases.items()}
     p = paired(rb, rc, cluster_of)
     k = min(base.k or 0, cand.k or 0)
-    b_band = band(base)
-    width = (b_band[1] - b_band[0]) if b_band else None
     out.update(
         paired=True, **p,
         k={"baseline": base.k, "candidate": cand.k},
-        variance_band={"baseline": b_band, "candidate": band(cand)},
+        variance_band={"baseline": band(base), "candidate": band(cand)},  # data for drift, not the verdict
         mde_at_80_power=mde_from(base, {c: rb[c] for c in rb if c in rc}),
         min_flips_for_significance=min_flips_for_significance(),
         per_set={s: paired(case_rates(base, set_name=s), case_rates(cand, set_name=s), cluster_of) for s in SETS},
@@ -340,14 +337,12 @@ def compare(ev: Evals, baseline_runs: list[str], candidate_runs: list[str]) -> d
     reasons = []
     significant = p["test"]["p"] < SIGNIFICANCE and p["test"]["ci"] is not None and (
         p["test"]["ci"][0] > 0 or p["test"]["ci"][1] < 0)
-    inside_band = width is not None and p["net"] is not None and abs(p["net"]) <= width
     if k < 2:
         verdict = None
         reasons.append("G2: k = 1 on one side; no claim of improvement or regression")
-    elif not significant or inside_band:
+    elif not significant:
         verdict = "indistinguishable"
-        reasons.append("paired test not significant" if not significant else
-                       f"net {p['net']:+.3f} is inside the baseline variance band (width {width:.3f})")
+        reasons.append("paired test not significant")
     else:
         verdict = "better" if p["net"] > 0 else "worse"
         reasons.append(f"McNemar p = {p['test']['p']:.4f}; CI {p['test']['ci']}")
