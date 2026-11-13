@@ -6,6 +6,15 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+- **The 2.0 statistics library** (`aot_evals.stats`, docs/statistics.md): `hajek_mean` (the
+  per-use-case estimate weighted by 1/π), `optimum_allocation` (Neyman with unequal costs, around
+  each use case's minimum), `judge_inflation` and `cases_needed` (the extra cases a grader's errors
+  cost), `threshold_test` and `threshold_n` (a rate against a fixed bar, with the judge's error in
+  the test), `non_inferiority_test` (one-sided sign-flip on paired deltas, per cluster) and `holm`.
+  `rogan_gladen` now takes the failure count, catch rate and clean pass rate, and returns the
+  corrected failure rate; the report's `corrected_trigger_rate` is unchanged. No command uses the
+  new functions yet.
+
 ## 1.1.0 — 2026-11-11
 
 - **The statistics behind the method** ([docs/statistics.md](docs/statistics.md)): for each decision

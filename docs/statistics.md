@@ -162,7 +162,7 @@ One set can serve both purposes only when each case's **inclusion probability** 
 sampling time, so each case can be reweighted by 1/π (Horvitz & Thompson 1952; for models, active testing weights each
 labeled case by its selection probability, Kossen et al. 2021). That is rule 5: a bug-finding case enters a rate only with a recorded
 π. The quality set's estimate per use case is the Hájek mean, Horvitz–Thompson normalized by its own
-weights, μ̂_s = Σ (ŷ_i / π_i) / Σ (1 / π_i) (Hájek 1971). It is approximately unbiased, and more
+weights, μ̂_s = Σ (ŷ_i / π_i) / Σ (1 / π_i) (Hájek 1971; `stats.hajek_mean`). It is approximately unbiased, and more
 stable than dividing by the size of the frame.
 
 ### 2.2 Drawing the quality set
@@ -187,13 +187,13 @@ extended for unequal costs (Cochran 1977, §5.5):
 
 where w_s is the use case's weight, σ_s the spread of its outcomes (√(μ_s(1 − μ_s)) for a pass rate)
 and c_s the cost of running one of its cases. This gives the narrowest interval on θ̂ for a fixed
-budget (rule 8; `stats.neyman_allocation`). A use case at 99% needs far fewer cases than one at 70% to
+budget (rule 8; `stats.optimum_allocation`). A use case at 99% needs far fewer cases than one at 70% to
 reach the same precision, and a use case whose cases are expensive (long runs, many tool calls) gets
 fewer than its weight alone would give it.
 
 Every gated use case also needs the minimum its decision rule sets (§4.1). Where the formula gives a
 use case less than its minimum, fix that use case at its minimum and spread the rest of the budget by
-the same formula over the other use cases. That is the narrowest interval the budget allows, given
+the same formula over the other use cases, repeating until every minimum holds. That is the narrowest interval the budget allows, given
 the minimums.
 
 Before any baseline, σ_s is unknown. Start with proportional allocation (n_s ∝ w_s), which assumes
@@ -433,7 +433,7 @@ difference between two proportions; Fiedler 2026, for LLM judges). Spearman (190
 attenuation in correlations measured with error. Correcting the reported rate (§3.2) divides by J,
 and the variance by J², so the cases needed to see the same change grow by the factor
 
-  q(1 − q) / (J² · p(1 − p))
+  q(1 − q) / (J² · p(1 − p))   (`stats.judge_inflation`)
 
 (an early sample-size treatment is Rubin, Rosenbaum & Cobb 1956; a modern closed form for one- and
 two-sample tests is Hársfalvi & Reiczigel 2024). Near p = 50% the factor is about 1/J². For rare
@@ -453,7 +453,8 @@ So a judge that is good enough for common failures can be ruinous for rare ones,
 failures its clean pass rate matters most. A threshold test that refunds break the policy less than
 5% of the time (one-sided α = 0.05, 80% power against a true rate of 1%) takes about 120 cases with
 a code check, about 860 with a judge at catch 0.80 and clean 0.90, and about 175 with one at catch
-0.95 and clean 0.99. Tests whose critical values and power are written in the judge's error rates
+0.95 and clean 0.99 (`stats.threshold_n`: 123, 863 and 176 rounded up; the test itself is
+`stats.threshold_test`, exact binomial on the grader's scale). Tests whose critical values and power are written in the judge's error rates
 exist for exactly this case (Feng et al. 2026), as do power calculations for prediction-powered
 inference (Chen, Guo & Li 2026) and for splitting a budget between human and judge labels (Kim
 2026).
@@ -715,7 +716,7 @@ version (`stats.cases_per_arm`):
 every job (`stats.allocation_target`): its comparison, its guard, the detection need of each costly
 failure mode, and its own gate if the blind-spot check (§1.2) gave it one. Weight enters through the
 inputs: a heavier use case gets a smaller worthwhile change, a tighter tolerated drop and more of its
-failure modes counted as costly. Each count is multiplied by the inflation factor of the checks that grade it (§3.3).
+failure modes counted as costly. Each count is multiplied by the inflation factor of the checks that grade it (§3.3; `stats.cases_needed`).
 The rest of the budget goes by optimum allocation around those minimums (§2.3).
 
 ### 4.2 Floors: showing that you cleared the bar
@@ -794,7 +795,7 @@ paired test already handles, and its width depends on k. The band belongs to dri
 **Statistics.** Failing to reject "no difference" says the test couldn't tell, not that there is no
 difference. On 50 cases with 4 fixes and 4 breaks, the 95% interval on Δ runs about ±11 points. To
 claim "no worse", state a margin Δ in advance and test it: the lower bound of θ_new − θ_old must sit
-above −Δ (rule 19). To show the cheaper model is within 5 points at that flip rate takes about 500
+above −Δ (rule 19; `stats.non_inferiority_test`). To show the cheaper model is within 5 points at that flip rate takes about 500
 cases (`stats.cases_for_flip_rate(0.16, 0.05)` = 503). Non-inferiority is the standard design for
 "cheaper and no worse" in clinical trials, and the same arithmetic applies.
 
@@ -807,8 +808,8 @@ blind use case is guarded (§1.2).
 alarm. Ten gates with no real change flag at least one about 40% of the time (1 − 0.95¹⁰). That holds
 for per-use-case gates, and for several evals gating one change (§1.3). Control it (rule 22):
 Benjamini–Hochberg controls the share of false discoveries among the gates that fire, when the
-p-values are independent or positively dependent (Benjamini & Hochberg 1995); Holm controls the
-chance of any (Holm 1979). Per-use-case rows that don't gate are diagnostics,
+p-values are independent or positively dependent (Benjamini & Hochberg 1995; `stats.benjamini_hochberg`); Holm controls the
+chance of any (Holm 1979; `stats.holm`). Per-use-case rows that don't gate are diagnostics,
 and their p-values are shown adjusted.
 
 ### 4.7 Looks: stop peeking

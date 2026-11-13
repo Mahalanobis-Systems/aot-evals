@@ -71,12 +71,35 @@ def test_ac1_and_specific_agreement_survive_a_skewed_pass_rate():
 
 
 def test_rogan_gladen_undoes_a_known_judge_error():
-    # true pass rate 70%, judge TPR 0.9, TNR 0.8: the judge passes 0.7*0.9 + 0.3*0.2 = 69%
-    r = stats.rogan_gladen(690, 1000, 900, 1000, 800, 1000)
-    assert abs(r["point"] - 0.70) < 1e-9 and r["ci"][0] < 0.70 < r["ci"][1]
-    thin = stats.rogan_gladen(690, 1000, 27, 30, 24, 30)  # same rates on 30 labels a side
+    # true failure rate 30%, catch 0.8, clean 0.9: the judge fails 0.3*0.8 + 0.7*0.1 = 31%
+    r = stats.rogan_gladen(310, 1000, 800, 1000, 900, 1000)
+    assert abs(r["point"] - 0.30) < 1e-9 and r["ci"][0] < 0.30 < r["ci"][1]
+    assert abs(r["j"] - 0.7) < 1e-12 and r["youden_j"] == r["j"]  # 1.x key kept until stage 8
+    thin = stats.rogan_gladen(310, 1000, 24, 30, 27, 30)  # same rates on 30 labels a kind
     assert (thin["ci"][1] - thin["ci"][0]) > (r["ci"][1] - r["ci"][0])
     assert stats.rogan_gladen(50, 100, 50, 100, 50, 100) is None  # a coin flip can't be corrected
+
+
+def test_rogan_gladen_matches_the_labels_per_kind_table():
+    # statistics §3.4: true failure rate 5%, catch 0.80, clean 0.95, 10,000 graded runs
+    rows = {(30, 30): (24, 28, 0.0, 14.7), (100, 100): (80, 95, 0.0, 10.5),
+            (200, 200): (160, 190, 1.1, 8.9), (100, 300): (80, 285, 1.7, 8.3),
+            (50, 350): (40, 332, 1.7, 7.9)}
+    for (n_fail, n_pass), (ck, cl, lo, hi) in rows.items():
+        ci = stats.rogan_gladen(875, 10_000, ck, n_fail, cl, n_pass)["ci"]
+        assert [round(100 * x, 1) for x in ci] == [lo, hi], (n_fail, n_pass)
+
+
+def test_corrected_trigger_rate_is_unchanged_by_the_catch_clean_signature():
+    from aot_evals.report import corrected_trigger_rate
+    # pass is the positive in the 1.x confusion matrix: tp both pass, tn both fail
+    judge = {"confusion": {"tp": 45, "fn": 5, "tn": 16, "fp": 4}, "status": "calibrated"}
+    r = corrected_trigger_rate(0.25, 40, judge)
+    # the 1.x arithmetic, pass as the positive, then complemented
+    q, tpr, tnr = 30 / 40, 45 / 50, 16 / 20
+    j = tpr + tnr - 1
+    assert abs(r["point"] - (1 - (q + tnr - 1) / j)) < 1e-12
+    assert r["ci"][0] < r["point"] < r["ci"][1] and r["calibrated"]
 
 
 def test_ppi_is_unbiased_and_tighter_than_labels_alone_when_the_suite_is_good():
@@ -234,3 +257,128 @@ def test_cost_flags_catch_a_write_in_a_read_only_category():
     assert f["categories"]["report"]["flag"] and f["categories"]["report"]["exceeds_declared"]
     assert not f["categories"]["book"]["flag"] and f["even"] is False
     assert stats.cost_flags([("book", "medium")], {"book": "medium"})["even"] is True
+
+
+# ---- 2.0 statistics library (docs/statistics.md §2.1, §2.3, §3.3, §4.1, §4.5, §4.6) ----------
+
+def test_hajek_mean_weights_each_case_by_one_over_pi():
+    # an oversampled case (pi = 0.25) counts four times; the others twice
+    h = stats.hajek_mean([1.0, 0.0, 1.0], [0.5, 0.5, 0.25])
+    assert abs(h["point"] - 0.75) < 1e-12 and h["sum_weights"] == 8.0
+    assert abs(h["n_effective"] - 64 / 24) < 1e-12  # unequal weights are worth fewer cases
+    equal = stats.hajek_mean([1.0, 0.0, 1.0, 1.0], [0.1] * 4)  # equal pi: the plain mean
+    assert equal["point"] == 0.75 and abs(equal["n_effective"] - 4) < 1e-12
+    assert abs(equal["se"] - 0.25) < 1e-12  # s / sqrt(n) = 0.5 / 2
+    assert stats.hajek_mean([1.0], [0.5])["se"] is None
+    assert stats.hajek_mean([], []) is None
+    assert stats.hajek_mean([1.0, 0.0], [0.5, None]) is None  # no recorded pi: not in a rate
+    assert stats.hajek_mean([1.0], [0.0]) is None
+
+
+def test_optimum_allocation_follows_spread_and_cost_around_minimums():
+    def uc(w, p=None, c=None):
+        return {"weight": w, "pass_rate": p, "cost": c}
+    # before a baseline: proportional to weight
+    prop = stats.optimum_allocation({"a": uc(0.8), "b": uc(0.2)}, 100)
+    assert prop["allocation"] == {"a": 80, "b": 20} and prop["spread"] == "assumed_equal"
+    # a use case at 99% needs fewer cases than one at 70% for the same precision
+    ney = stats.optimum_allocation({"easy": uc(0.5, 0.99, 1), "hard": uc(0.5, 0.70, 1)}, 100)
+    assert ney["allocation"]["hard"] > 3 * ney["allocation"]["easy"] and ney["spread"] == "measured"
+    # four times the cost per case: half the cases (1 / sqrt(4))
+    cost = stats.optimum_allocation({"cheap": uc(0.5, 0.8, 1), "dear": uc(0.5, 0.8, 4)}, 90)
+    assert cost["allocation"] == {"cheap": 60, "dear": 30}
+    # a minimum above the formula's share is fixed, and the rest spread over the others
+    m = stats.optimum_allocation({"a": uc(0.7), "b": uc(0.2), "c": uc(0.1)}, 100, {"c": 30})
+    assert m["allocation"] == {"a": 54, "b": 16, "c": 30} and m["at_minimum"] == ["c"]
+    assert sum(m["allocation"].values()) == 100
+    # fixing one at its minimum can push another under its own: repeat until all hold
+    chain = stats.optimum_allocation({"a": uc(0.9), "b": uc(0.05), "c": uc(0.05)}, 100, {"b": 40, "c": 9})
+    assert chain["allocation"]["b"] == 40 and chain["allocation"]["c"] >= 9
+    assert sum(chain["allocation"].values()) == 100
+    short = stats.optimum_allocation({"a": uc(0.5), "b": uc(0.5)}, 50, {"a": 40, "b": 40})
+    assert short["allocation"] == {"a": 40, "b": 40} and short["shortfall"] == 30
+    assert stats.optimum_allocation({"a": uc(None), "b": uc(1.0)}, 10) is None  # unstated weight
+
+
+def test_judge_inflation_matches_the_table():
+    # statistics §3.3, rounded as printed there
+    table = {(0.95, 0.95): (1.2, 1.4, 1.7, 3.0), (0.90, 0.90): (1.6, 1.9, 2.6, 5.8),
+             (0.80, 0.90): (2.0, 2.3, 3.2, 7.5), (0.80, 0.80): (2.8, 3.8, 5.9, 16.3),
+             (0.75, 0.75): (4.0, 5.7, 9.3, 26.8)}
+    for (c, s), want in table.items():
+        got = tuple(round(stats.judge_inflation(p, c, s), 1) for p in (0.5, 0.2, 0.1, 0.03))
+        assert got == want, (c, s)
+    assert stats.judge_inflation(0.03, 1.0, 1.0) == 1.0  # a code check costs nothing extra
+    assert stats.judge_inflation(0.1, 0.5, 0.5) is None  # J = 0: a coin
+    assert stats.judge_inflation(0.0, 0.9, 0.9) is None
+    assert stats.cases_needed(100, 0.03, 0.9, 0.9) == 584  # 5.83x, rounded up
+    assert stats.cases_needed(59, 0.05) == 59
+    assert stats.cases_needed(59, 0.05, 0.6, 0.4) is None
+
+
+def test_threshold_n_with_a_code_check_and_with_judges():
+    # statistics §3.3: refunds break the policy less than 5%, 80% power at a true 1%. The formula
+    # gives 122.2, 862.4 and 175.0 ("about 120, 860 and 175"), rounded up to whole cases.
+    assert stats.threshold_n(0.05, 0.01) == 123
+    assert stats.threshold_n(0.05, 0.01, catch=0.80, clean=0.90) == 863
+    assert stats.threshold_n(0.05, 0.01, catch=0.95, clean=0.99) == 176
+    assert stats.threshold_n(0.05, 0.05) is None and stats.threshold_n(0.05, 0.01, catch=0.5, clean=0.5) is None
+    # the other side: show a failure rate is above 20% when it is 30%
+    assert stats.threshold_n(0.20, 0.30) == stats.threshold_n(0.20, 0.30, alpha=0.05)
+    assert stats.threshold_n(0.20, 0.30) > 100
+
+
+def test_threshold_test_is_the_zero_failure_rule_and_handles_a_judge():
+    assert stats.threshold_test(0, 59, 0.05)["passed"]  # 0.95^59 < 0.05
+    t58 = stats.threshold_test(0, 58, 0.05)
+    assert not t58["passed"] and abs(t58["p"] - 0.95 ** 58) < 1e-12
+    assert abs(stats.threshold_test(0, 59, 0.05)["bound"] - stats.zero_failure_bound(59)) < 1e-9
+    # 2 failures in 200 with a code check: well under 5%
+    t = stats.threshold_test(2, 200, 0.05)
+    assert t["passed"] and t["bound"] < 0.05 and t["estimate"] == 0.01
+    # the same agent through a judge at catch 0.80, clean 0.90: about 10.7% of runs flagged.
+    # 200 cases cannot show it; the 863 threshold_n plans for can.
+    judged = stats.threshold_test(21, 200, 0.05, catch=0.80, clean=0.90)
+    assert not judged["passed"] and abs(judged["grader_bar"] - 0.135) < 1e-12
+    big = stats.threshold_test(92, 863, 0.05, catch=0.80, clean=0.90)
+    assert big["passed"] and big["bound"] < 0.05 and abs(big["estimate"] - (92 / 863 - 0.1) / 0.7) < 1e-12
+    # passed and the bound agree
+    for k in range(0, 15):
+        r = stats.threshold_test(k, 150, 0.05)
+        assert r["passed"] == (r["bound"] < 0.05)
+    up = stats.threshold_test(40, 100, 0.25, side="above")
+    assert up["passed"] and up["bound"] > 0.25
+    assert stats.threshold_test(1, 10, 0.05, catch=0.5, clean=0.5) is None
+    assert stats.threshold_test(11, 10, 0.05) is None and stats.threshold_test(0, 10, 0.05, side="x") is None
+
+
+def test_non_inferiority_is_not_no_significant_difference():
+    # statistics §4.5: 4 fixes and 4 breaks on 50 cases, an interval of about +/-11 points
+    deltas = [1.0] * 4 + [-1.0] * 4 + [0.0] * 42
+    assert stats.sign_flip_test(deltas) == 1.0  # "no difference"...
+    five = stats.non_inferiority_test(deltas, 0.05)
+    assert not five["passed"] and five["lower"] < -0.05  # ...but not shown within 5 points
+    wide = stats.non_inferiority_test(deltas, 0.15)
+    assert wide["passed"] and wide["lower"] > -0.15
+    # a clean candidate on 60 cases clears a 2-point margin
+    assert stats.non_inferiority_test([0.0] * 55 + [1 / 3] * 5, 0.02)["passed"]
+    # a real 5-point drop does not clear a 2-point margin
+    drop = stats.non_inferiority_test([0.0] * 190 + [-1.0] * 10, 0.02)
+    assert not drop["passed"] and drop["mean"] == -0.05
+    # four clusters: a one-sided test cannot go below 1/16
+    clustered = stats.non_inferiority_test([0.0] * 40, 0.02, clusters=[f"t{i % 4}" for i in range(40)])
+    assert clustered["n_clusters"] == 4 and clustered["min_attainable_p"] == 1 / 16
+    assert not clustered["passed"] and clustered["lower"] is None
+    many = stats.non_inferiority_test([0.0] * 40, 0.02, clusters=[f"t{i % 20}" for i in range(40)])
+    assert many["passed"] and many["weights"] == "rademacher"
+    assert stats.non_inferiority_test([0.0] * 40, 0.02, clusters=[f"t{i % 7}" for i in range(40)])["weights"] == "webb"
+    assert stats.non_inferiority_test([], 0.02) is None and stats.non_inferiority_test([0.0], 0) is None
+
+
+def test_holm_controls_any_false_alarm_and_is_stricter_than_bh():
+    adj = stats.holm([0.01, 0.04, None, 0.03, 0.5])
+    assert adj == [0.04, 0.09, None, 0.09, 0.5]
+    bh = stats.benjamini_hochberg([0.01, 0.04, None, 0.03, 0.5])
+    assert all(h >= b for h, b in zip(adj, bh, strict=True) if h is not None)
+    assert stats.holm([0.3, 0.9]) == [0.6, 0.9]  # monotone, capped at 1
+    assert stats.holm([]) == [] and stats.holm([None]) == [None]
