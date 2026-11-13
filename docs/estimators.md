@@ -10,7 +10,7 @@ write down:
 
 | Part | The question it answers | What you write down |
 |---|---|---|
-| **1. Estimand** | What number, about what, drives which decision? | The unit being evaluated, the population of requests, the segments of that population and the weight of each, and the decision |
+| **1. Estimand** | What number, about what, drives which decision? | The unit being evaluated, the population of requests, the use cases of that population and the weight of each, and the decision |
 | **2. Sampling design** | Which cases, drawn how? | Where cases come from, how they were selected, the chance each had of being selected, and which cases are related |
 | **3. Measurement model** | How wrong is the grader? | One check per failure mode, each with its measured error rates, and how many times each case runs |
 | **4. Decision rule** | When do we act? | The test, the margin, the error rates you'll tolerate, and how many times you'll look |
@@ -28,6 +28,7 @@ numbers. This page is the structure both of them hang on.
 
 ## Contents
 
+- [Terms](#terms)
 1. [Where evals go](#1-where-evals-go)
 2. [The running example](#2-the-running-example)
 3. [Part 1: the estimand](#3-part-1-the-estimand)
@@ -35,12 +36,93 @@ numbers. This page is the structure both of them hang on.
 5. [Part 3: the measurement model](#5-part-3-the-measurement-model)
 6. [Part 4: the decision rule](#6-part-4-the-decision-rule)
 7. [The estimate](#7-the-estimate)
-8. [The suite spec](#8-the-suite-spec)
-9. [Changing a suite](#9-changing-a-suite)
+8. [The eval spec](#8-the-eval-spec)
+9. [Changing an eval](#9-changing-an-eval)
 10. [The rules in one table](#10-the-rules-in-one-table)
 11. [Out of scope, and open problems](#11-out-of-scope-and-open-problems)
 12. [Prior work](#12-prior-work)
 13. [References](#13-references)
+
+## Terms
+
+Each term below means one thing, here, in the [problems](problems.md), in the
+[statistics](statistics.md) and in the tool. Where aot-evals uses a plainer word than the field it
+comes from, the last column gives the standard name, so the sources can be read alongside.
+
+**The eval and what it covers**
+
+| Term | Meaning | Standard term |
+|---|---|---|
+| **eval** | One estimator: one unit, one population, one decision, with its four parts written down. An agent can have several | estimator |
+| **eval spec** | The file that writes an eval's four parts down (`eval.yaml`). Changing it can change what the number means ([§9](#9-changing-an-eval)) | study protocol |
+| **suite** | An eval's cases and checks: what you build and run | test set |
+| **unit** | What the eval evaluates: the whole agent, or one component of it | system under test |
+| **end-to-end eval** | The eval whose unit is the whole agent as a user meets it, subagents included. Every agent has one | |
+| **component eval** | An eval of one subagent on its own, run from the handoffs it receives | |
+| **context boundary** | Where a subagent starts with a context of its own instead of sharing the orchestrator's | |
+| **handoff** | The input a subagent receives across a context boundary | |
+| **baseline**, **candidate** | The version running now, and the changed version being decided on | control, treatment |
+
+**Part 1: the estimand**
+
+| Term | Meaning | Standard term |
+|---|---|---|
+| **estimand** | The number the decision needs (θ), defined before any case runs | estimand |
+| **population** | Every request the decision is about: from where, over which window, in which environment | target population |
+| **use case** | A kind of request the agent is built to handle, such as a refund or an address change. Use cases partition the population: each request belongs to exactly one | stratum |
+| **share** | A use case's fraction of the population | stratum weight |
+| **cost of a failure** | What one failure in a use case costs, stated by its owner | loss |
+| **weight** (w) | How much a use case counts in θ: its share ("traffic"), or share × cost scaled to sum to 1 ("cost") | |
+| **pass rate** (μ) | The share of a use case's requests the agent gets right | |
+| **θ** | The weighted pass rate, Σ w · μ over use cases. The headline | population parameter |
+
+**Part 2: the sampling design**
+
+| Term | Meaning | Standard term |
+|---|---|---|
+| **case** | One request, with what's needed to run it and grade the result | sampled unit |
+| **frame** | The list cases are drawn from, such as last month's production traces | sampling frame |
+| **pool** | Which of two separate sets a case belongs to: the quality set or the bug-finding set | |
+| **quality set** | Cases drawn at random from the frame, use case by use case. The only cases that count toward θ̂ | stratified probability sample |
+| **bug-finding set** | Cases picked by hand to find failures. They never count toward θ̂ | purposive sample |
+| **inclusion probability** (π) | The chance a case had of being drawn. The estimate weights each case by 1/π | inclusion probability |
+| **oversampling** | Drawing a use case at more than its share, so its own row can be read. π records it | disproportionate allocation |
+| **cluster** | Cases that aren't independent, such as several from one customer. They count as one piece of evidence | cluster |
+| **coverage** | The list of situations the bug-finding set has to reach | test adequacy criterion |
+| **plan** | How many cases each use case and pool needs, worked out from the decision rule | sample-size calculation, optimum allocation |
+
+**Part 3: the measurement model**
+
+| Term | Meaning | Standard term |
+|---|---|---|
+| **failure mode** | One way a run can go wrong, such as breaking the refund policy | outcome definition |
+| **check** | The yes-or-no test that grades one failure mode: code, or a judge | measurement instrument |
+| **judge** | A check made of a model that reads the run | automated rater |
+| **grader** | Whatever produces a verdict: a check, a judge, or the eval as a whole | rater |
+| **label** | A person's verdict on a whole run. Graders are measured against labels | reference standard |
+| **catch rate** | Of the runs a person fails, the share the grader fails | sensitivity, with failure as the positive |
+| **clean pass rate** | Of the runs a person passes, the share the grader passes | specificity |
+| **J** | Catch rate + clean pass rate − 1. 1 is a perfect grader; 0 is a coin flip | Youden's J |
+| **correction** | Adjusting the observed failure rate for the grader's measured errors | Rogan–Gladen estimator, prediction-powered inference |
+| **inflation** | How many times more cases a grader's errors cost, compared with a grader that never errs. `max_inflation` caps it | variance inflation factor |
+| **trial** | One run of a case. Each case runs k times, because the agent doesn't answer the same way every time | replicate |
+
+**Part 4: the decision rule**
+
+| Term | Meaning | Standard term |
+|---|---|---|
+| **decision rule** | When to act: the test, its bar or margin, α, power and the looks | decision rule |
+| **superiority test** | Shows the candidate is better than the baseline | superiority test |
+| **non-inferiority test** | Shows the candidate is no worse than the baseline by more than the margin | non-inferiority test |
+| **threshold test** | Shows a rate is on the right side of a fixed bar, such as policy errors below 5% | one-sample test against a fixed bound |
+| **bar** | The fixed value a threshold test compares with | |
+| **margin** (Δ) | The smallest change that matters to the decision. In a non-inferiority test, the largest drop still counted as "no worse" | minimal important difference, non-inferiority margin |
+| **α** | How often you accept acting on a change that isn't real, usually 5% | type I error rate |
+| **power** | How often you need to detect a real change of size Δ, usually 80% | power, 1 − β |
+| **look** | One time the results are checked against the rule. The number of looks is fixed in advance | interim analysis |
+| **gate** | A decision rule a change must pass: the headline, a use case's own rule, or another eval | |
+| **multiplicity correction** | Adjusting α when several gates decide one change | familywise error control |
+| **constraint** | A limit that holds whatever θ says, such as cost per run or latency | constraint |
 
 ## 1. Where evals go
 
@@ -85,7 +167,7 @@ where:
    own decision rule passes *and* the end-to-end eval shows no regression. A better component does
    not prove a better system.
 7. **Gating on several evals at once needs a multiplicity correction** (rule 22), the same as
-   gating on several segments.
+   gating on several use cases.
 
 Graders and the store of traces are shared between evals. The four parts are not: each eval writes
 down its own.
@@ -95,7 +177,7 @@ down its own.
 The examples on this page, and in the problems and statistics, use one agent: **a support agent for
 an online store**. It answers about 1,000 requests a day:
 
-| Segment | Per day | Share |
+| Use case | Per day | Share |
 |---|---:|---:|
 | Where's my order? | 700 | 70% |
 | Start a return | 200 | 20% |
@@ -123,31 +205,31 @@ So the store has two evals:
 - **Unit**: the thing that ships, at a context boundary (section 1).
 - **Quantity**: a pass rate, a mean score, or the rate of one failure mode.
 - **Population**: which requests, from which window, in which environment.
-- **Segments**: a partition of the population into kinds of request, each with its measured share
+- **Use cases**: a partition of the population into kinds of request, each with its measured share
   of traffic. Shares sum to 1.
-- **Weights**: how much each segment counts in the decision. Either "traffic" (weights equal the
-  shares), or a number per segment that the owner states. An unstated weight is unknown, not 1.
+- **Weights**: how much each use case counts in the decision. Either "traffic" (weights equal the
+  shares), or a number per use case that the owner states. An unstated weight is unknown, not 1.
 - **Decision**: the action this number drives, who owns it, and how often it is made.
 
 The estimand is then one number, the weighted pass rate θ:
 
 θ = Σ_s w_s · μ_s
 
-where μ_s is the true pass rate in segment s and the weights w_s sum to 1. The eval estimates θ.
+where μ_s is the true pass rate in use case s and the weights w_s sum to 1. The eval estimates θ.
 
-**Segments and failure modes are two different things.** A segment is a kind of request ("refund
+**Use cases and failure modes are two different things.** A use case is a kind of request ("refund
 me"). It carries weight, because it is part of the population the decision is about. A failure mode
 is a way the agent can go wrong ("refunded an order outside the policy window"). It is a check, part
-of the measurement model (section 5). A single segment can fail in several modes, and one mode can
-occur in several segments. aot-evals 1.x mixed the two into "categories"; 2.0 keeps them apart.
+of the measurement model (section 5). A single use case can fail in several modes, and one mode can
+occur in several use cases. aot-evals 1.x mixed the two into "categories"; 2.0 keeps them apart.
 
 **Example.** Suppose the store's eval uses traffic weights and the system passes 91.0% of requests.
 A bug makes refunds fail 15% of the time instead of 5%. That is 2 more bad refunds a day, and θ moves
 from 91.0% to 90.8%, which nobody will notice. Now suppose the owner says what a failure costs in
-each segment: $1 for a wrong order status, $5 for a botched return, $20 for an address change and $50
-for a refund. Weighting each segment by share × cost gives:
+each use case: $1 for a wrong order status, $5 for a botched return, $20 for an address change and $50
+for a refund. Weighting each use case by share × cost gives:
 
-| Segment | Share | Cost of a failure | Share × cost | Weight |
+| Use case | Share | Cost of a failure | Share × cost | Weight |
 |---|---:|---:|---:|---:|
 | Order status | 0.70 | $1 | 0.70 | 0.16 |
 | Return | 0.20 | $5 | 1.00 | 0.23 |
@@ -162,8 +244,8 @@ per request, so the number means something a business owner can use.
 
 - **One eval, one estimand** (rule 1). Two units, two populations or two decisions need two evals.
   This is what puts evals at context boundaries (section 1).
-- **The headline is θ̂ under the stated weights** (rule 2), with the per-segment table beside it
-  as the diagnostic. An unweighted average over segments is an arbitrary weighting nobody chose.
+- **The headline is θ̂ under the stated weights** (rule 2), with the per-use-case table beside it
+  as the diagnostic. An unweighted average over use cases is an arbitrary weighting nobody chose.
 - **A shift in the population re-opens the estimand** (rule 26). The shares are part of θ, so a
   new mix of traffic means a new θ. Shares are measured again on a schedule.
 
@@ -175,7 +257,7 @@ per request, so the number means something a business owner can use.
 
 - **Frame**: where cases come from (production traces, the handoffs into a subagent, written
   tasks), and the window.
-- **Two pools.** The **quality set** is a random sample from the frame, stratified by segment,
+- **Two pools.** The **quality set** is a random sample from the frame, stratified by use case,
   with each case's chance of being drawn (its inclusion probability, π) recorded. The
   **bug-finding set** is picked by hand to find failures: hard cases, rare ones, ones from the
   coverage list. It has no π.
@@ -186,7 +268,7 @@ per request, so the number means something a business owner can use.
 proportion to traffic, would hold about 140 order lookups, 40 returns, 16 address changes and 4
 refunds. Four refunds can't say much about refunds, and refunds carry a weight of 0.23. So the
 design draws refunds at a higher rate, records that π, and the estimator weights each refund case
-back down by 1/π. The estimate stays (approximately) unbiased and the refund segment gets enough cases to
+back down by 1/π. The estimate stays (approximately) unbiased and the refund use case gets enough cases to
 measure.
 Meanwhile the bug-finding set holds 30 written refund cases that each probe a corner of the policy
 (an order one day outside the window, a partial refund, a refund on a gift card). They find bugs.
@@ -199,9 +281,9 @@ They never enter θ̂, because nobody knows how often such requests occur.
   testing to find faults and testing to measure reliability (Musa 1993; Frankl et al. 1998).
 - **The quality set is drawn, not picked** (rule 6): seeded, with π recorded per case.
 - **The number of cases comes from the decision rule** (rule 7, section 6), not from a constant.
-- **Spread the budget by optimum allocation** (rule 8): each segment gets cases in proportion to
+- **Spread the budget by optimum allocation** (rule 8): each use case gets cases in proportion to
   its weight × the spread of its outcomes ÷ √(cost of a case), which is Neyman's allocation extended
-  for cost (Cochran 1977). A gated segment the formula would short gets its minimum, and the formula
+  for cost (Cochran 1977). A gated use case the formula would short gets its minimum, and the formula
   spreads the rest over the others. This makes θ̂ as precise as the budget allows.
 - **Count clusters, not cases** (rule 9). Twenty cases from one template are worth fewer than twenty
   independent cases. The effective count is n ÷ (1 + (m − 1)ρ), where m is the cluster size and ρ
@@ -291,17 +373,17 @@ current version on the same cases.
 
 - **The case count comes from the decision rule** (rule 7). The number of cases solves "power at
   least 1 − β to detect Δ at level α", with the judges' error included (section 5). The zero-failure
-  version is n ≥ ln(α) / ln(1 − p). No flat count per segment.
+  version is n ≥ ln(α) / ln(1 − p). No flat count per use case.
 - **Compare versions case by case** (rule 18): the same cases, the same trials, a paired test.
   Pairing removes the differences between cases from the comparison.
 - **"No significant difference" is not "no worse"** (rule 19). Claiming no regression takes a
   non-inferiority test with a stated margin.
-- **A segment gets its own gate only when someone decides about it, and when its rule can be
+- **A use case gets its own gate only when someone decides about it, and when its rule can be
   powered** (rule 20). Otherwise its row is a diagnostic. If no one will act on it, it shouldn't
   gate.
 - **Fix the looks in advance** (rule 21). Labeling until the number clears the bar, or checking
   after every batch, inflates false passes.
-- **Several gates need a multiplicity correction** (rule 22). Ten gated segments at α = 0.05, with
+- **Several gates need a multiplicity correction** (rule 22). Ten gated use cases at α = 0.05, with
   no real change, flag at least one about 40% of the time (1 − 0.95¹⁰).
 - **An optimizer keeps a split it never sees** (rule 23), and its looks at that split are counted
   (Dwork et al. 2015).
@@ -315,15 +397,15 @@ Put together, the eval's estimate of θ is
 θ̂ = Σ_s w_s · μ̂_s,  with  μ̂_s = Σ_{i∈s} (ŷ_i / π_i) / Σ_{i∈s} (1 / π_i)
 
 where ŷ_i is case i's outcome averaged over its k trials and corrected for the checks' error rates,
-and π_i is its inclusion probability. (Within each segment this is the Hájek estimator: the Horvitz–Thompson estimator normalized by
+and π_i is its inclusion probability. (Within each use case this is the Hájek estimator: the Horvitz–Thompson estimator normalized by
 its own weights, which is approximately unbiased; Hájek 1971.)
 
 Its interval accounts for three sources of uncertainty: which cases were drawn (with clusters and
-segments), how wrong the judges are (from the size of their calibration sets), and how much trials
+use cases), how wrong the judges are (from the size of their calibration sets), and how much trials
 of the same case vary. The decision rule says which interval to compute and which bar it has to
 clear.
 
-## 8. The suite spec
+## 8. The eval spec
 
 Each eval writes its four parts in one file. An eval is complete when every field is filled. A
 missing field doesn't stop the eval from running; it means nothing says what its number means, and
@@ -336,19 +418,20 @@ estimand:
   unit: refund subagent          # at a context boundary
   quantity: failure_rate:breaks_policy
   population: refund handoffs from production, last 30 days
-  segments: {full_refund: 0.80, partial_refund: 0.15, gift_card: 0.05}
-  weights: traffic               # or {segment: weight}, stated by the owner
+  use_cases: {full_refund: 0.80, partial_refund: 0.15, gift_card: 0.05}
+  weights: traffic               # or {use_case: weight}, stated by the owner
   decision: ship refund-subagent changes; owner refunds team; weekly
 design:
   frame: handoffs captured in end-to-end traces
-  quality_set: {selection: stratified_random, strata: segments, seed: 1234, inclusion_prob: per_case}
+  quality_set: {selection: stratified_random, strata: use_cases, seed: 1234, inclusion_prob: per_case}
   bug_finding_set: {selection: purposive}       # never enters the rate
   cluster_key: order_template
 measurement:
   checks:
-    breaks_policy: {type: judge, catch_rate: 0.80, clean_pass_rate: 0.90, calibration_n: 200, calibrated_on: 2026-11-01}
+    breaks_policy: {type: judge}  # its catch and clean pass rates live in its calibration file
     refund_amount_correct: {type: code}
   trials_per_case: 3
+  max_inflation: 2.0             # a judge may cost at most twice the cases a code check would
   correction: ppi                # or rogan_gladen, or none when every check is code
 decision_rule:
   test: threshold                # superiority | non_inferiority | threshold
@@ -361,19 +444,21 @@ decision_rule:
   constraints: {cost_per_run_usd: 0.02, p95_latency_ms: 8000}
 ```
 
-The field names are a sketch. The 2.0 refactor will settle them.
+The field names are a sketch; [v2-design.md](v2-design.md) settles them. The judges' measured error rates
+are not in the spec. They are measurements, kept with each judge's calibration, so recalibrating a
+judge doesn't change the spec.
 
-## 9. Changing a suite
+## 9. Changing an eval
 
 Every change to an eval is one of three kinds, and the four parts say which:
 
 | Change | When | What happens |
 |---|---|---|
-| **Expand** | New cases from the same frame, same segments, same checks, with known π | Same version. The interval narrows; θ is the same quantity |
-| **Revise** | The estimand, weights, segments, design or checks change. A new judge counts | Major version. Re-run the baseline; old and new scores are different quantities and are not compared |
-| **Split** | A segment or a component gets its own decision, owner and powered rule | A new eval with its own four parts. The old eval keeps the segment in its estimand. Whether a sub-score adds anything beyond the total has a test (Haberman 2008) |
+| **Expand** | New cases from the same frame, same use cases, same checks, with known π | Same version. The interval narrows; θ is the same quantity |
+| **Revise** | The estimand, weights, use cases, design or checks change. A new judge counts | Major version. Re-run the baseline; old and new scores are different quantities and are not compared |
+| **Split** | A use case or a component gets its own decision, owner and powered rule | A new eval with its own four parts. The old eval keeps the use case in its estimand. Whether a sub-score adds anything beyond the total has a test (Haberman 2008) |
 
-A new kind of request is a new segment, so it is a revision, not an expansion. Pruning for cost may
+A new kind of request is a new use case, so it is a revision, not an expansion. Pruning for cost may
 remove bug-finding cases freely; it may not remove quality-set cases, because that changes their π
 and biases θ̂ (rule 25).
 
@@ -385,13 +470,13 @@ the section of [statistics.md](statistics.md) that derives it.
 | # | Rule | Part | Problem | Statistics |
 |---|---|---|---|---|
 | 1 | One eval, one estimand: one unit, one population, one decision | Estimand | 2 | §1.3 |
-| 2 | The headline is θ̂ under the stated weights, with the per-segment table as the diagnostic | Estimand | 1 | §1.1 |
+| 2 | The headline is θ̂ under the stated weights, with the per-use-case table as the diagnostic | Estimand | 1 | §1.1 |
 | 3 | Every agent has an end-to-end eval; components get their own only at a context boundary, when decided on separately | Estimand | 2 | §1.3 |
 | 4 | A component eval's population is its production handoffs | Estimand, design | 2 | §1.3, §2.1 |
 | 5 | Bug-finding cases never enter a rate without a recorded π | Design | 4 | §2.1 |
 | 6 | The quality set is a seeded random draw with π per case | Design | 4 | §2.2 |
 | 7 | Case counts come from the decision rule's power, with judge error included | Decision rule | 9 | §4.1, §3.3 |
-| 8 | The budget goes by optimum allocation (Neyman's, with cost), around each gated segment's minimum | Design | 4 | §2.3 |
+| 8 | The budget goes by optimum allocation (Neyman's, with cost), around each gated use case's minimum | Design | 4 | §2.3 |
 | 9 | Count clusters, not cases | Design | 5 | §2.4 |
 | 10 | The quality and bug-finding sets are disjoint by cluster key | Design | 4, 5 | §2.4 |
 | 11 | One failure mode per check | Measurement | 6 | §3.1 |
@@ -403,7 +488,7 @@ the section of [statistics.md](statistics.md) that derives it.
 | 17 | Cases with an unverified answer stay out of the score | Measurement | 6 | §3.8 |
 | 18 | Compare versions case by case | Decision rule | 10 | §4.3, §4.4 |
 | 19 | Claim "no worse" only with a non-inferiority test | Decision rule | 11 | §4.5 |
-| 20 | A segment gates only when decided on separately and when its rule can be powered | Decision rule | 1 | §1.2 |
+| 20 | A use case gates only when decided on separately and when its rule can be powered | Decision rule | 1 | §1.2 |
 | 21 | Fix the looks in advance | Decision rule | 12 | §4.7 |
 | 22 | Several gates need a multiplicity correction | Decision rule | 2, 12 | §4.6 |
 | 23 | An optimizer keeps a split it never sees | Decision rule | 12 | §4.7 |

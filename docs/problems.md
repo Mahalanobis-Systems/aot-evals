@@ -10,7 +10,8 @@ estimates**, **which cases it draws**, **how wrong its grader is**, and **when i
 problem below is what happens when one of those parts is left unstated, so they are grouped by
 part. Each comes with one worked example and no formulas. The box under each one names the methods
 that solve it, the rules in [estimators.md](estimators.md#10-the-rules-in-one-table) it explains, and
-where [statistics.md](statistics.md) derives them. aot-evals does the math.
+where [statistics.md](statistics.md) derives them. aot-evals does the math. Words like *use case*,
+*catch rate* and *clean pass rate* mean what the [terms](estimators.md#terms) say.
 
 | Part | Problems |
 |---|---|
@@ -62,7 +63,7 @@ has.
 > **Under the hood.** A weighted estimand, θ = Σ weight × pass rate, with weights from share × cost,
 > so 1 − θ tracks the expected cost of failures. Decision theory for the cost of each kind of
 > failure. Severity tagged on real failures (did it write, can it be undone, would anyone notice) to
-> test whether the stated costs hold up. A blind-spot check: compare a segment's weighted effect with
+> test whether the stated costs hold up. A blind-spot check: compare a use case's weighted effect with
 > the smallest change the comparison can see. Weight sensitivity: does the verdict hold under other
 > plausible costs? *Rules* 2, 20. *Statistics* §1.1, §1.2.
 
@@ -149,8 +150,8 @@ random from the traffic stream. Each jar has its own pass rate printed on it.
 
 > **Under the hood.** Elicitation vs estimation. Stratified random sampling with inclusion probabilities and the Horvitz–Thompson (Hájek)
 > estimator; optimum allocation (Neyman's, with cost: weight × spread ÷ √cost) around each gated
-> segment's minimum; a beta-posterior interval for small segments. Quota sampling
-> (hand-picking within a segment) is biased. Test blueprint and category-partition for coverage, and
+> use case's minimum; a beta-posterior interval for small use cases. Quota sampling
+> (hand-picking within a use case) is biased. Test blueprint and category-partition for coverage, and
 > t-way covering arrays when the grid gets large. Mutation analysis for whether the set would catch
 > a fault. Contrast sets, metamorphic relations, partial-input baselines and property-based shrinking
 > to generate hard cases. Contamination screens for cases built from public sources. *Rules* 5, 6, 8,
@@ -186,8 +187,8 @@ evidence, not 24".
 
 **Worked example.** A reviewer labels 200 runs: 190 good and 10 bad. A judge that says "pass" to
 everything agrees with the reviewer on 190 of 200, which is 95%, and it caught **none** of the 10
-bad runs. So ask two separate questions. Of the bad runs, how many did it catch? Of the good runs,
-how many did it pass? Each needs its own labels. If only 2 bad runs were labeled, "caught 2 of 2"
+bad runs. So ask two separate questions. Of the bad runs, how many did it catch (its **catch
+rate**)? Of the good runs, how many did it pass (its **clean pass rate**)? Each needs its own labels. If only 2 bad runs were labeled, "caught 2 of 2"
 is consistent with a judge that catches anywhere from a third of failures to all of them.
 
 The judge's error also distorts the rates it reports. Take 1,000 refunds, 30 of them really bad. The
@@ -335,7 +336,7 @@ interval crosses.
 
 > **Under the hood.** Power and minimum detectable effect, before the run and from the observed
 > deltas after it. Non-inferiority (or equivalence) testing with a pre-set margin, the standard
-> design for "cheaper and no worse". The same test guards a blind segment (problem 1) and checks a
+> design for "cheaper and no worse". The same test guards a blind use case (problem 1) and checks a
 > part change against the whole agent (problem 2). *Rule* 19. *Statistics* §4.5.
 
 ### 12. Stop peeking

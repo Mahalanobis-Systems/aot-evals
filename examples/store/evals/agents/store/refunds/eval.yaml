@@ -1,4 +1,4 @@
-# The refund subagent, on its own (estimators §1, Eval 2). Spec only: see docs/spec.md §9.
+# The refund subagent, on its own (estimators §1, Eval 2). Spec only: see docs/v2-design.md §9.
 eval: refunds
 version: 1.0                       # major.minor; see estimators §9 for which changes are major
 
@@ -12,7 +12,7 @@ estimand:
     frame: refund-handoffs-2026-10 # an import id in data/export.manifest.json
     window: 2026-10-01/2026-10-31
     environment: env/              # the sandbox; its hash goes in every manifest
-  segments:
+  use_cases:
     - id: full-refund
       definition: Refund of a whole order inside the policy window.
       example: tr_8812             # a trace id from the frame
@@ -29,7 +29,7 @@ estimand:
       share: 0.05
       cost: 20
   share_source: refund-handoffs-2026-10   # where the shares were measured
-  weights: cost                    # traffic (w = share) | cost (w ∝ share × cost) | {segment: w}
+  weights: cost                    # traffic (w = share) | cost (w ∝ share × cost) | {use_case: w}
   decision:
     action: ship a change to the refund subagent
     owner: refunds team
@@ -39,7 +39,7 @@ design:
   quality_set:
     selection: stratified_random   # the only selection allowed for the quality set
     seed: 1234
-    oversample: {gift-card: 4}     # draw a segment at k times its share; π records it
+    oversample: {gift-card: 4}     # draw a use case at k times its share; π records it
   bug_finding_set:
     coverage: coverage.yaml        # the external list it is checked against
   cluster_key: order_template      # case field that marks related cases (estimators rule 9)
@@ -48,14 +48,14 @@ measurement:
   failure_modes:
     - id: breaks-policy
       description: Refunds an order the policy does not allow, or refuses one it does.
-      segments: "*"
+      use_cases: "*"
       check: policy-judge          # the one check that counts (rule 12)
       diagnostics: []              # other checks on this mode, reported, never counted
     - id: wrong-amount
-      segments: ["*"]
+      use_cases: ["*"]
       check: amount-matches
     - id: unrequested-change
-      segments: "*"
+      use_cases: "*"
       check: no-side-effects
       side_effect: true            # at least one counted side-effect check is required
   trials: 3                        # or: auto (from the measured variance split, rule 16)
@@ -74,14 +74,14 @@ decision_rule:
   power: 0.80
   looks: fixed                     # fixed | sequential | optimizer_holdout
   multiplicity: none               # none | benjamini_hochberg | holm; required when gates > 1
-  segment_gates: []                # segments with their own rule (rule 20); each: {segment, test, ...}
+  use_case_gates: []                # use cases with their own rule (rule 20); each: {use_case, test, ...}
   also_requires:                   # other evals that must pass for this decision (estimators §1 rule 6)
     - eval: end-to-end
       test: non_inferiority
       margin: 0.02
   constraints:                     # budgets; limits, not part of θ (rule 24)
     default: {cost_per_success_usd: 0.05, latency_p90_ms: 8000}
-    segments: {}
+    use_cases: {}
 
 invoke:                            # component evals only; the system eval uses agent.yaml
   command: ["python", "agent/refunds.py", "--handoff"]

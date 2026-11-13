@@ -12,16 +12,11 @@ Each section follows the same shape: the decision you face, the statistics behin
 source, and when to deviate. Rules are cited by their number in [estimators.md §10](estimators.md#10-the-rules-in-one-table).
 Functions in the `aot_evals.stats` library are named as `stats.<function>`.
 
-**Two words for a grader's error,** used throughout for a single judge and for the eval as a whole.
-Against a person's verdict as the reference:
-
-- **Catch rate**: of the runs a person fails, the share the grader fails. (Sensitivity to failure;
-  TNR in pass orientation.)
-- **Clean pass rate**: of the runs a person passes, the share the grader passes. (Specificity;
-  TPR in pass orientation.)
-
-Their sum minus one, **J = catch + clean − 1**, is Youden's J. J = 1 is a perfect grader and J = 0
-is a coin.
+Terms follow [estimators.md](estimators.md#terms). Two matter on almost every page: a grader's
+**catch rate** (of the runs a person fails, the share the grader fails: its sensitivity, with failure
+as the positive) and its **clean pass rate** (of the runs a person passes, the share the grader
+passes: its specificity). Their sum minus one, **J = catch + clean − 1**, is Youden's J. J = 1 is a
+perfect grader and J = 0 is a coin.
 
 ## Contents
 
@@ -55,10 +50,10 @@ measurement, and a measurement that wasn't made must not look like one.
 
 **Decision.** What single quantity is the eval trying to estimate and improve?
 
-**Statistics.** The estimand is θ = Σ_s w_s · μ_s, the weighted pass rate over segments. Weighting by
+**Statistics.** The estimand is θ = Σ_s w_s · μ_s, the weighted pass rate over use cases. Weighting by
 traffic alone (w_s = share_s) counts every failure as equally bad: a wrong delivery date and a
 refund sent to the wrong customer each cost one failed run. For some agents that is close enough,
-and for others it is badly wrong. The weights should carry what a failure in each segment costs,
+and for others it is badly wrong. The weights should carry what a failure in each use case costs,
 as a ratio to the others:
 
   w_s = share_s × cost_s / Σ_t share_t × cost_t
@@ -79,10 +74,10 @@ differ, and the expensive failures are often ones nobody predicted.
   eval and a person, with what it did: did it write, delete or send; can it be undone; would a person
   have noticed before acting on it? `stats.failure_severity` turns those answers into low, medium or
   high: an irreversible write is high, a reversible side effect or an unnoticeable wrong answer is
-  medium, a wrong answer a person would catch is low. `stats.cost_flags` flags a segment whose
+  medium, a wrong answer a person would catch is low. `stats.cost_flags` flags a use case whose
   failures span severities with a high one among them, or whose worst failure is worse than its
   stated cost. The canonical case is **an agent asked for a report that changes CRM state**: a
-  read-only request that writes costs far more than a wrong number, in a segment the owner would
+  read-only request that writes costs far more than a wrong number, in a use case the owner would
   rate cheap. A flag goes back to the weights, and to the checks (a side-effect check on read-only
   requests).
 
@@ -93,20 +88,20 @@ uneven, the weights, the thresholds of judges (§3.2) and the gates (§4) should
 plausible weights (half and double each stated cost). A verdict that flips is a verdict about the
 weights, not about the agent.
 
-### 1.2 The blind spot: a segment the headline can't see
+### 1.2 The blind spot: a use case the headline can't see
 
-**Decision.** Does a segment that matters need a gate of its own?
+**Decision.** Does a use case that matters need a gate of its own?
 
-**Statistics.** A drop of δ in a segment with weight w moves θ by w·δ. If that is below the
-comparison's detectable effect (§4.1), θ cannot see the drop. A segment with 2% of traffic that
+**Statistics.** A drop of δ in a use case with weight w moves θ by w·δ. If that is below the
+comparison's detectable effect (§4.1), θ cannot see the drop. A use case with 2% of traffic that
 drops 10 points moves a traffic-weighted score by 0.2 points, and a 100-case paired comparison
 detects about 11. Weighting helps less than it seems: even at 60 times the weight of the rest, that
-segment's 10-point drop moves the score only 5.5 points (`stats.blind_spot`).
+use case's 10-point drop moves the score only 5.5 points (`stats.blind_spot`).
 
-So a segment that matters and is blind gets its own decision rule: a non-inferiority test on that
-segment alone, sized in §4.1. That makes it a second gate, so the gates need a multiplicity
-correction (§4.6), and it only makes sense when someone would act on that segment by itself (rule 20).
-If no one would, the segment's row is a diagnostic.
+So a use case that matters and is blind gets its own decision rule: a non-inferiority test on that
+use case alone, sized in §4.1. That makes it a second gate, so the gates need a multiplicity
+correction (§4.6), and it only makes sense when someone would act on that use case by itself (rule 20).
+If no one would, the use case's row is a diagnostic.
 
 ### 1.3 Units: where an eval goes
 
@@ -135,7 +130,7 @@ Three statistical facts follow for a component behind a context boundary:
 **Decision.** The agent hasn't changed. Has its score?
 
 **Statistics.** The shares are part of θ, so a new mix of traffic is a new θ (rule 26). Post-
-stratification recomputes it from the same per-segment rates under the new shares, without running
+stratification recomputes it from the same per-use-case rates under the new shares, without running
 anything: if returns pass 80% and everything else 95%, θ is 0.2 × 80 + 0.8 × 95 = 92% when returns
 are 20% of traffic, and 0.5 × 80 + 0.5 × 95 = 87.5% when a holiday makes them half. Re-measure the
 shares on a schedule, and whenever routing changes, since that moves the frame of every eval
@@ -166,7 +161,7 @@ Hamlet, Littlewood & Strigini 1998), and operational testing draws from the usag
 One set can serve both purposes only when each case's **inclusion probability** π is recorded at
 sampling time, so each case can be reweighted by 1/π (Horvitz & Thompson 1952; for models, active testing weights each
 labeled case by its selection probability, Kossen et al. 2021). That is rule 5: a bug-finding case enters a rate only with a recorded
-π. The quality set's estimate per segment is the Hájek mean, Horvitz–Thompson normalized by its own
+π. The quality set's estimate per use case is the Hájek mean, Horvitz–Thompson normalized by its own
 weights, μ̂_s = Σ (ŷ_i / π_i) / Σ (1 / π_i) (Hájek 1971). It is approximately unbiased, and more
 stable than dividing by the size of the frame.
 
@@ -174,48 +169,48 @@ stable than dividing by the size of the frame.
 
 **Decision.** Which traces fill the quality set?
 
-**Statistics.** Proportional counts per segment are not enough. If the author chooses which traces
+**Statistics.** Proportional counts per use case are not enough. If the author chooses which traces
 fill each quota, the set is a quota sample, and a quota sample carries the author's selection bias
-with no way to measure it. Each segment's cases should be a **seeded random draw** from that
-segment's traces, with the seed and each case's π recorded. Every skip after the draw (a trace with
+with no way to measure it. Each use case's cases should be a **seeded random draw** from that
+use case's traces, with the seed and each case's π recorded. Every skip after the draw (a trace with
 PII that can't be scrubbed, a duplicate) is recorded with its reason and replaced from a second
 seeded draw, never by hand (`stats.stratified_draw`; rule 6).
 
-### 2.3 Allocation: how many cases per segment
+### 2.3 Allocation: how many cases per use case
 
-**Decision.** How is a budget of cases split across segments?
+**Decision.** How is a budget of cases split across use cases?
 
 **Statistics.** The budget goes by **optimum allocation**: Neyman's allocation (Neyman 1934),
 extended for unequal costs (Cochran 1977, §5.5):
 
   n_s ∝ w_s · σ_s / √c_s
 
-where w_s is the segment's weight, σ_s the spread of its outcomes (√(μ_s(1 − μ_s)) for a pass rate)
+where w_s is the use case's weight, σ_s the spread of its outcomes (√(μ_s(1 − μ_s)) for a pass rate)
 and c_s the cost of running one of its cases. This gives the narrowest interval on θ̂ for a fixed
-budget (rule 8; `stats.neyman_allocation`). A segment at 99% needs far fewer cases than one at 70% to
-reach the same precision, and a segment whose cases are expensive (long runs, many tool calls) gets
+budget (rule 8; `stats.neyman_allocation`). A use case at 99% needs far fewer cases than one at 70% to
+reach the same precision, and a use case whose cases are expensive (long runs, many tool calls) gets
 fewer than its weight alone would give it.
 
-Every gated segment also needs the minimum its decision rule sets (§4.1). Where the formula gives a
-segment less than its minimum, fix that segment at its minimum and spread the rest of the budget by
-the same formula over the other segments. That is the narrowest interval the budget allows, given
+Every gated use case also needs the minimum its decision rule sets (§4.1). Where the formula gives a
+use case less than its minimum, fix that use case at its minimum and spread the rest of the budget by
+the same formula over the other use cases. That is the narrowest interval the budget allows, given
 the minimums.
 
 Before any baseline, σ_s is unknown. Start with proportional allocation (n_s ∝ w_s), which assumes
 equal spreads, and switch to Neyman once a baseline measures them.
 
 **How many in total.** For an interval of half-width h on a single proportion at the worst case
-p = 0.5, n = z²·p(1 − p)/h²: ±5 points takes 385 cases. With segments and weights, the variance of
+p = 0.5, n = z²·p(1 − p)/h²: ±5 points takes 385 cases. With use cases and weights, the variance of
 θ̂ is Σ w_s² σ_s² / n_s, and the budget solves that for the decision rule's precision.
 
-**Small segments.** Proportional allocation gives a segment with 1% of traffic about 4 of 385
+**Small use cases.** Proportional allocation gives a use case with 1% of traffic about 4 of 385
 cases, too few to say anything about it by itself. Oversample it, record its π, and weight it back
-down: θ̂ stays (approximately) unbiased and the segment's own row becomes readable.
+down: θ̂ stays (approximately) unbiased and the use case's own row becomes readable.
 
 **Intervals.** Normal (CLT) intervals are too narrow below a few hundred items (Bowyer et al.
-2025), and a weighted estimate is no exception. Single-segment rates use Wilson intervals; the weighted estimate should use a
+2025), and a weighted estimate is no exception. Single-use-case rates use Wilson intervals; the weighted estimate should use a
 beta-posterior interval, or a normal interval with an Agresti–Caffo-style adjustment so that a
-segment at 0% or 100% never contributes zero variance.
+use case at 0% or 100% never contributes zero variance.
 
 ### 2.4 Clusters: count the evidence, not the cases
 
@@ -250,7 +245,7 @@ A cluster that holds a large share of the cases decides the result by itself. Fl
 effect, not by a fixed share (`stats.cluster_summary` reports G, the sizes and the regime).
 
 **Bounds count clusters too.** 100 clean cases from 10 seeds bound the failure rate at about 26%,
-not 3% (§4.1). A clean segment can't show how correlated its clusters are, so its zero-failure bound
+not 3% (§4.1). A clean use case can't show how correlated its clusters are, so its zero-failure bound
 counts clusters.
 
 **Dependence checks.**
@@ -290,7 +285,7 @@ fewer (Kuhn, Wallace & Gallo 2004). Take a case space of six factors with 8, 5, 
 grid is 5,760 cases. A **covering array** in which every pair of levels appears at least once needs
 40 (the floor is 8 × 5, and it can be reached), and every triple about 160–180 (the floor is
 8 × 5 × 4 = 160). So "every pair of factors covered" costs about what "10 cases for each of four
-segments" costs, and unlike that rule it can be checked by someone else.
+use cases" costs, and unlike that rule it can be checked by someone else.
 
 **Adequacy: would the set catch a fault?** Plant known faults and count the share the suite
 catches: **mutation analysis** (DeMillo, Lipton & Sayward 1978), whose mutation score correlates with detecting real faults, independently of code coverage (Just
@@ -559,7 +554,7 @@ al. 2023). The estimate is the labels' mean, plus a correction for how far the e
 labeled runs sit from its verdicts on the rest. PPI++ (Angelopoulos, Duchi & Zrnic 2026) weighs the
 eval's contribution by how well it tracks the labels: an eval that agrees with people narrows the
 interval well below labels alone, and one that doesn't is given no weight, so the estimate is never
-meaningfully worse than the labels alone. Stratified PPI does the same per segment (Fisch et al.
+meaningfully worse than the labels alone. Stratified PPI does the same per use case (Fisch et al.
 2024).
 
 **Assumption.** The labeled runs must be a random sample of the runs they stand for. Runs chosen because they looked wrong would bias the estimate (verification bias, Begg & Greenes
@@ -636,7 +631,7 @@ minimum width.
 
 **Statistics.** Each change breaks an assumption behind specific numbers:
 
-| Change | Assumption broken | Numbers affected | Kind of change ([estimators §9](estimators.md#9-changing-a-suite)) |
+| Change | Assumption broken | Numbers affected | Kind of change ([estimators §9](estimators.md#9-changing-an-eval)) |
 |---|---|---|---|
 | The agent | same population of runs | the baseline, the noise floor, the discriminating cases | none: this is what the eval measures |
 | A check | same instrument | the eval's catch and clean pass rates | revise |
@@ -662,7 +657,7 @@ until a person has read them (rule 17).
 **Statistics.** The count solves "power at least 1 − β to detect a change of Δ at level α" for the
 decision rule's test (rule 7; Neyman & Pearson 1933), and then multiplies by the grader's inflation
 factor (§3.3). Three tests
-cover most decisions, and they need different arithmetic, so one flat number per segment can't serve
+cover most decisions, and they need different arithmetic, so one flat number per use case can't serve
 them all.
 
 **Threshold, with zero failures: detection.** If a failure affects a share p of runs, n cases show
@@ -681,12 +676,12 @@ it at least once with probability 1 − (1 − p)ⁿ. Fix that at 95% and solve,
 Read backwards, this is the **zero-failure bound**: if all n cases pass, the failure rate could
 still be as high as 1 − 0.05^(1/n), about 3/n (the "rule of three", Hanley & Lippman-Hand 1983). A
 clean run on 10 cases cannot rule out a failure that hits one run in five. Detection applies **per
-failure mode**: a segment at 70% is usually several failure modes at a few percent each, not one at
+failure mode**: a use case at 70% is usually several failure modes at a few percent each, not one at
 30%, and each needs enough cases to be seen. Over clusters, count clusters (§2.4). The zero-failure arithmetic assumes a grader that never
 flags a good run: a code check, or a person. A judge with a clean pass rate below 1 flags good runs,
 so a clean run never comes, and the threshold test of §3.3 applies instead.
 
-**Non-inferiority on a solved segment: a regression guard.** Near 100%, with noise ruled out, one
+**Non-inferiority on a solved use case: a regression guard.** Near 100%, with noise ruled out, one
 new consistent failure is signal, so a guard is sized by detection: the smallest n with
 1 − (1 − δ)ⁿ ≥ 95% for a tolerated drop δ.
 
@@ -697,7 +692,7 @@ new consistent failure is signal, so a guard is sized by detection: the smallest
 | 2 points | 149 |
 | 1 point | 299: use a check on every production run, or a canary, instead |
 
-A segment at 99% has one question first: what is the 1%? If the case passes on a re-run, it was
+A use case at 99% has one question first: what is the 1%? If the case passes on a re-run, it was
 noise. If a person passes the run, the check or the expected answer was wrong; fix it. If it fails
 consistently on some input, it is a real rare failure, and if its cost is high it becomes a failure
 mode with its own detection need.
@@ -716,10 +711,10 @@ version (`stats.cases_per_arm`):
 | 10% | 432 |
 | 1% | 4,671 |
 
-**Putting it together.** A segment's target is the largest of its needs, since the same cases serve
+**Putting it together.** A use case's target is the largest of its needs, since the same cases serve
 every job (`stats.allocation_target`): its comparison, its guard, the detection need of each costly
 failure mode, and its own gate if the blind-spot check (§1.2) gave it one. Weight enters through the
-inputs: a heavier segment gets a smaller worthwhile change, a tighter tolerated drop and more of its
+inputs: a heavier use case gets a smaller worthwhile change, a tighter tolerated drop and more of its
 failure modes counted as costly. Each count is multiplied by the inflation factor of the checks that grade it (§3.3).
 The rest of the budget goes by optimum allocation around those minimums (§2.3).
 
@@ -804,16 +799,16 @@ cases (`stats.cases_for_flip_rate(0.16, 0.05)` = 503). Non-inferiority is the st
 "cheaper and no worse" in clinical trials, and the same arithmetic applies.
 
 Non-inferiority is also how a component change is checked against the system (§1.3) and how a
-blind segment is guarded (§1.2).
+blind use case is guarded (§1.2).
 
 ### 4.6 Many gates
 
 **Statistics.** Each gate is a test, and each test at α = 0.05 is a 1-in-20 chance of a false
 alarm. Ten gates with no real change flag at least one about 40% of the time (1 − 0.95¹⁰). That holds
-for per-segment gates, and for several evals gating one change (§1.3). Control it (rule 22):
+for per-use-case gates, and for several evals gating one change (§1.3). Control it (rule 22):
 Benjamini–Hochberg controls the share of false discoveries among the gates that fire, when the
 p-values are independent or positively dependent (Benjamini & Hochberg 1995); Holm controls the
-chance of any (Holm 1979). Per-segment rows that don't gate are diagnostics,
+chance of any (Holm 1979). Per-use-case rows that don't gate are diagnostics,
 and their p-values are shown adjusted.
 
 ### 4.7 Looks: stop peeking

@@ -1,4 +1,4 @@
-# The whole support agent (estimators §1, Eval 0). Spec only: see docs/spec.md §9.
+# The whole support agent (estimators §1, Eval 0). Spec only: see docs/v2-design.md §9.
 eval: end-to-end
 version: 1.0
 
@@ -10,7 +10,7 @@ estimand:
     frame: support-requests-2026-10
     window: 2026-10-01/2026-10-31
     environment: env/
-  segments:
+  use_cases:
     - id: order-status
       definition: Where is my order, when will it arrive.
       example: tr_1004
@@ -51,20 +51,20 @@ measurement:
   failure_modes:
     - id: wrong-answer
       description: The reply states something about the order that the order system contradicts.
-      segments: ["order-status", "return"]
+      use_cases: ["order-status", "return"]
       check: reply-matches-order
     - id: wrong-end-state
       description: The order system ends in a different state than the request called for.
-      segments: "*"
+      use_cases: "*"
       check: end-state-matches
     - id: unrequested-change
       description: Something changed that the request didn't ask for.
-      segments: "*"
+      use_cases: "*"
       check: no-side-effects
       side_effect: true
     - id: wrong-route
       description: A refund request is not handed to the refund subagent, or another request is.
-      segments: "*"
+      use_cases: "*"
       check: routed-correctly
   trials: 3
   correction: none                 # every counted check is code
@@ -79,8 +79,8 @@ decision_rule:
   power: 0.80
   looks: fixed
   multiplicity: holm               # θ and the refund gate
-  segment_gates:
-    - segment: refund
+  use_case_gates:
+    - use_case: refund
       test: non_inferiority
       margin: 0.05
   constraints:

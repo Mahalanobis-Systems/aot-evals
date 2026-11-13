@@ -1,7 +1,9 @@
-# aot-evals 2.0 specification
+# aot-evals 2.0 design
 
-*Target design for aot-evals 2.0. Draft. It turns the model in [estimators.md](estimators.md) into
-files, fields and outputs. Until 2.0 is released, [method.md](method.md) describes 1.x.*
+*Working design for building aot-evals 2.0; once 2.0 ships, [method.md](method.md) and the
+reference pages take over from it. It turns the model in [estimators.md](estimators.md) into
+files, fields and outputs. Until 2.0 is released, method.md describes 1.x. Terms follow
+[estimators.md](estimators.md#terms); "spec" here always means an eval's `eval.yaml`.*
 
 Every field below traces to one of the four parts of an eval (estimand, sampling design,
 measurement model, decision rule) or to the agent contract. A field that traces to neither is
@@ -16,7 +18,7 @@ agent that runs under 1.x runs under 2.0 unchanged. Only the suite around it cha
 ## Contents
 
 1. [Layout](#1-layout)
-2. [The suite spec: eval.yaml](#2-the-suite-spec-evalyaml)
+2. [The eval spec: eval.yaml](#2-the-eval-spec-evalyaml)
 3. [Cases](#3-cases)
 4. [Checks and judges](#4-checks-and-judges)
 5. [Runs](#5-runs)
@@ -40,10 +42,10 @@ evals/agents/<agent>/            the agent system
   labels/standard.md             the labeling standard, shared
   journal/                       activity log (unchanged)
   <eval>/                        one eval: one estimand
-    eval.yaml                    the suite spec: the four parts
+    eval.yaml                    the eval spec: the four parts
     coverage.yaml                the external coverage list (1.x taxonomy.yaml)
-    plan.yaml                    generated: case targets per segment (1.x allocation.yaml)
-    cases/<segment>/<id>.json
+    plan.yaml                    generated: case targets per use case (1.x allocation.yaml)
+    cases/<use_case>/<id>.json
     checks/code/<id>.py
     checks/judge/<id>.md         plus <id>.labels.jsonl, .calibration.json, .reliability.json
     labels/                      whole-run labels, rulings, triage for this eval
@@ -60,7 +62,7 @@ evals/agents/<agent>/            the agent system
   labels, runs and reports. A judge's error rates belong to the population it was calibrated on.
 - `--eval <id>` selects an eval, as `--agent` selects an agent. With one eval it is optional.
 
-## 2. The suite spec: eval.yaml
+## 2. The eval spec: eval.yaml
 
 `eval.yaml` is the four parts written down. An eval is **complete** when every required field is
 filled. An incomplete eval still runs; its report lists the missing fields under `spec.missing`,
@@ -83,7 +85,7 @@ estimand:
     frame: refund-handoffs-2026-10 # an import id in data/export.manifest.json
     window: 2026-10-01/2026-10-31
     environment: env/              # the sandbox; its hash goes in every manifest
-  segments:
+  use_cases:
     - id: full-refund
       definition: Refund of a whole order inside the policy window.
       example: tr_8812             # a trace id from the frame
@@ -100,7 +102,7 @@ estimand:
       share: 0.05
       cost: 20
   share_source: refund-handoffs-2026-10   # where the shares were measured
-  weights: cost                    # traffic (w = share) | cost (w ∝ share × cost) | {segment: w}
+  weights: cost                    # traffic (w = share) | cost (w ∝ share × cost) | {use_case: w}
   decision:
     action: ship a change to the refund subagent
     owner: refunds team
@@ -110,7 +112,7 @@ design:
   quality_set:
     selection: stratified_random   # the only selection allowed for the quality set
     seed: 1234
-    oversample: {gift-card: 4}     # draw a segment at k times its share; π records it
+    oversample: {gift-card: 4}     # draw a use case at k times its share; π records it
   bug_finding_set:
     coverage: coverage.yaml        # the external list it is checked against
   cluster_key: order_template      # case field that marks related cases (estimators rule 9)
@@ -119,14 +121,14 @@ measurement:
   failure_modes:
     - id: breaks-policy
       description: Refunds an order the policy does not allow, or refuses one it does.
-      segments: "*"
+      use_cases: "*"
       check: policy-judge          # the one check that counts (rule 12)
       diagnostics: []              # other checks on this mode, reported, never counted
     - id: wrong-amount
-      segments: ["*"]
+      use_cases: ["*"]
       check: amount-matches
     - id: unrequested-change
-      segments: "*"
+      use_cases: "*"
       check: no-side-effects
       side_effect: true            # at least one counted side-effect check is required
   trials: 3                        # or: auto (from the measured variance split, rule 16)
@@ -145,14 +147,14 @@ decision_rule:
   power: 0.80
   looks: fixed                     # fixed | sequential | optimizer_holdout
   multiplicity: none               # none | benjamini_hochberg | holm; required when gates > 1
-  segment_gates: []                # segments with their own rule (rule 20); each: {segment, test, ...}
+  use_case_gates: []                # use cases with their own rule (rule 20); each: {use_case, test, ...}
   also_requires:                   # other evals that must pass for this decision (estimators §1 rule 6)
     - eval: end-to-end
       test: non_inferiority
       margin: 0.02
   constraints:                     # budgets; limits, not part of θ (rule 24)
     default: {cost_per_success_usd: 0.05, latency_p90_ms: 8000}
-    segments: {}
+    use_cases: {}
 
 invoke:                            # component evals only; the system eval uses agent.yaml
   command: ["python", "agent/refunds.py", "--handoff"]
@@ -167,8 +169,8 @@ invoke:                            # component evals only; the system eval uses 
 | `estimand.unit` | Estimand | yes | `system` once per agent; `component` needs `component` and `boundary` |
 | `estimand.quantity` | Estimand | yes | |
 | `estimand.population.frame` | Estimand | yes | an import id; a component's frame holds handoffs (rule 4) |
-| `estimand.segments[]` | Estimand | yes | `id`, `definition`, `example`, `share`; shares sum to 1 ± 0.02 |
-| `segments[].cost` | Estimand | when `weights: cost` | a positive number; null means not stated |
+| `estimand.use_cases[]` | Estimand | yes | `id`, `definition`, `example`, `share`; shares sum to 1 ± 0.02 |
+| `use_cases[].cost` | Estimand | when `weights: cost` | a positive number; null means not stated |
 | `estimand.weights` | Estimand | yes | an unstated weight is unknown, never 1 |
 | `estimand.decision` | Estimand | yes | `action` and `owner` |
 | `design.quality_set` | Design | yes | `seed`; `oversample` optional |
@@ -183,7 +185,7 @@ invoke:                            # component evals only; the system eval uses 
 | `decision_rule.constraints` | Decision rule | no | budget keys as in 1.x `budgets.yaml` |
 
 **What the generated plan holds.** `plan.yaml` (1.x `allocation.yaml`) is written by
-`aot-evals plan`: per segment and pool, the target from the decision rule's power (with each
+`aot-evals plan`: per use case and pool, the target from the decision rule's power (with each
 judge's inflation factor), the minimum, the optimum allocation of the rest, what exists, and how
 many are screened. Humans edit only `status` and `reason`, as in 1.x.
 
@@ -193,7 +195,7 @@ A case keeps the 1.x shape. Changes:
 
 | Field | 2.0 | 1.x |
 |---|---|---|
-| `segment` | required; equals the folder name | `category` |
+| `use_case` | required; equals the folder name | `category` |
 | `pool` | `quality` or `bug_finding`, required | `set`: `quality_estimate` or `error_finding` |
 | `draw` | quality pool only: `{frame, seed, index, inclusion_prob}`, written by `aot-evals draw` | none; cases were picked by hand |
 | `cluster` | the value of the eval's `cluster_key`; defaults to the case id | optional `cluster` |
@@ -205,34 +207,51 @@ A case keeps the 1.x shape. Changes:
 For a component eval, `trigger` and `inputs` hold the handoff as the component receives it.
 
 **Quality cases come from `aot-evals draw`, never by hand.** It draws from the frame with the
-eval's seed, stratified by segment and oversampled as declared, records `inclusion_prob` on each
+eval's seed, stratified by use case and oversampled as declared, records `inclusion_prob` on each
 case, and logs every skip with its reason. A quality case without `draw` is refused from the
 estimate (rule 6). Bug-finding cases carry no `draw` and never enter θ̂ (rule 5).
 
 ## 4. Checks and judges
 
 Code checks are unchanged (`check(start, end, case) -> (bool, detail)`; `USES_AGENT_REPORT` is
-refused). Judge specs keep their front matter, with these changes:
+refused). Judge files keep their front matter, with these changes:
 
 - `min_tpr` and `min_tnr` go. A judge's floor comes from `measurement.max_inflation` and the
   eval's failure rate: the judge passes when its inflation factor at the current rate, computed
   from its lower confidence bounds on catch and clean, is at or under the limit.
 - Calibration reports **catch rate** and **clean pass rate** (1.x TNR and TPR), each with its
   interval and its count of labels per kind, plus the inflation factor and the J it implies.
-- A judge belongs to one eval. Copying a judge into another eval copies its spec, not its
+- A judge belongs to one eval. Copying a judge into another eval copies its definition, not its
   calibration.
 
 ## 5. Runs
 
 The manifest becomes `aot-evals/run-manifest@2`:
 
-- adds `eval` (id and version) and `spec_sha` (eval.yaml);
+- adds `eval` (id and version) and `spec_sha`, one hash per part (below);
 - `case_set` adds each quality case's `inclusion_prob`;
 - removes `simulator`;
 - everything else as 1.x, including `fakes_sha256` and the resume rules.
 
-`outcomes.jsonl` attempt lines rename `category` to `segment` and `set` to `pool`. The agent
+`outcomes.jsonl` attempt lines rename `category` to `use_case` and `set` to `pool`. The agent
 contract's per-result fields keep their names.
+
+**Which runs can be compared.** The spec says what a run's number means, so two runs compare only
+when they measured the same thing. `spec_sha` holds one hash per part, `{estimand, design,
+measurement, decision_rule}`, taken over that part of `eval.yaml`. The `measurement` hash also
+covers the eval's check files and judge prompts, but not their calibration files. `compare`, and
+any report that sets a candidate against a baseline:
+
+- **refuses** when the `estimand`, `design` or `measurement` hash differs. That is a revision
+  ([estimators §9](estimators.md#9-changing-an-eval)): the two scores are different quantities. The
+  message names the part that changed and says to re-run the baseline under the current spec.
+- **refuses** when only the `decision_rule` hash differs, unless the change has a journal entry
+  dated before the first candidate run. Moving the bar or the margin after seeing results is
+  problem 12 (rule 21).
+- **compares** when nothing but the cases or the calibrations changed. Adding cases drawn from the
+  same frame and seed, or bug-finding cases, is an expansion. Recalibrating a judge refines its
+  measured error rates without changing what it measures. A new judge, or a changed judge prompt,
+  is a new instrument (rule 13) and changes the `measurement` hash.
 
 ## 6. report.json v2
 
@@ -244,17 +263,17 @@ values are null with a reason, never 0, and nothing is pre-rounded.
 | `schema`, `generated`, `runs`, `refused` | as 1.x | |
 | `eval` | `{id, version, unit, quantity, decision}` | Estimand |
 | `spec` | `{complete, missing[{field, why, blocks[]}]}` | all |
-| `estimate` | the headline: `{theta, ci, ci_method, weights{segment: w}, weights_source, estimator: "hajek", corrected, n_cases, n_clusters, k}` | Estimand, design |
-| `segments` | one row per segment and pool: 1.x category rows, with `share`, `cost`, `weight`, `inclusion_prob_range` | Estimand, design |
+| `estimate` | the headline: `{theta, ci, ci_method, weights{use_case: w}, weights_source, estimator: "hajek", corrected, n_cases, n_clusters, k}` | Estimand, design |
+| `use_cases` | one row per use case and pool: 1.x category rows, with `share`, `cost`, `weight`, `inclusion_prob_range` | Estimand, design |
 | `design` | `{quality{n, drawn, seed, skips[]}, bug_finding{n, coverage}, clusters{n, design_effect, largest}}` | Design |
 | `measurement` | `{failure_modes[{id, check, catch, clean, j, inflation, corrected_rate}], eval_vs_people{catch, clean, labels{fail, pass}}, person_anchored{ppi}, variance{icc, between, within}, people{ac1, specific_agreement}}` | Measurement |
-| `decision` | `{test, quantity, bar, margin, alpha, power, looks, result: "pass" \| "fail" \| "insufficient", interval, detectable_effect, cases_needed, gates[{segment, result, p, p_adjusted}], also_requires[{eval, result}], constraints{status, breaches[]}}` | Decision rule |
+| `decision` | `{test, quantity, bar, margin, alpha, power, looks, result: "pass" \| "fail" \| "insufficient", interval, detectable_effect, cases_needed, gates[{use_case, result, p, p_adjusted}], also_requires[{eval, result}], constraints{status, breaches[]}}` | Decision rule |
 | `comparison` | as 1.x, with the verdict read from the paired sign-flip test and `variance_band` removed | Decision rule |
 | `coverage`, `redundancy`, `cases`, `conditions`, `next_actions` | as 1.x (`conditions.simulator` removed) | |
 | `checks` | as 1.x, with `catch` and `clean` in place of `tnr` and `tpr` | Measurement |
 
 **Removed from v1:** `validity` (compounded validity), `online` (always null), `regime`,
-`sets` (now `estimate`, `design` and `segments`), `categories` (now `segments`), the `simple`
+`sets` (now `estimate`, `design` and `use_cases`), `categories` (now `use_cases`), the `simple`
 flag, `conditions.simulator`, and gates G9 and C16/C17. `gates` becomes `spec.missing` plus the
 evidence checks that remain (manifest integrity, screening, trial completeness, isolation), keyed
 by part.
@@ -287,11 +306,16 @@ listing every decision it made, and leaves the spec incomplete wherever 1.x neve
 needs, so the report says so instead of inventing a value. A migrated suite reports the same pass
 rates as before; what changes is that it says what it is missing.
 
+**Scope.** Very few 1.x suites exist, so `migrate` covers the mechanical part (the moves, the
+renames and the table below) and does not try to handle every variation of a 1.x suite. Anything
+it can't map it lists in MIGRATION.md and leaves in place. Each migrated suite is then checked by
+hand. Only the tests need the full path to work unattended.
+
 | 1.x | 2.0 | Notes |
 |---|---|---|
 | `evals/agents/<a>/agent.yaml` | stays; `validity` and `simulator` dropped | logged in MIGRATION.md |
-| `categories.yaml` | `eval.yaml` `estimand.segments` | `observed_share` → `share`; `share_source` → `estimand.share_source` |
-| category `worth`, `cost` row | `segments[].cost: null`, `weights: traffic` | 1.x never put a number on cost; the owner states one (problem 1) |
+| `categories.yaml` | `eval.yaml` `estimand.use_cases` | `observed_share` → `share`; `share_source` → `estimand.share_source` |
+| category `worth`, `cost` row | `use_cases[].cost: null`, `weights: traffic` | 1.x never put a number on cost; the owner states one (problem 1) |
 | category `simple`, `heuristic`, `other`, `draft` | dropped | heuristic text kept as a note in MIGRATION.md |
 | `failure_modes.yaml` | `measurement.failure_modes` | first code check → `check`, the rest → `diagnostics`; a mode with only judges keeps its first judge; every choice logged |
 | `failure_modes[].cost_cell`, `feature`, `scenario` | dropped | |
@@ -300,9 +324,9 @@ rates as before; what changes is that it says what it is missing.
 | `labels/floors.yaml` | `measurement.people` | `min_catch`/`min_clean` become the bar; `margin: 0.10` added |
 | `allocation.yaml` | `plan.yaml` | regenerated by `plan`; `status`/`reason` marks carried over |
 | `taxonomy.yaml` | `coverage.yaml` | contents unchanged |
-| case `category` | `segment` | folders unchanged |
+| case `category` | `use_case` | folders unchanged |
 | case `set` | `pool` | `error_finding` → `bug_finding`; `quality_estimate` → `quality` |
-| quality cases (hand-picked) | `pool: quality`, no `draw` | counted with π assumed equal within a segment, and flagged; `draw` replaces them |
+| quality cases (hand-picked) | `pool: quality`, no `draw` | counted with π assumed equal within a use case, and flagged; `draw` replaces them |
 | case `cluster` | `cluster` | missing → the case id |
 | judge `min_tpr`, `min_tnr` | dropped | `measurement.max_inflation: 2.0` default, logged |
 | runs, labels, calibration, journal | moved unchanged | 1.x manifests stay readable; v1 runs are not comparable with v2 runs of a revised eval |
@@ -318,7 +342,7 @@ fixture. It is the agent from the [problems](problems.md):
   questions with an order-reading tool and an address-changing tool, and routes refunds to a
   **refund subagent** with its own prompt and model. Both are small Python programs speaking the
   agent contract, with fakes in `env/` for the order system and payments.
-- **Two evals.** `end-to-end` (unit: the system; segments order status 0.70, returns 0.20, address
+- **Two evals.** `end-to-end` (unit: the system; use cases order status 0.70, returns 0.20, address
   0.08, refunds 0.02; costs $1, $5, $20, $50; weights: cost; decision: non-inferiority, margin 2
   points) and `refunds` (unit: the subagent; frame: refund handoffs; the threshold test above).
 - **Checks.** Code checks for end state, amount and side effects; one policy judge with a known
@@ -336,16 +360,19 @@ and nine others use it).
 
 ## 10. Decisions to confirm
 
-These are proposals; each is cheap to change now and expensive after the code lands.
+Each is cheap to change now and expensive after the code lands.
 
-1. **Layout**: one folder per eval inside the agent folder, with the end-to-end eval in
-   `end-to-end/`, and the sandbox, frames and standard shared.
-2. **Renames**: `category` → `segment`, `set` → `pool` (`bug_finding`, `quality`), `taxonomy` →
-   `coverage`, `allocate` → `plan`, TPR/TNR → clean/catch. They match the docs; 1.x names would be
-   read by `migrate` only.
-3. **Judge floors from `max_inflation`** instead of fixed catch and clean floors, default 2.0.
+1. **Layout** (decided): one folder per eval inside the agent folder, with the end-to-end eval in
+   `end-to-end/`, and the sandbox, frames and standard shared. A component gets an eval only when
+   someone decides about it separately (estimators §1, rule 3). Behind a router, each route is
+   a use case of the end-to-end eval, and a route whose model ships on its own gets a gate (rule 20).
+2. **Renames** (decided): `category` → `use_case`, `set` → `pool` (`bug_finding`, `quality`),
+   `taxonomy` → `coverage`, `allocate` → `plan`, TPR/TNR → clean pass rate and catch rate, all
+   defined in [the terms](estimators.md#terms). 1.x names are read by `migrate` only.
+3. **Judge floors from `max_inflation`** instead of fixed catch and clean floors, default 2.0:
+   a judge may cost at most twice the cases a code check would.
 4. **Measured values stay out of eval.yaml.** The estimators sketch put judges' error rates in the
    spec; here the spec states the requirement (`max_inflation`) and calibration files hold the
    measurements, so the spec doesn't change every time a judge is recalibrated.
-5. **Migration defaults**: traffic weights with costs left null, superiority at α 0.05 and 80%
+5. **Migration defaults** (decided): traffic weights with costs left null, superiority at α 0.05 and 80%
    power, `decision` and `margin` left missing.
