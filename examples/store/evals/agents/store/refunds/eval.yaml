@@ -1,0 +1,89 @@
+# The refund subagent, on its own (estimators §1, Eval 2). Spec only: see docs/spec.md §9.
+eval: refunds
+version: 1.0                       # major.minor; see estimators §9 for which changes are major
+
+estimand:
+  unit:
+    kind: component                # system | component
+    component: refund-subagent     # for a component: what it is, named in agent.yaml
+    boundary: handoff from the orchestrator's refund route
+  quantity: pass_rate              # pass_rate | failure_rate:<failure mode id>
+  population:
+    frame: refund-handoffs-2026-10 # an import id in data/export.manifest.json
+    window: 2026-10-01/2026-10-31
+    environment: env/              # the sandbox; its hash goes in every manifest
+  segments:
+    - id: full-refund
+      definition: Refund of a whole order inside the policy window.
+      example: tr_8812             # a trace id from the frame
+      share: 0.80
+      cost: 50                     # what one failure costs, in any unit, relative to the others
+    - id: partial-refund
+      definition: Refund of some items, or a partial amount.
+      example: tr_9017
+      share: 0.15
+      cost: 50
+    - id: gift-card
+      definition: Refund to a gift card instead of the original payment.
+      example: tr_9230
+      share: 0.05
+      cost: 20
+  share_source: refund-handoffs-2026-10   # where the shares were measured
+  weights: cost                    # traffic (w = share) | cost (w ∝ share × cost) | {segment: w}
+  decision:
+    action: ship a change to the refund subagent
+    owner: refunds team
+    cadence: weekly
+
+design:
+  quality_set:
+    selection: stratified_random   # the only selection allowed for the quality set
+    seed: 1234
+    oversample: {gift-card: 4}     # draw a segment at k times its share; π records it
+  bug_finding_set:
+    coverage: coverage.yaml        # the external list it is checked against
+  cluster_key: order_template      # case field that marks related cases (estimators rule 9)
+
+measurement:
+  failure_modes:
+    - id: breaks-policy
+      description: Refunds an order the policy does not allow, or refuses one it does.
+      segments: "*"
+      check: policy-judge          # the one check that counts (rule 12)
+      diagnostics: []              # other checks on this mode, reported, never counted
+    - id: wrong-amount
+      segments: ["*"]
+      check: amount-matches
+    - id: unrequested-change
+      segments: "*"
+      check: no-side-effects
+      side_effect: true            # at least one counted side-effect check is required
+  trials: 3                        # or: auto (from the measured variance split, rule 16)
+  correction: ppi                  # none | rogan_gladen | ppi
+  max_inflation: 2.0               # how many times more cases a judge may cost (statistics §3.3)
+  people:
+    margin: 0.10                   # floors are shown with this non-inferiority margin (§4.2)
+    labels_per_kind: auto          # or a number; auto sizes from the margin
+
+decision_rule:
+  test: threshold                  # superiority | non_inferiority | threshold
+  quantity: failure_rate:breaks-policy   # defaults to estimand.quantity
+  bar: 0.05                        # threshold only
+  margin: null                     # non_inferiority and superiority: the smallest change that matters
+  alpha: 0.05
+  power: 0.80
+  looks: fixed                     # fixed | sequential | optimizer_holdout
+  multiplicity: none               # none | benjamini_hochberg | holm; required when gates > 1
+  segment_gates: []                # segments with their own rule (rule 20); each: {segment, test, ...}
+  also_requires:                   # other evals that must pass for this decision (estimators §1 rule 6)
+    - eval: end-to-end
+      test: non_inferiority
+      margin: 0.02
+  constraints:                     # budgets; limits, not part of θ (rule 24)
+    default: {cost_per_success_usd: 0.05, latency_p90_ms: 8000}
+    segments: {}
+
+invoke:                            # component evals only; the system eval uses agent.yaml
+  command: ["python", "agent/refunds.py", "--handoff"]
+  cwd: .
+  timeout: 60
