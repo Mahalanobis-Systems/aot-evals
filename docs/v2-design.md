@@ -182,7 +182,7 @@ invoke:                            # component evals only; the system eval uses 
 | `measurement.max_inflation` | Measurement | when any check is a judge | sets the floor on each judge (statistics §3.3) |
 | `decision_rule.test` | Decision rule | yes | |
 | `decision_rule.margin` or `bar` | Decision rule | yes | whichever the test needs |
-| `decision_rule.alpha` | Decision rule | yes | one-sided (the regulatory convention for non-inferiority is 0.025) |
+| `decision_rule.alpha` | Decision rule | yes | one-sided; default 0.05; 0.025 where a bad change is costly or hard to reverse (statistics §4.5) |
 | `decision_rule.multiplicity` | Decision rule | when one gate alone can trigger the action | `none` when every gate must pass (statistics §4.6) |
 | `decision_rule.constraints` | Decision rule | no | budget keys as in 1.x `budgets.yaml` |
 

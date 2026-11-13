@@ -799,7 +799,15 @@ claim "no worse", state a margin Δ in advance and test it: the lower bound of �
 above −Δ (rule 19). To show the cheaper model is within 5 points at that flip rate takes about 500
 cases (`stats.cases_for_flip_rate(0.16, 0.05)` = 503), at one-sided α = 0.025, the regulatory
 convention for non-inferiority (the lower bound of a two-sided 95% interval); at one-sided α = 0.05,
-about 400. Non-inferiority is the standard design for
+about 400.
+
+**Choosing α.** aot-evals defaults to one-sided α = 0.05. Halving it to 0.025 halves the chance of
+shipping a change that is worse than the margin, and costs about 27% more cases at the same power
+((z₀.₉₇₅ + z₀.₈)² ÷ (z₀.₉₅ + z₀.₈)² ≈ 1.27). Held to the same cases, power falls from 80% to about 70%,
+or the smallest margin the eval can certify widens by about 13%. Regulators use 0.025 because an
+approval is hard to undo; most agent changes can be rolled back and keep being measured after they
+ship. Set α = 0.025 in an eval's spec where a bad change is costly or hard to reverse, such as a
+subagent that moves money. Non-inferiority is the standard design for
 "cheaper and no worse" in clinical trials, and the same arithmetic applies.
 
 Non-inferiority is also how a component change is checked against the system (§1.3) and how a
