@@ -55,7 +55,8 @@ def test_zero_failure_bound_is_the_rule_of_three():
 def test_floor_evidence_separates_clearing_a_floor_from_having_shown_it():
     e = stats.floor_evidence(13, 15, 0.85)  # 87% on 15 runs: clears the point floor
     assert e["meets_point"] and not e["meets_margin"] and 0.6 < e["lower"] < 0.65
-    assert e["n_needed"] > 15
+    assert e["n_needed"] == 53  # statistics §4.2's table
+    assert stats.floor_evidence(23, 30, 0.75)["n_needed"] == 65
     assert stats.floor_evidence(2, 2, 0.75)["meets_margin"] is False  # TNR on two labels
     big = stats.floor_evidence(90, 100, 0.85)
     assert big["meets_point"] and big["meets_margin"] and big["n_needed"] == 100

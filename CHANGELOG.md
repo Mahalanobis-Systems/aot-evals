@@ -6,6 +6,10 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+- **`stats.floor_evidence` no longer flatters `n_needed`.** It rounded the count at each candidate
+  size, so 13 of 15 was sized as 42 of 48 (88%, not 87%) and reported 48 labels where 53 are
+  needed. It now holds today's rate exactly, matching docs/statistics.md §4.2. The "about N labels"
+  hint in `calibrate` and `agreement` changes with it.
 - **2.0 measurement** (stage 5, docs/v2-design.md §4–§6). Grader error is the **catch rate** and the
   **clean pass rate** everywhere in 2.0: calibrations add `catch`, `clean`, their intervals and lower
   bounds, `labels_per_kind` and J (beside 1.x's `tpr`/`tnr`), and `calibrate` and `label status` speak

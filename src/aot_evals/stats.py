@@ -349,7 +349,7 @@ def floor_evidence(k: int, n: int, floor: float, margin: float = 0.10, limit: in
     need = None
     if point >= floor:
         for m in range(n, limit + 1):
-            c = wilson(round(point * m), m)
+            c = wilson(point * m, m)  # today's rate exactly; rounding the count would flatter it
             if c and c[0] >= floor - margin:
                 need = m
                 break

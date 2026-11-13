@@ -474,8 +474,10 @@ fixture. It is the agent from the [problems](problems.md):
   0.08, refunds 0.02; costs $1, $5, $20, $50; weights: cost; decision: non-inferiority, margin 2
   points) and `refunds` (unit: the subagent; frame: refund handoffs; the threshold test above).
 - **Checks.** Code checks for end state, amount and side effects; one policy judge at catch 0.95
-  and clean 0.99 on a labeled set shipped with the example, which meets `max_inflation: 2.0` at a
-  3% failure rate, and a weaker one (0.80, 0.90) that the floor refuses.
+  and clean 0.99 on a labeled set shipped with the example, and a weaker one (0.80, 0.90) that the
+  floor refuses. At those point rates the policy judge costs 1.43× at a 3% failure rate, but the
+  floor reads the lower bounds (§4), so the set needs about 100 failure labels and 500 pass labels
+  to clear `max_inflation: 2.0` (at 20 and 100 the bounds give 3.7×).
 - **Cases.** A quality set drawn from a shipped trace export with `draw`, and a bug-finding set
   from templates with cluster keys, including the policy corners (a day outside the window, a
   partial refund, a gift card).
