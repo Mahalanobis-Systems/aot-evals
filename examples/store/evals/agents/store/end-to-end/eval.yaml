@@ -1,0 +1,87 @@
+# The whole support agent (estimators §1, Eval 0). Spec only: see docs/v2-design.md §9.
+eval: end-to-end
+version: 1.0
+
+estimand:
+  unit:
+    kind: system
+  quantity: pass_rate
+  population:
+    frame: support-requests-2026-10
+    window: 2026-10-01/2026-10-31
+    environment: env/
+  use_cases:
+    - id: order-status
+      definition: Where is my order, when will it arrive.
+      example: tr_1004
+      share: 0.70
+      cost: 1
+    - id: return
+      definition: Start a return for an order.
+      example: tr_1120
+      share: 0.20
+      cost: 5
+    - id: address
+      definition: Change the delivery address of an order that hasn't shipped.
+      example: tr_1301
+      share: 0.08
+      cost: 20
+    - id: refund
+      definition: Refund an order or part of one (routed to the refund subagent).
+      example: tr_1417
+      share: 0.02
+      cost: 50
+  share_source: support-requests-2026-10
+  weights: cost                    # refund carries 0.23 of θ, not 0.02 (estimators §3)
+  decision:
+    action: ship a change to the support agent (prompt, model, tools or routing)
+    owner: support platform team
+    cadence: per change
+
+design:
+  quality_set:
+    selection: stratified_random
+    seed: 2026
+    oversample: {refund: 10, address: 2}
+  bug_finding_set:
+    coverage: coverage.yaml
+  cluster_key: template
+
+measurement:
+  failure_modes:
+    - id: wrong-answer
+      description: The reply states something about the order that the order system contradicts.
+      use_cases: ["order-status", "return"]
+      check: reply-matches-order
+    - id: wrong-end-state
+      description: The order system ends in a different state than the request called for.
+      use_cases: "*"
+      check: end-state-matches
+    - id: unrequested-change
+      description: Something changed that the request didn't ask for.
+      use_cases: "*"
+      check: no-side-effects
+      side_effect: true
+    - id: wrong-route
+      description: A refund request is not handed to the refund subagent, or another request is.
+      use_cases: "*"
+      check: routed-correctly
+  trials: 3
+  correction: none                 # every counted check is code
+  people:
+    margin: 0.10
+    labels_per_kind: auto
+
+decision_rule:
+  test: non_inferiority
+  margin: 0.02                     # ship if θ̂ falls by no more than 2 points
+  alpha: 0.05
+  power: 0.80
+  looks: fixed
+  multiplicity: holm               # θ and the refund gate
+  use_case_gates:
+    - use_case: refund
+      test: non_inferiority
+      margin: 0.05
+  constraints:
+    default: {cost_per_success_usd: 0.03, latency_p90_ms: 10000}
