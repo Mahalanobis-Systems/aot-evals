@@ -140,8 +140,13 @@ and `aot-evals migrate` moves them.
 **2.0 evals (preview).** An agent folder may instead hold 2.0 evals, one folder per eval with its
 `eval.yaml` ([v2-design.md §1](v2-design.md#1-layout)). `aot-evals --eval ID init [--component
 NAME]` creates one, and `validate` and `status` read its spec: every missing or invalid field, and
-the numbers it blocks. The other commands refuse such a folder until the 2.0 refactor reaches them;
-a 1.x suite is read as before.
+the numbers it blocks, and `validate` also each case whose design fields are wrong. `plan` sizes
+the cases per use case and pool from the decision rule, `draw` draws the quality set from the frame
+(seeded, stratified, with each case's inclusion probability and a logged skip for each trace left
+out), and `screen`, `run` and `report` work on the eval: runs carry a v2 manifest with a hash per
+part of the spec, and `report` writes the weighted estimate θ̂, the per-use-case table and the
+design ([v2-design.md §2–§6](v2-design.md#3-cases)). The other commands refuse such a folder until
+the 2.0 refactor reaches them; a 1.x suite is read as before.
 
 ```
 evals/agents/<agent>/

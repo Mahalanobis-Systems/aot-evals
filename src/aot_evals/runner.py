@@ -31,7 +31,7 @@ from .checks import run_check
 from .executor import AttemptResult, Executor
 from .judging import JudgeRunner
 from .outcomes import Outcome
-from .repo import Evals
+from .repo import Eval, Evals
 from .util import append_jsonl, git_commit_info, now_iso, read_jsonl, run_id_stamp, sha256_file, sha256_tree, write_json
 
 PURPOSES = ("smoke", "baseline", "candidate", "drift", "screen")
@@ -71,12 +71,23 @@ def _short(v, n: int = 120) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
-def select_cases(ev: Evals, case_ids: list[str] | None, categories: list[str] | None) -> list[dict]:
+MANIFEST_V1 = "aot-evals/run-manifest@1"
+MANIFEST_V2 = "aot-evals/run-manifest@2"
+
+
+def is_v2(ev) -> bool:
+    """A 2.0 eval (docs/v2-design.md §5) rather than a 1.x suite."""
+    return isinstance(ev, Eval)
+
+
+def select_cases(ev: Evals | Eval, case_ids: list[str] | None, categories: list[str] | None) -> list[dict]:
+    """The cases to run; `categories` are use cases for a 2.0 eval."""
     cases = ev.cases(include_dropped=False)
     if case_ids:
         cases = [c for c in cases if c.get("id") in set(case_ids)]
     if categories:
-        cases = [c for c in cases if c.get("category") in set(categories)]
+        key = "use_case" if is_v2(ev) else "category"
+        cases = [c for c in cases if c.get(key) in set(categories)]
     return cases
 
 
@@ -93,8 +104,8 @@ def build_manifest(ev: Evals, run_id: str, purpose: str, k: int, cases: list[dic
                     checks[cid] = sha256_file(path)[:16]
     agent_git = git_commit_info(agent_cwd or executor.cwd, exclude=ev.evals_dir)
     evals_git = git_commit_info(ev.repo_root, pathspec=str(ev.root.relative_to(ev.repo_root)))
-    return {
-        "schema": "aot-evals/run-manifest@1",
+    m = {
+        "schema": MANIFEST_V2 if is_v2(ev) else MANIFEST_V1,
         "run_id": run_id,
         "purpose": purpose,
         "label": label,
@@ -111,13 +122,12 @@ def build_manifest(ev: Evals, run_id: str, purpose: str, k: int, cases: list[dic
         "k": k,
         "window": (agent.get("stable_window") or {}).get("since"),
         "judge_backends": _judge_backends(ev, cases),
-        "fakes_sha256": sha256_tree(ev.p("env")),
+        "fakes_sha256": sha256_tree(ev.env_dir),
         "case_set": {"ids": [c.get("id") for c in cases],
                      "files": {c.get("id"): sha256_file(ev.p(c["_path"]))[:16] for c in cases if "_path" in c},
                      "sha256": _hash_files(case_files, ev.root)},
         "checks": checks,
-        "standard_sha": (sha256_file(ev.p("labels", "standard.md"))[:16]
-                         if ev.p("labels", "standard.md").exists() else None),
+        "standard_sha": (sha256_file(ev.standard_path)[:16] if ev.standard_path.exists() else None),
         "invoke": {**{key: executor.invoke.get(key) for key in
                       ("command", "cwd", "timeout", "setup", "reset", "reset_scope", "seed",
                        "observe", "max_attempts", "isolate")},
@@ -131,6 +141,24 @@ def build_manifest(ev: Evals, run_id: str, purpose: str, k: int, cases: list[dic
         "cost_usd": None,
         "counts": None,
     }
+    if is_v2(ev):
+        _v2_manifest(ev, m, cases)
+    return m
+
+
+def _v2_manifest(ev: Eval, m: dict, cases: list[dict]) -> None:
+    """What a 2.0 manifest adds (docs/v2-design.md §5): the eval, one hash per part of its spec,
+    and each quality case's inclusion probability."""
+    from .design import case_status
+    from .spec import part_hashes
+
+    spec = ev.spec()
+    m["eval"] = {"id": ev.id, "version": spec.resolved.get("version")}
+    m["spec_sha"] = part_hashes(spec, ev)
+    m["spec_complete"] = spec.complete
+    m["case_set"]["inclusion_prob"] = {
+        st["id"]: st["inclusion_prob"] for st in (case_status(ev, c) for c in cases)
+        if st["pool"] == "quality"}
 
 
 def _replay(ev: Evals, executor: Executor) -> dict | None:
@@ -251,9 +279,12 @@ def _run(ev: Evals, agent: dict, isolated: Path | None, *, purpose: str, k: int,
     manifest["judges_enabled"] = judges
     if isolated:
         log(f"  isolated: the agent runs from {isolated}, a copy without evals/")
-    # gates that were unmet when the run started; the report greys what they cover (§10)
-    manifest["unmet_gates"] = forced or []
-    manifest["forced_past_gates"] = forced or []  # the name manifests before 1.0 used
+    if is_v2(ev):  # 2.0: the spec's missing fields replace the gates (docs/v2-design.md §6)
+        manifest["spec_issues"] = [i.field for i in (*ev.spec().missing, *ev.spec().invalid)]
+    else:
+        # gates that were unmet when the run started; the report greys what they cover (§10)
+        manifest["unmet_gates"] = forced or []
+        manifest["forced_past_gates"] = forced or []  # the name manifests before 1.0 used
     write_json(run_dir / "manifest.json", manifest)
     (run_dir / "outcomes.jsonl").touch()
 
@@ -374,13 +405,13 @@ def resume_problems(ev: Evals, then: dict, now: dict) -> list[str]:
     return out
 
 
-def _env_edited(ev: Evals) -> bool:
+def _env_edited(ev: Evals | Eval) -> bool:
     """Whether env/ holds edits git has not committed. The fakes hash covers every file under
     env/, including git-ignored ones an agent rewrites on each attempt (an observe dump), so it
     differs between any two runs; committed changes to env/ are already caught by evals_commit."""
     from .util import git
 
-    status = git(["status", "--porcelain", "--", "env"], ev.root)
+    status = git(["status", "--porcelain", "--", str(ev.env_dir)], ev.root)
     return status is None or bool(status.strip())
 
 
@@ -509,9 +540,12 @@ def _execute(ev: Evals, executor: Executor, manifest: dict, plan: list[tuple[int
 def _one_attempt(ev: Evals, executor: Executor, case: dict, trial: int, attempt: int,
                  run_id: str, run_dir: Path, judge_runner: JudgeRunner | None = None
                  ) -> tuple[dict, list[dict], AttemptResult | None]:
+    v2 = is_v2(ev)
     base = {"kind": "attempt", "run_id": run_id, "case_id": case.get("id"),
-            "category": case.get("category"), "set": case.get("set"), "trial": trial,
-            "attempt": attempt, "started": now_iso()}
+            # 2.0 renames them (docs/v2-design.md §5); the per-result fields keep their names
+            **({"use_case": case.get("use_case"), "pool": case.get("pool")} if v2 else
+               {"category": case.get("category"), "set": case.get("set")}),
+            "trial": trial, "attempt": attempt, "started": now_iso()}
     empty_ops = {"cost_usd": None, "tokens_input": None, "tokens_output": None,
                  "tokens_cached": None, "latency_ms": None, "tool_calls": None, "retries": None,
                  "killed": False, "model": None, "model_ids": {}, "judge_model": None}
@@ -573,11 +607,20 @@ def _one_attempt(ev: Evals, executor: Executor, case: dict, trial: int, attempt:
     verdicts = []
     for cid, fm in ev.checks_for_case(case, check_type="code"):
         cr = run_check(cid, ev.code_check_path(cid), start, end, case)
+        line = {"kind": "check", **ids, "check_id": cid, "failure_mode": fm.get("id"), "type": "code",
+                "passed": cr.passed, "detail": cr.detail}
+        if v2:  # one check counts per failure mode; diagnostics are reported, never counted (rule 12)
+            line["counted"] = ev.counted(cid, fm)
+            if not line["counted"]:
+                check_lines.append(line)
+                continue
         verdicts.append(cr.passed)
-        check_lines.append({"kind": "check", **ids, "check_id": cid,
-                            "failure_mode": fm.get("id"), "type": "code",
-                            "passed": cr.passed, "detail": cr.detail})
+        check_lines.append(line)
     judge_lines = judge_runner.lines(case, start, end, ids) if (judge_runner and not adhoc) else []
+    if v2:
+        modes = {cid: fm for cid, fm in ev.checks_for_case(case, check_type="judge")}
+        for jl in judge_lines:
+            jl["counted"] = ev.counted(jl["check_id"], modes.get(jl["check_id"]) or {})
     check_lines += judge_lines
     # `passed` here is the code checks' verdict. Judge verdicts are on their own lines; the report
     # decides which judges count (calibrated ones only, G3) and recomputes each trial's pass.
@@ -587,4 +630,6 @@ def _one_attempt(ev: Evals, executor: Executor, case: dict, trial: int, attempt:
         rec["passed"] = all(verdicts) if verdicts else None
         if not verdicts and not ev.checks_for_case(case, check_type="judge"):
             rec["instrument_error"] = "no checks apply to this case"
+        elif v2 and not verdicts and not any(ev.counted(c, f) for c, f in ev.checks_for_case(case, None)):
+            rec["instrument_error"] = "no counted check applies to this case"
     return rec, check_lines, res

@@ -111,7 +111,8 @@ def weighted_estimate(strata: Sequence[tuple[float, float, int]]) -> dict | None
             "weights": {}, "n": sum(n for _, _, n in usable)}
 
 
-def hajek_mean(values: Sequence[float], inclusion_probs: Sequence[float]) -> dict | None:
+def hajek_mean(values: Sequence[float], inclusion_probs: Sequence[float],
+               clusters: Sequence[str | None] | None = None) -> dict | None:
     """The Hájek mean of one use case's quality cases: Horvitz-Thompson normalized by its own
     weights, sum(y_i / pi_i) / sum(1 / pi_i) (Hájek 1971; docs/statistics.md §2.1, estimators §7).
 
@@ -122,9 +123,12 @@ def hajek_mean(values: Sequence[float], inclusion_probs: Sequence[float]) -> dic
 
     `se` is the linearized (Taylor) standard error, treating the draw as with replacement (no
     finite-population correction, so it errs wide), and `n_effective` is Kish's effective sample
-    size (sum w)^2 / sum w^2: how many equally weighted cases the weighted ones are worth. None
-    when there is no case, or a pi is missing or outside (0, 1]: a case without a recorded pi
-    does not enter a rate (rule 5).
+    size (sum w)^2 / sum w^2: how many equally weighted cases the weighted ones are worth. With
+    `clusters` (one key per case; None for a case alone), the residuals are summed per cluster
+    before squaring, so cases that pass or fail together count as one piece of evidence
+    (statistics §2.4, rule 9), and `n_effective` is at most the number of clusters. None when
+    there is no case, or a pi is missing or outside (0, 1]: a case without a recorded pi does not
+    enter a rate (rule 5).
     """
     ys, ps = list(values), list(inclusion_probs)
     if not ys or len(ys) != len(ps):
@@ -133,17 +137,110 @@ def hajek_mean(values: Sequence[float], inclusion_probs: Sequence[float]) -> dic
         return None
     if any(not isinstance(y, (int, float)) for y in ys):
         return None
+    keys = list(clusters) if clusters is not None else [None] * len(ys)
+    if len(keys) != len(ys):
+        return None
     w = [1 / p for p in ps]
     sw = sum(w)
     point = sum(wi * yi for wi, yi in zip(w, ys, strict=True)) / sw
     n = len(ys)
+    sums: dict = {}
+    for i, (wi, yi, g) in enumerate(zip(w, ys, keys, strict=True)):
+        k = ("g", g) if g is not None else ("c", i)
+        sums[k] = sums.get(k, 0.0) + wi * (yi - point)
+    g_ = len(sums)
     se = None
-    if n > 1:
-        resid = sum((wi * (yi - point)) ** 2 for wi, yi in zip(w, ys, strict=True))
-        se = math.sqrt(n / (n - 1) * resid) / sw
-    return {"point": point, "se": se, "n": n, "sum_weights": sw,
-            "n_effective": sw ** 2 / sum(wi * wi for wi in w), "estimator": "hajek",
-            "se_method": "linearized, with replacement"}
+    if g_ > 1:
+        se = math.sqrt(g_ / (g_ - 1) * sum(s * s for s in sums.values())) / sw
+    n_eff = sw ** 2 / sum(wi * wi for wi in w)
+    out = {"point": point, "se": se, "n": n, "sum_weights": sw,
+           "n_effective": min(n_eff, g_) if clusters is not None else n_eff, "estimator": "hajek",
+           "se_method": ("linearized over clusters, with replacement" if clusters is not None
+                         else "linearized, with replacement")}
+    if clusters is not None:
+        out["n_clusters"] = g_
+    return out
+
+
+def stratified_hajek(strata: dict[str, dict], z: float = Z95) -> dict | None:
+    """theta-hat = sum_s w_s * mu-hat_s, each mu-hat_s a Hájek mean (`hajek_mean`), with a normal
+    interval (estimators §7; statistics §2.1, §2.3).
+
+    `strata` maps a use case to {"weight": w_s, "values": [...], "inclusion_probs": [...],
+    "clusters": [...] or None}. The weights are the estimand's (traffic or cost), normalized here;
+    a use case with weight 0 may have no cases. Use cases are drawn independently, so
+    Var(theta-hat) = sum w_s^2 Var(mu-hat_s).
+
+    Each use case's variance is floored at the binomial variance of an Agresti-Caffo-style
+    adjusted rate at its effective size, p~(1 - p~) / n_eff with p~ = (n_eff mu-hat + 1) /
+    (n_eff + 2), so a use case at 0% or 100%, or one cluster, never contributes zero variance
+    (statistics §2.3). Values outside [0, 1] (not rates) are not floored. The interval is clipped to
+    [0, 1] for rates. Below about 30 cases read it as a minimum width.
+
+    None when a weight is missing or negative, the weights sum to 0, or a use case with weight
+    above 0 has no usable case: theta is then unknown, never estimated without it. `missing`
+    names those use cases.
+    """
+    if not strata:
+        return None
+    weights = {s: (v or {}).get("weight") for s, v in strata.items()}
+    if any(not isinstance(w, (int, float)) or w < 0 for w in weights.values()):
+        return None
+    total = sum(weights.values())
+    if total <= 0:
+        return None
+    per, missing = {}, []
+    for s, v in strata.items():
+        if weights[s] == 0:
+            continue
+        h = hajek_mean(v.get("values") or [], v.get("inclusion_probs") or [], v.get("clusters"))
+        if h is None:
+            missing.append(s)
+            continue
+        per[s] = h
+    if missing:
+        return {"point": None, "ci": None, "se": None, "missing": sorted(missing), "per_use_case": per}
+    point, var = 0.0, 0.0
+    rates = all(0 <= v <= 1 for s in per for v in strata[s]["values"])
+    for s, h in per.items():
+        w = weights[s] / total
+        point += w * h["point"]
+        v = h["se"] ** 2 if h["se"] is not None else 0.0
+        if rates:
+            m = h["n_effective"]
+            pa = (m * h["point"] + 1) / (m + 2)
+            v = max(v, pa * (1 - pa) / m)
+        h["variance_used"] = v
+        var += w * w * v
+    se = math.sqrt(var)
+    lo, hi = point - z * se, point + z * se
+    if rates:
+        lo, hi = max(0.0, lo), min(1.0, hi)
+    return {"point": point, "ci": [lo, hi], "se": se, "missing": [], "per_use_case": per,
+            "ci_method": ("normal, linearized Hájek variance per use case"
+                          + (" over clusters" if any("n_clusters" in h for h in per.values()) else "")
+                          + (", floored at an Agresti-Caffo-adjusted binomial variance" if rates else ""))}
+
+
+def allocation_design_effect(weights: dict[str, float], allocation: dict[str, int]) -> float | None:
+    """How much an allocation that departs from the weights widens theta-hat's interval, at equal
+    spreads: n * sum_s w_s^2 / n_s (Kish's design effect for unequal weighting). 1 when n_s is
+    proportional to w_s; above 1 when a use case is oversampled beyond its weight. A plan needs
+    N = n_independent * this to reach the precision of n_independent equally weighted cases.
+    None when a use case with weight above 0 has no cases."""
+    n = sum(allocation.get(s, 0) for s in weights)
+    tw = sum(w for w in weights.values() if isinstance(w, (int, float)))
+    if n <= 0 or tw <= 0:
+        return None
+    acc = 0.0
+    for s, w in weights.items():
+        if not w:
+            continue
+        ns = allocation.get(s, 0)
+        if ns <= 0:
+            return None
+        acc += (w / tw) ** 2 / ns
+    return n * acc
 
 
 def sample_size_for_halfwidth(halfwidth: float, p: float = 0.5) -> int:
@@ -737,6 +834,18 @@ def cases_for_flip_rate(flip_rate: float, effect: float, power_z: float = Z80_PO
     return math.ceil((Z95 + power_z) ** 2 * flip_rate / effect ** 2)
 
 
+def paired_n(flip_rate: float, margin: float, alpha: float = 0.05, power: float = 0.80) -> int | None:
+    """Cases a one-sided paired test needs (a superiority test of a gain of `margin`, or a
+    non-inferiority test with margin `margin` when the true difference is 0), at one-sided level
+    `alpha` and power `power`, when a share `flip_rate` of cases flip between versions:
+    (z_(1-alpha) + z_power)^2 d / margin^2 (statistics §4.1, §4.5). At alpha 0.025 it equals
+    `cases_for_flip_rate`; showing a cheaper model within 5 points at a 16% flip rate takes 503
+    cases at 0.025 and 396 at 0.05."""
+    if margin <= 0 or not 0 < flip_rate <= 1 or not 0 < alpha < 0.5 or not 0 < power < 1:
+        return None
+    return math.ceil((_z(1 - alpha) + _z(power)) ** 2 * flip_rate / margin ** 2 - 1e-9)
+
+
 # ---- correlated cases: clusters (docs/statistics.md §4.3) -----------------------------------
 
 def cluster_summary(clusters: Sequence[str | None], dominant_share: float = 0.30) -> dict:
@@ -1111,23 +1220,44 @@ def optimum_allocation(strata: dict[str, dict], total: int,
             "method": "optimum allocation (Neyman, unequal costs) with minimums"}
 
 
-def stratified_draw(population: dict[str, Sequence[str]], n_by_stratum: dict[str, int], seed: int) -> dict:
-    """A seeded simple random draw within each stratum, recorded with each item's inclusion
-    probability n_h / N_h, so the quality-estimate set is a stratified random sample rather than
-    a quota the author fills, and Horvitz-Thompson weights (1 / probability) are known. Skips
-    after the draw must be recorded with a reason; replace a skip with the next item of a
-    second seeded draw, never by hand."""
+def draw_order(items: Sequence[str], seed: int, stratum: str) -> list[str]:
+    """A seeded random order of one stratum's items, the same on every machine and Python 3.11+
+    (string seeds hash with SHA-512). Each stratum has its own stream, so changing how many are
+    drawn from one never changes another's draw, and the first n of the order are a simple random
+    sample of n: drawing more later extends the same draw (an expansion, estimators §9)."""
     import random as _random
-    rng = _random.Random(seed)
-    drawn, probs = {}, {}
+    order = sorted(set(items))
+    _random.Random(f"aot-evals-draw|{seed}|{stratum}").shuffle(order)
+    return order
+
+
+def stratified_draw(population: dict[str, Sequence[str]], n_by_stratum: dict[str, int], seed: int,
+                    skip: Sequence[str] = ()) -> dict:
+    """A seeded simple random draw within each stratum, recorded with each item's inclusion
+    probability n_h / N_h, so the quality set is a stratified random sample rather than a quota
+    the author fills, and Hájek weights (1 / probability) are known (statistics §2.2; rule 6).
+
+    Each stratum is drawn as the first n_h of its `draw_order`. A skipped item (recorded with its
+    reason, outside this function) leaves the frame: the draw passes over it and takes the next
+    item of the same seeded order, never one picked by hand, and N_h counts the items that remain.
+    `index` is each drawn item's position in its stratum's order. `replaced` lists the skipped
+    items the draw passed over."""
+    skipped = set(skip)
+    drawn, probs, index, sizes, replaced = {}, {}, {}, {}, {}
     for stratum in sorted(population):
-        items = sorted(population[stratum])
-        n = min(n_by_stratum.get(stratum, 0), len(items))
-        pick = rng.sample(items, n) if n else []
+        order = draw_order(population[stratum], seed, stratum)
+        pos = {it: i for i, it in enumerate(order)}
+        left = [it for it in order if it not in skipped]
+        n = min(n_by_stratum.get(stratum, 0), len(left))
+        pick = left[:n]
         drawn[stratum] = sorted(pick)
+        sizes[stratum] = len(left)
+        replaced[stratum] = sorted(it for it in order[:pos[pick[-1]] + 1] if it in skipped) if pick else []
         for it in pick:
-            probs[it] = n / len(items)
-    return {"seed": seed, "drawn": drawn, "inclusion_probability": probs, "method": "stratified simple random"}
+            probs[it] = n / len(left)
+            index[it] = pos[it]
+    return {"seed": seed, "drawn": drawn, "inclusion_probability": probs, "index": index,
+            "frame_size": sizes, "replaced": replaced, "method": "stratified simple random"}
 
 
 # ---- are failures equally costly? (docs/statistics.md §1.2) ---------------------------------

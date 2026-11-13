@@ -713,7 +713,7 @@ def _invoke(c: _Check, spec: dict, kind: str | None) -> None:
 def sibling_units(ev: Eval) -> dict[str, str | None]:
     """The unit kind of each other eval of the agent, read leniently."""
     out = {}
-    for d in ev.agent.eval_dirs():
+    for d in ev.agent_system.eval_dirs():
         if d.name == ev.id:
             continue
         try:
@@ -827,6 +827,89 @@ def load(ev: Eval) -> Spec:
     if data is None and not ev.spec_path.exists():
         raise ContractError(f"{ev.spec_path} does not exist")
     return check(data, ev.id, ev, ev.spec_path)
+
+
+def use_cases(spec: Spec) -> list[dict]:
+    """The estimand's use cases that have an id."""
+    ucs = spec.part("estimand").get("use_cases")
+    return [u for u in ucs if isinstance(u, dict) and _text(u.get("id"))] if isinstance(ucs, list) else []
+
+
+def use_case_weights(spec: Spec) -> tuple[dict[str, float] | None, str | None]:
+    """Each use case's weight in θ, normalized to sum to 1, and where it came from: `traffic`
+    (w = share), `cost` (w ∝ share × cost, statistics §1.1) or `stated` ({use_case: w}). None when
+    any share, cost or stated weight is missing or invalid: an unstated weight is unknown, never 1
+    (rule 2)."""
+    from .stats import objective_weights
+
+    w = spec.part("estimand").get("weights")
+    ucs = use_cases(spec)
+    if not ucs:
+        return None, None
+    shares = {u["id"]: u.get("share") if _num(u.get("share")) else None for u in ucs}
+    if w == "traffic":
+        return objective_weights(shares, {k: 1.0 for k in shares}), "traffic"
+    if w == "cost":
+        costs = {u["id"]: u.get("cost") if _num(u.get("cost")) and u["cost"] > 0 else None for u in ucs}
+        return objective_weights(shares, costs), "cost"
+    if isinstance(w, dict):
+        stated = {k: w.get(k) for k in shares}
+        if any(not _num(v) or v < 0 for v in stated.values()) or sum(stated.values()) <= 0:
+            return None, "stated"
+        t = sum(stated.values())
+        return {k: v / t for k, v in stated.items()}, "stated"
+    return None, None
+
+
+def quantity(spec: Spec) -> tuple[str | None, str | None]:
+    """("pass_rate", None) or ("failure_rate", mode id); (None, None) when not stated or invalid."""
+    q = spec.part("estimand").get("quantity")
+    if q == "pass_rate":
+        return "pass_rate", None
+    if isinstance(q, str) and q.startswith("failure_rate:") and not any(
+            i.field == "estimand.quantity" for i in (*spec.missing, *spec.invalid)):
+        return "failure_rate", q.split(":", 1)[1]
+    return None, None
+
+
+def check_ids(spec: Spec) -> list[str]:
+    """Every check the measurement model names: each mode's counted check and its diagnostics."""
+    out: list[str] = []
+    fms = spec.part("measurement").get("failure_modes")
+    for fm in fms if isinstance(fms, list) else []:
+        if not isinstance(fm, dict):
+            continue
+        for cid in ([fm.get("check")] + list(fm.get("diagnostics") or [])):
+            if isinstance(cid, str) and cid not in out:
+                out.append(cid)
+    return out
+
+
+def part_hashes(spec: Spec, ev: Eval | None = None) -> dict[str, str | None]:
+    """`spec_sha`: one hash per part of the eval (v2-design §5), over that part as resolved (so
+    writing a default out changes nothing). The measurement hash also covers the files of the
+    checks it names, code and judge prompts, but not their calibration: a changed check is a new
+    instrument (rule 13), a recalibration is not. A part that is absent hashes to None."""
+    import hashlib
+    import json
+
+    out: dict[str, str | None] = {}
+    for part in PARTS:
+        body = spec.resolved.get(part)
+        if body is None:
+            out[part] = None
+            continue
+        payload: dict[str, Any] = {"part": body}
+        if part == "measurement" and ev is not None:
+            files = {}
+            for cid in check_ids(spec):
+                for kind, path in (("code", ev.code_check_path(cid)), ("judge", ev.judge_check_path(cid))):
+                    if path.exists():
+                        files[f"{kind}/{cid}"] = hashlib.sha256(path.read_bytes()).hexdigest()
+            payload["checks"] = files
+        blob = json.dumps(payload, sort_keys=True, default=str, ensure_ascii=False)
+        out[part] = hashlib.sha256(blob.encode()).hexdigest()[:16]
+    return out
 
 
 def render(spec: Spec) -> str:

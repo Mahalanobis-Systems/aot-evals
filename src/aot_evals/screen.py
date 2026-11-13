@@ -226,6 +226,6 @@ def run_screen(ev: Evals, case_ids: list[str] | None = None, read_by: str | None
         case_out = {k: v for k, v in case.items() if not k.startswith("_")}
         case_out["screen"] = screen
         write_json(path, case_out)
-        rows.append({"case": cid, "category": case.get("category"), **screen,
+        rows.append({"case": cid, "category": case.get("use_case", case.get("category")), **screen,
                      "passes": passes(screen)})
     return rows
