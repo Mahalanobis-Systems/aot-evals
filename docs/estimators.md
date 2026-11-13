@@ -121,7 +121,7 @@ comes from, the last column gives the standard name, so the sources can be read 
 | **power** | How often you need to detect a real change of size Δ, usually 80% | power, 1 − β |
 | **look** | One time the results are checked against the rule. The number of looks is fixed in advance | interim analysis |
 | **gate** | A decision rule a change must pass: the headline, a use case's own rule, or another eval | |
-| **multiplicity correction** | Adjusting α when several gates decide one change | familywise error control |
+| **multiplicity correction** | Adjusting α when any one of several tests can trigger the action on its own. Gates that must all pass need none | familywise error control; intersection–union test |
 | **constraint** | A limit that holds whatever θ says, such as cost per run or latency | constraint |
 
 ## 1. Where evals go
@@ -146,28 +146,29 @@ handoffs it receives.
 One eval answers one question, so a system can need more than one. These rules say how many and
 where:
 
-1. **Every agent gets an end-to-end eval** (Eval 0). Its unit is the whole system as a user meets
+- **Every agent gets an end-to-end eval** (Eval 0, rule 3). Its unit is the whole system as a user meets
    it, subagents included, because the user experiences the whole system and the decision to ship
    is made about the whole system.
-2. **A component gets an eval of its own only at a context boundary** (Eval 2). A subagent with its
+- **A component gets an eval of its own only at a context boundary** (Eval 2, rule 3). A subagent with its
    own context receives a defined input, a handoff, that can be captured and replayed. A step that
    shares the orchestrator's context receives the whole transcript so far, which can't be sampled
    or replayed on its own.
-3. **...and only when someone decides about it separately.** A subagent with its own prompt, model
+- **...and only when someone decides about it separately** (rule 3). A subagent with its own prompt, model
    or owner, changed on its own schedule, earns an eval. One that is only ever changed together with
    the rest of the system doesn't: an eval whose number drives no decision is a diagnostic, and the
    end-to-end eval's checks already cover it.
-4. **Steps inside a shared context are graded by checks in the eval that encloses them.** Steps 1
+- **Steps inside a shared context are graded by checks in the eval that encloses them** (rule 3). Steps 1
    and N are covered by Eval 0, through checks on the steps of the run (did it call the right tool,
    with the right arguments).
-5. **A component eval's cases are the handoffs it receives in production.** Eval 2 draws its cases
+- **A component eval's cases are the handoffs it receives in production** (rule 4). Eval 2 draws its cases
    from the inputs the orchestrator actually hands Step 2, taken from end-to-end traces. A change to
    routing changes those inputs, so it re-opens every eval downstream of it (rule 26).
-6. **The end-to-end eval has the last word.** A change to a component ships when the component's
+- **The end-to-end eval has the last word** (rule 27). A change to a component ships when the component's
    own decision rule passes *and* the end-to-end eval shows no regression. A better component does
    not prove a better system.
-7. **Gating on several evals at once needs a multiplicity correction** (rule 22), the same as
-   gating on several use cases.
+- **Several evals gating one change are several tests** (rule 22). When the change ships only if
+  every one of them passes, testing each at α already keeps the chance of shipping a bad change at
+  α, so no correction is needed; each needs enough cases of its own.
 
 Graders and the store of traces are shared between evals. The four parts are not: each eval writes
 down its own.
@@ -324,7 +325,8 @@ more, because the judge's false flags on good runs swamp the few real failures. 
 failure rate, the judge above needs about 7.5 times the cases a code check would, and a judge at
 0.75 on both needs about 27 times. That is how much a judge's errors cost, and it is how a floor on
 judge quality is set: decide how many extra cases you are willing to pay for at the failure rates
-you care about ([statistics §3.3](statistics.md#33-what-a-graders-error-costs-you)). It assumes the
+you care about. At the default limit of twice the cases, the policy judge above is refused at a 3%
+failure rate, while one at catch 0.95 and clean 0.99 costs about 1.4 times ([statistics §3.3](statistics.md#33-what-a-graders-error-costs-you)). It assumes the
 judge errs the same way on both versions being compared; when it doesn't, the comparison is biased
 and more cases don't help (Fiedler 2026).
 
@@ -383,8 +385,11 @@ current version on the same cases.
   gate.
 - **Fix the looks in advance** (rule 21). Labeling until the number clears the bar, or checking
   after every batch, inflates false passes.
-- **Several gates need a multiplicity correction** (rule 22). Ten gated use cases at α = 0.05, with
-  no real change, flag at least one about 40% of the time (1 − 0.95¹⁰).
+- **Correct for multiplicity where one test alone can trigger the action** (rule 22). Flagging a
+  regression in any of ten use cases at α = 0.05, with no real change, flags at least one about 40%
+  of the time (1 − 0.95¹⁰). A change that ships only when every gate passes is different: testing
+  each gate at α keeps the chance of shipping a bad change at α (an intersection–union test; Berger
+  1982), so it needs no correction, only enough cases for each gate.
 - **An optimizer keeps a split it never sees** (rule 23), and its looks at that split are counted
   (Dwork et al. 2015).
 - **Cost and latency are constraints, not part of θ** (rule 24). A change can improve θ and still
@@ -440,8 +445,8 @@ decision_rule:
   alpha: 0.05
   power: 0.80
   looks: fixed                   # fixed | sequential | optimizer_holdout
-  multiplicity: none             # or benjamini_hochberg when several gates count
-  constraints: {cost_per_run_usd: 0.02, p95_latency_ms: 8000}
+  multiplicity: none             # holm when any one gate alone can act; none when all must pass
+  constraints: {cost_per_success_usd: 0.05, latency_p90_ms: 8000}
 ```
 
 The field names are a sketch; [v2-design.md](v2-design.md) settles them. The judges' measured error rates
@@ -490,11 +495,12 @@ the section of [statistics.md](statistics.md) that derives it.
 | 19 | Claim "no worse" only with a non-inferiority test | Decision rule | 11 | §4.5 |
 | 20 | A use case gates only when decided on separately and when its rule can be powered | Decision rule | 1 | §1.2 |
 | 21 | Fix the looks in advance | Decision rule | 12 | §4.7 |
-| 22 | Several gates need a multiplicity correction | Decision rule | 2, 12 | §4.6 |
+| 22 | Correct for multiplicity where one test alone can trigger the action; gates that must all pass need none | Decision rule | 2, 12 | §4.6 |
 | 23 | An optimizer keeps a split it never sees | Decision rule | 12 | §4.7 |
 | 24 | Cost and latency are constraints, not part of θ | Decision rule | 10 | §4.8 |
 | 25 | Prune only where θ̂ stays unbiased | Design | 3 | §2.6 |
 | 26 | A population shift, or a routing change upstream, re-opens the estimand | Estimand | 3 | §1.4 |
+| 27 | A component change ships only when the end-to-end eval also shows no regression | Estimand, decision rule | 2 | §1.3, §4.5 |
 
 Everything else aot-evals asks of a team (how to write failure modes, how to run labeling sessions,
 how to lay out files) is process. It doesn't follow from the four parts and doesn't have to, but it
@@ -596,6 +602,7 @@ a changed judge, or a changed agent under the same judge, calls for fresh labels
 - Bean, A. M. et al. (2025). Measuring what matters: Construct validity in large language model benchmarks. *NeurIPS 2025, Datasets and Benchmarks Track*. doi:10.52202/085713-0590. arXiv:2511.04703
 - Binette, O. & Reiter, J. P. (2024). Improving the validity and practical usefulness of AI/ML evaluations using an estimands framework. arXiv:2406.10366
 - Boyeau, P., Angelopoulos, A. N., Yosef, N., Malik, J. & Jordan, M. I. (2024). AutoEval done right: Using synthetic data for model evaluation. arXiv:2403.07008
+- Berger, R. L. (1982). Multiparameter hypothesis testing and acceptance sampling. *Technometrics* 24(4):295–300. doi:10.2307/1267823
 - Bross, I. (1954). Misclassification in 2 × 2 tables. *Biometrics* 10(4):478–486. doi:10.2307/3001619
 - Card, D., Henderson, P., Khandelwal, U., Jia, R., Mahowald, K. & Jurafsky, D. (2020). With little power comes great responsibility. *EMNLP 2020*, 9263–9274. doi:10.18653/v1/2020.emnlp-main.745
 - Chen, Y. T., Guo, M. & Li, S. (2026). Power analysis for prediction-powered inference. arXiv:2603.16041
