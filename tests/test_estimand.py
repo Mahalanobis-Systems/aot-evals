@@ -76,6 +76,12 @@ class Store:
 
 @pytest.fixture
 def store(tmp_path, monkeypatch) -> Store:
+    return make_store(tmp_path, monkeypatch)
+
+
+def make_store(tmp_path, monkeypatch) -> Store:
+    """The store's end-to-end eval in a fresh repository, its frame imported (shared with
+    test_measurement)."""
     root = tmp_path / "repo"
     (root / "agent").mkdir(parents=True)
     (root / "agent" / "store.py").write_text(AGENT)

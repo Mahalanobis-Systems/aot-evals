@@ -145,8 +145,19 @@ the cases per use case and pool from the decision rule, `draw` draws the quality
 (seeded, stratified, with each case's inclusion probability and a logged skip for each trace left
 out), and `screen`, `run` and `report` work on the eval: runs carry a v2 manifest with a hash per
 part of the spec, and `report` writes the weighted estimate θ̂, the per-use-case table and the
-design ([v2-design.md §2–§6](v2-design.md#3-cases)). The other commands refuse such a folder until
-the 2.0 refactor reaches them; a 1.x suite is read as before.
+design ([v2-design.md §2–§6](v2-design.md#3-cases)). The measurement model works on the eval too
+([v2-design.md §4, §6](v2-design.md#4-checks-and-judges)): `label`, `calibrate` and `judge` measure
+each judge's **catch rate** and **clean pass rate** (1.x TNR and TPR) with its count of labels of
+each kind, and a judge counts only when the cases its errors cost, read at its lower confidence
+bounds and the eval's current failure rate, are within `measurement.max_inflation` (default 2.0;
+`min_tpr` and `min_tnr` are ignored); an uncalibrated or refused judge that feeds the quantity
+leaves θ̂ null with the reason. `agreement` holds the whole eval to people: floors from
+`measurement.people` (stated floors read with the margin, null ones from `max_inflation`), labels
+counted per kind against a count fixed in advance, and one gate per shortfall. `report` corrects
+θ̂ as the spec says (`rogan_gladen`, `ppi`), keeps the uncorrected number beside it, and adds the
+`measurement` key; `trials: auto` runs k = 3 until a baseline measures the variance split, then the
+k it implies. `screen --judges` reads a 2.0 eval's calibrated judges. The other commands refuse
+such a folder until the 2.0 refactor reaches them; a 1.x suite is read as before.
 
 ```
 evals/agents/<agent>/

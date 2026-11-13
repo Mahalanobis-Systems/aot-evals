@@ -26,6 +26,15 @@ check with a bug. This measures the whole.
 Writes `report/agreement.json`. Gate C19: enough labels of both kinds, a measurement that is
 current for this suite and these labels, dev catch rate and clean pass rate at or above their
 floors, and every dev disagreement triaged. Holdout is reported, never iterated on.
+
+In a 2.0 eval (docs/v2-design.md §6) the labels, rulings and triage are the eval's own
+(`<eval>/labels/`), and the floors come from its spec (`measurement.people`): a stated floor is
+read with the non-inferiority margin (statistics §4.2), a null one from `max_inflation` at the
+eval's failure rate, as for a judge. Labels are counted per kind against the count each kind
+needs, fixed in advance (`labels_per_kind`). agreement.json adds `labels_per_kind`,
+`labels_needed`, the margin-based `evidence` that the gate now reads, and `gates`, one entry per
+gate that is not met, each with its id (`people_labels`, `people_disputes`, `people_stale`,
+`people_floor`, `people_triage`) so a fixture can trigger exactly one.
 """
 
 from __future__ import annotations
@@ -69,6 +78,23 @@ def triage_path(ev: Evals) -> Path:
 
 def result_path(ev: Evals) -> Path:
     return ev.p("report", "agreement.json")
+
+
+def _v2(ev) -> bool:
+    from .repo import Eval
+
+    return isinstance(ev, Eval)
+
+
+def load_result(ev: Evals) -> dict | None:
+    return load_json(result_path(ev))
+
+
+def is_stale(ev: Evals, result: dict, labels: list[dict] | None = None) -> bool:
+    """The eval (cases, checks, judges, their calibrations, the spec) or the labels changed since
+    agreement.json was measured."""
+    labels = load_labels(ev) if labels is None else labels
+    return result.get("suite_sha") != suite_sha(ev) or result.get("labels_sha") != labels_sha(labels)
 
 
 def floors(ev: Evals) -> dict:
@@ -179,7 +205,8 @@ def suite_sha(ev: Evals) -> str:
     """What the verdict depends on: cases, checks, judge specs and their calibrations."""
     h = hashlib.sha256()
     for sub, pattern in (("cases", "**/*.json"), ("checks/code", "*.py"), ("checks/judge", "*.md"),
-                         ("checks/judge", "*.calibration.json"), (".", "failure_modes.yaml")):
+                         ("checks/judge", "*.calibration.json"), (".", "failure_modes.yaml"),
+                         (".", "eval.yaml")):
         base = ev.p(*sub.split("/"))
         for p in sorted(base.glob(pattern)) if base.exists() else []:
             h.update(str(p.relative_to(ev.evals_dir)).encode())
@@ -252,7 +279,8 @@ def make_queue(ev: Evals, run_ids: list[str], per_case: int = 1, n: int | None =
     if n is not None:
         picked = picked[:n]
     items = [{"item_id": item_key(a["run_id"], a["case_id"], a["trial"], a["attempt"]),
-              "case_id": a["case_id"], "category": cases[a["case_id"]].get("category") or "",
+              "case_id": a["case_id"],
+              "category": cases[a["case_id"]].get("category") or cases[a["case_id"]].get("use_case") or "",
               "run": a["run_id"], "trial": a["trial"], "attempt": a["attempt"], "label": "", "labeller": "",
               "note": "", "input": run_view(ev, a["run_id"], a, cases[a["case_id"]])} for a in picked]
     path = ev.p("data", "agreement", "queue.json")
@@ -427,12 +455,16 @@ class Grader:
         start = {"world": raw.get("start_world"), "output": None}
         end = {"world": raw.get("end_world"), "output": raw.get("output")}
         lines = []
-        for cid, _ in self.ev.checks_for_case(case, check_type="code"):
+        v2 = _v2(self.ev)
+        for cid, fm in self.ev.checks_for_case(case, check_type="code"):
             cr = run_check(cid, self.ev.code_check_path(cid), start, end, case)
-            lines.append({"check_id": cid, "type": "code", "counted": True, "passed": cr.passed, "detail": cr.detail})
+            lines.append({"check_id": cid, "type": "code", "counted": self.ev.counted(cid, fm) if v2 else True,
+                          "passed": cr.passed, "detail": cr.detail})
         for cid, fm in self.ev.checks_for_case(case, check_type="judge"):
             st = self.judges.get(cid) or {}
-            counted = bool(st.get("calibrated"))
+            # 2.0: the eval is measured as it is built, every counted check included; whether a
+            # judge may count toward θ̂ is its floor, read by the report (measurement.judge_floor)
+            counted = self.ev.counted(cid, fm) if v2 else bool(st.get("calibrated"))
             line = self._judge_line(run_id, a, key, case, cid, fm, st, start, end) if st.get("spec") else None
             if line is None:
                 lines.append({"check_id": cid, "type": "judge", "counted": counted, "passed": None,
@@ -529,8 +561,9 @@ def measure(ev: Evals, call_judges: bool = False, log=print) -> dict:
             continue
         res = g.grade(run_id, a)
         human = "pass" if lab["label"] else "fail"
+        case = g.cases.get(lab["case_id"]) or {}
         rows.append({"item": lab["item_id"], "case_id": lab["case_id"],
-                     "category": (g.cases.get(lab["case_id"]) or {}).get("category"),
+                     "category": case.get("category") or case.get("use_case"),
                      "split": lab.get("split") or split_for(lab["item_id"]),
                      "human": human, "suite": res["verdict"], "note": lab.get("note") or "",
                      "failing": [f"{c['check_id']}: {c['detail'][:200]}" for c in res["checks"]
@@ -551,9 +584,37 @@ def measure(ev: Evals, call_judges: bool = False, log=print) -> dict:
               "disagreements": sorted(disagreements, key=lambda d: (d["split"], d["human"], d["case_id"]))}
     result["evidence"] = evidence(result)
     result["human_anchored"] = human_anchored(ev, g, rows, labels)
+    if _v2(ev):
+        result.update(measure_v2(ev, result, labels))
     result["problems"] = gate_problems(ev, result, labels)
     write_json(result_path(ev), result)
     return result
+
+
+def measure_v2(ev, result: dict, labels: list[dict]) -> dict:
+    """The 2.0 keys of agreement.json: floors from the spec, labels per kind against the count
+    each kind needs, and the margin-based evidence the gate reads (measurement.people_floor)."""
+    from . import measurement as ms
+    from .report_v2 import Scored, default_runs
+    from .spec import use_case_weights
+
+    spec = ev.spec()
+    n_fail = sum(not r["label"] for r in labels)
+    need = ms.labels_needed(spec)
+    runs = default_runs(ev)
+    rate = None
+    if runs:
+        s = Scored(ev, runs)
+        weights, _ = use_case_weights(spec)
+        rate = ms.weighted_rate(s, weights,
+                                lambda a: None if a.get("passed") is None else (0.0 if a["passed"] else 1.0))
+    dev = result.get("dev") or {}
+    fl = ms.people_floor(spec, dev.get("catch") or {}, dev.get("clean") or {}, rate)
+    ps = ms.people_settings(spec)
+    return {"floors": {**ps["floors"], "margin": ps["margin"], "labels_per_kind": ps["labels_per_kind"],
+                       "source": "measurement.people (eval.yaml)"},
+            "labels_per_kind": {"fail": n_fail, "pass": len(labels) - n_fail},
+            "labels_needed": need, "eval_failure_rate": rate, "evidence": {**fl, "split": "dev"}}
 
 
 def evidence(result: dict, margin: float = 0.10) -> dict:
@@ -610,8 +671,50 @@ def human_anchored(ev: Evals, g: Grader, rows: list[dict], labels: list[dict]) -
             "assumption": "labeled attempts are a random sample of these runs' final attempts"}
 
 
+def gates_v2(ev, result: dict | None, labels: list[dict]) -> list[dict]:
+    """The eval-against-people gates of a 2.0 eval, one entry per gate that is not met."""
+    out = []
+    n_fail = sum(not r["label"] for r in labels)
+    have = {"fail": n_fail, "pass": len(labels) - n_fail}
+    if result and result.get("labels_needed"):
+        need = result["labels_needed"]
+    else:
+        from .measurement import labels_needed
+
+        need = labels_needed(ev.spec())
+    short = [f"{have[k]} of {need[k]['n']} {'failing' if k == 'fail' else 'passing'}" for k in ("fail", "pass")
+             if (need.get(k) or {}).get("n") and have[k] < need[k]["n"]]
+    if short:
+        out.append({"id": "people_labels", "detail": "whole-run labels per kind: " + ", ".join(short)
+                    + " (fixed before looking: measurement.people.labels_per_kind; aot-evals agreement label queue)"})
+    open_disputes = disputes(ev)
+    if open_disputes:
+        out.append({"id": "people_disputes", "detail": f"{len(open_disputes)} labelled run(s) where labellers "
+                    f"disagree and nobody has ruled, e.g. {open_disputes[0]['item_id']} (aot-evals agreement rule)"})
+    if result is None:
+        return out
+    if is_stale(ev, result, labels):
+        out.append({"id": "people_stale", "detail": "agreement is stale: the eval or the labels changed since "
+                    "it was measured (aot-evals agreement)"})
+    ev_ = result.get("evidence") or {}
+    if ev_.get("status") == "below":
+        out.append({"id": "people_floor", "detail": "; ".join(ev_.get("reasons") or [])})
+    untriaged = [d["item"] for d in result.get("disagreements") or []
+                 if d["split"] == "dev" and (d.get("triage") or {}).get("cause") not in CAUSES]
+    if untriaged:
+        out.append({"id": "people_triage", "detail": f"{len(untriaged)} dev disagreement(s) without a cause in "
+                    f"labels/triage.yaml, e.g. {untriaged[0]}"})
+    return out
+
+
 def gate_problems(ev: Evals, result: dict | None, labels: list[dict] | None = None) -> list[str]:
     labels = load_labels(ev) if labels is None else labels
+    if _v2(ev):
+        gs = gates_v2(ev, result, labels)
+        if result is not None:
+            result["gates"] = gs
+        unmeasured = [] if result is not None else ["agreement not measured (aot-evals agreement)"]
+        return [g["detail"] for g in gs] + unmeasured
     f = floors(ev)
     problems = []
     n_fail = sum(not r["label"] for r in labels)
@@ -679,6 +782,8 @@ def render(result: dict) -> str:
             return "n/a" if x["rate"] is None else f"{x['rate']:.0%} ({x['k']}/{x['n']}, 95% {ci[0]:.0%}–{ci[1]:.0%})"
         lines.append(f"{split}: {s['runs']} runs · catch {fmt(c)} · clean pass {fmt(p)} · no verdict {s['no_verdict']}")
     for name, label in (("catch", "catch rate"), ("clean", "clean pass rate")):
+        if "labels_needed" in result:  # 2.0: the margin evidence is the gate, listed under problems
+            break
         e = ((result.get("evidence") or {}).get("dev") or {}).get(name)
         if e and e["meets_point"] and not e["meets_margin"]:
             lines.append(f"evidence: dev {label} {e['point']:.0%} clears its floor on {e['n']} runs, but its 95% "
@@ -701,5 +806,14 @@ def render(result: dict) -> str:
     hold = sum(d["split"] == "holdout" for d in result["disagreements"])
     if hold:
         lines.append(f"holdout disagreements: {hold} (not listed: fix dev errors only)")
+    if "labels_needed" in result:
+        have, need = result["labels_per_kind"], result["labels_needed"]
+        lines.append(f"labels per kind: {have['fail']} failing of {need['fail']['n']}, {have['pass']} passing of "
+                     f"{need['pass']['n']} ({need['fail']['source']})")
+        e = result.get("evidence") or {}
+        lines.append(f"against its floors (dev, margin {e.get('margin', 0):.0%}): {e.get('status')}")
+        lines += [f"problem: [{g['id']}] {g['detail']}" for g in result.get("gates") or []] or [
+            "the eval meets people's labels"]
+        return "\n".join(lines)
     lines += [f"problem: {p}" for p in result["problems"]] or ["C19 met"]
     return "\n".join(lines)

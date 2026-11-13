@@ -281,6 +281,10 @@ def _run(ev: Evals, agent: dict, isolated: Path | None, *, purpose: str, k: int,
         log(f"  isolated: the agent runs from {isolated}, a copy without evals/")
     if is_v2(ev):  # 2.0: the spec's missing fields replace the gates (docs/v2-design.md §6)
         manifest["spec_issues"] = [i.field for i in (*ev.spec().missing, *ev.spec().invalid)]
+        from .measurement import trials_for_run
+
+        t = trials_for_run(ev)  # what measurement.trials asked for, beside the k this run used
+        manifest["trials"] = {"spec": t["spec"], "recommended": t["k"], "source": t["source"], "k": k}
     else:
         # gates that were unmet when the run started; the report greys what they cover (§10)
         manifest["unmet_gates"] = forced or []

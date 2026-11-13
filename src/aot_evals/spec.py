@@ -24,6 +24,15 @@ from typing import TYPE_CHECKING, Any
 
 from .util import ContractError, load_yaml
 
+
+def load_yaml_text(text: str):
+    import yaml
+
+    try:
+        return yaml.safe_load(text)
+    except yaml.YAMLError as e:
+        raise ContractError(f"front matter: {e}") from e
+
 if TYPE_CHECKING:
     from .repo import Eval
 
@@ -498,6 +507,16 @@ def _measurement(c: _Check, spec: dict, ids: list[str]) -> tuple[list[str], dict
         c.bad("measurement.trials", "must be a whole number of at least 3, or auto (rule 16)", ["run", "plan"])
 
     judges = [ck for ck in counted.values() if ck and c.ev is not None and c.ev.check_type(ck) == "judge"]
+    for ck in judges:  # 2.0 judges have no fixed floors (docs/v2-design.md §4)
+        try:
+            front = c.ev.judge_check_path(ck).read_text().split("---")
+            meta = load_yaml_text(front[1]) if len(front) > 2 else {}
+        except (OSError, ContractError):
+            meta = {}
+        old = [k for k in ("min_tpr", "min_tnr") if isinstance(meta, dict) and k in meta]
+        if old:
+            c.note(f"checks/judge/{ck}.md", f"{' and '.join(old)} are 1.x floors and are ignored: a 2.0 judge "
+                   "counts when its inflation at the eval's failure rate is within measurement.max_inflation")
     corr = m.get("correction")
     if corr is not None and corr not in CORRECTIONS:
         c.bad("measurement.correction", f"must be one of {', '.join(CORRECTIONS)}", ["estimate"])
