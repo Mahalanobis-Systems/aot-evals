@@ -10,11 +10,12 @@
     aot-evals allocate [--write]        C5: size both case sets, print the arithmetic
     aot-evals --eval ID plan [--write]  2.0: case targets per use case and pool, from the decision rule
     aot-evals --eval ID draw            2.0: the seeded stratified draw of the quality set, with π
+    aot-evals --eval ID handoffs [--scan]   2.0: a component eval's frame, the handoffs in end-to-end traces
     aot-evals screen [--read-by NAME]   C7: reference / do-nothing / claim screens per case
     aot-evals run --purpose P --k N     C1 smoke, C12 baseline, candidate runs
-    aot-evals build [--run]             the lightest Build: drafts, the checklist, then the baseline
+    aot-evals build [--run]             drafts, the checklist per eval and part, then the baselines
     aot-evals serve [--open]            the grader application: label runs, rule, triage, rules, judges
-    aot-evals components [--json]       the optimization loop's components as a checklist
+    aot-evals components [--json]       the optimization loop's components, by part, as a checklist
     aot-evals migrate [--dry-run]       move suites from evals/<agent>/ to evals/agents/<agent>/
     aot-evals label queue|page|import|add|status   C9: human labels per judge (page: label in a browser)
     aot-evals calibrate --judge ID      C10 / E3 / E5: TPR/TNR per backend on the labels
@@ -80,7 +81,8 @@ def _evals(args) -> Evals:
 # Commands that work on an agent folder holding 2.0 evals (docs/v2-design.md §1). The rest read a
 # 1.x suite only, until their stage of the 2.0 refactor.
 V2_READY = {"init", "validate", "status", "import", "log", "activity", "snapshot", "plan", "draw",
-            "screen", "run", "report", "label", "calibrate", "agreement", "judge", "compare"}
+            "screen", "run", "report", "label", "calibrate", "agreement", "judge", "compare", "handoffs",
+            "build", "components"}
 
 
 def _one_eval(args, ev: Evals):
@@ -273,11 +275,38 @@ def cmd_import(args) -> int:
 
     ev = _evals(args)
     entry = import_export(ev, Path(args.file), source=args.source, query=args.query,
-                          window=args.window, export_id=args.id, notes=args.notes)
+                          window=args.window, export_id=args.id, notes=args.notes,
+                          handoffs_of=args.handoffs_of)
     print(json.dumps(entry, indent=2))
     if entry["rows"] is None:
         print("warning: could not count rows; C0 needs a row count. Use .jsonl, .csv, .tsv or "
               "a JSON array.", file=sys.stderr)
+    return 0
+
+
+def cmd_handoffs(args) -> int:
+    from . import handoffs as handoffs_mod
+
+    ev = _evals(args)
+    try:
+        if args.scan or not args.eval and not ev.has_evals:
+            s = handoffs_mod.scan_frame(ev, args.source)
+            print(json.dumps(s, indent=2) if args.json else handoffs_mod.render_scan(s))
+            return 0
+        e = _one_eval(args, ev)
+        entry = handoffs_mod.extract(e, args.source, args.id, dry_run=args.dry_run)
+    except (ContractError, KeyError, FileNotFoundError) as err:
+        sys.exit(str(err).strip("'\""))
+    if args.json:
+        print(json.dumps(entry, indent=2))
+    else:
+        print(handoffs_mod.render_extract(entry, e.spec().part("design").get("cluster_key")))
+        if entry.get("file"):
+            frame = (e.spec().part("estimand").get("population") or {}).get("frame")
+            if frame != entry["id"]:
+                print(f"  next: set estimand.population.frame to {entry['id']} in {e.id}/eval.yaml, then draw")
+            else:
+                print(f"  next: aot-evals --eval {e.id} draw")
     return 0
 
 
@@ -580,6 +609,16 @@ def cmd_build(args) -> int:
     from . import build as build_mod
 
     ev = _evals(args)
+    if build_mod.is_v2(ev):
+        try:
+            done = build_mod.prepare_v2(ev)
+        except ContractError as e:
+            sys.exit(str(e))
+        print(build_mod.render_v2(done, ev))
+        if args.run:
+            return build_mod.run_v2(ev, main)
+        print("\nNext: fill what each eval's spec lacks (aot-evals validate), then aot-evals build --run")
+        return 0
     done = build_mod.prepare(ev)
     items = build_mod.checklist(ev)
     print(build_mod.render(done, items))
@@ -1114,7 +1153,23 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--window", required=True, help="time window covered, e.g. 2026-07-01..2026-09-30")
     s.add_argument("--id", help="export id (default: <date>-<file stem>)")
     s.add_argument("--notes")
+    s.add_argument("--handoffs-of", metavar="COMPONENT",
+                   help="the export holds handoffs into this component, captured as they happened: a "
+                        "component eval's frame (rule 4). Handoffs recorded in end-to-end traces are "
+                        "extracted with `handoffs` instead")
     s.set_defaults(fn=cmd_import)
+
+    s = sub.add_parser("handoffs", help="extract a component eval's frame: the handoffs into its component, "
+                                        "from the end-to-end traces (rule 4)")
+    s.add_argument("--from", dest="source", metavar="IMPORT_ID",
+                   help="the end-to-end frame to read (default: the end-to-end eval's population frame)")
+    s.add_argument("--id", help="import id for the new frame (default: the eval's estimand.population.frame)")
+    s.add_argument("--scan", action="store_true",
+                   help="count the handoffs into each component in the frame, beside agent.yaml's "
+                        "components: where the traces show context boundaries")
+    s.add_argument("--dry-run", action="store_true")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_handoffs)
 
     s = sub.add_parser("allocate", help="C5: size both case sets")
     s.add_argument("--halfwidth", type=float, default=0.05,

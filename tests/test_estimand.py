@@ -90,7 +90,9 @@ def make_store(tmp_path, monkeypatch) -> Store:
     shutil.copyfile(STORE / "end-to-end" / "eval.yaml", s.eval / "eval.yaml")
     (s.agent / "agent.yaml").write_text(yaml.safe_dump({
         "id": "store", "invoke": {"command": [sys.executable, "agent/store.py"], "cwd": ".", "timeout": 20,
-                                  "env": {"AGENT_VARIANT": "refund-bug"}}}))
+                                  "env": {"AGENT_VARIANT": "refund-bug"}},
+        "components": [{"id": "refund-subagent", "kind": "subagent", "context": "own",
+                        "ships_separately": True, "use_case": "refund"}]}))
     (s.agent / "env").mkdir()
     (s.agent / "env" / "orders.json").write_text("{}")
     code = s.eval / "checks" / "code"

@@ -257,12 +257,36 @@ def discovery_body(fm: dict, text: str, agent: str) -> str:
             group = after if head in AFTER_NEXT else before
             group.append(f'<section class="detail-group" id="{slug(head)}"><h2>{markdown.inline(head)}</h2>'
                          f"{markdown.render(body)}</section>")
-    comp = components_html(fm.get("components"))
-    if comp:
-        before.append(comp)
+    for extra in (boundaries_html(fm.get("boundaries")), components_html(fm.get("components"))):
+        if extra:
+            before.append(extra)
     details = ('<p class="kicker details-head">The details</p>' + "".join(before)) if before else ""
     return (_overview(fm, agent) + (markdown.render(lead) if lead.strip() else "") + details
             + _next(fm) + "".join(after))
+
+
+def boundaries_html(found) -> str:
+    """The context boundaries discovery found (front matter `boundaries:`, the fields of agent.yaml's
+    `components`), each with where it is graded (boundaries.py, estimators §1)."""
+    from . import boundaries
+
+    rows = boundaries.entries(found)
+    if not rows:
+        return ""
+    word = {boundaries.OWN_EVAL: "An eval of its own", boundaries.USE_CASE_GATE: "A use case gate end to end",
+            boundaries.USE_CASE: "A use case end to end", boundaries.CHECKS: "Checks in the end-to-end eval",
+            boundaries.UNKNOWN: "To decide with the owner"}
+    body = []
+    for r in rows:
+        p = boundaries.placement(r)
+        body.append(f"<tr><td><b>{_i(r['id'])}</b></td><td>{_i(r.get('kind') or '')}</td>"
+                    f"<td>{_i(r.get('context') or '')}</td><td>{word[p['placement']]}</td><td>{_i(p['why'])}</td></tr>")
+    return ('<section class="detail-group" id="context-boundaries"><h2>Where the evals go</h2>'
+            '<p>Every agent gets one eval end to end. A part of it gets an eval of its own only where it starts '
+            'from a handoff of its own (a context boundary) and a team changes it on its own schedule; '
+            '<code>aot-evals build</code> creates those evals.</p>'
+            '<div class="wrap"><table class="full"><thead><tr><th>Part</th><th>Kind</th><th>Context</th>'
+            f'<th>Graded by</th><th>Why</th></tr></thead><tbody>{"".join(body)}</tbody></table></div></section>')
 
 
 def components_html(found) -> str:
@@ -274,19 +298,20 @@ def components_html(found) -> str:
 
     word = {"done": "In place", "partial": "Partly", "todo": "To build", "later": "Later", "n/a": "Doesn't apply"}
     rows = []
-    for group, cid, name, phase, _ in COMPONENTS:
+    for part, cid, name, _ in COMPONENTS:
         f = found.get(cid)
         if not isinstance(f, dict):
             continue
         st = f.get("state") if f.get("state") in word else "todo"
-        rows.append(f"<tr><td>{_i(group)}</td><td>{_i(name)}</td><td>{_i(phase.capitalize())}</td>"
+        rows.append(f"<tr><td>{_i(part)}</td><td>{_i(name)}</td>"
                     f"<td>{word[st]}</td><td>{_i(f.get('note'))}</td></tr>")
     if not rows:
         return ""
     return ('<section class="detail-group" id="components"><h2>The components to build</h2>'
-            '<p>The parts an optimization loop needs around this agent, what exists today, and which phase '
-            'builds the rest. <code>aot-evals components</code> keeps this list current as the work goes on.</p>'
-            '<div class="wrap"><table class="full"><thead><tr><th>Area</th><th>Component</th><th>Phase</th>'
+            '<p>The parts an optimization loop needs around this agent, grouped by the part of an eval each '
+            'serves, and what exists today. <code>aot-evals components</code> keeps this list current as the '
+            'work goes on.</p>'
+            '<div class="wrap"><table class="full"><thead><tr><th>Part</th><th>Component</th>'
             f'<th>Today</th><th>Found</th></tr></thead><tbody>{"".join(rows)}</tbody></table></div></section>')
 
 

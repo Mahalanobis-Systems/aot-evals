@@ -773,6 +773,134 @@ def _across(c: _Check, ev: Eval, spec: dict, kind: str | None) -> None:
             c.miss("decision_rule.also_requires", f"a component change ships only when the end-to-end "
                    f"eval ({systems[0]}) shows no regression: add it with a non-inferiority test "
                    "(rule 27)", ["decision"])
+        for a in reqs if isinstance(reqs, list) else []:
+            if isinstance(a, dict) and a.get("eval") in systems and a.get("test") == "threshold":
+                c.bad(f"decision_rule.also_requires[{a['eval']}].test", "the end-to-end eval must show no "
+                      "regression on the same change, which takes a paired test against its baseline: "
+                      "non_inferiority, or superiority (rules 19, 27)", ["decision"])
+        _component(c, ev, spec, systems)
+    elif kind == "system":
+        _routes(c, ev, spec)
+
+
+def _component(c: _Check, ev: Eval, spec: dict, systems: list[str]) -> None:
+    """A component earns an eval only at a context boundary, when decided on separately (rule 3),
+    and its population is the handoffs it receives (rule 4)."""
+    from . import boundaries
+
+    est = spec.get("estimand") if isinstance(spec.get("estimand"), dict) else {}
+    unit = est.get("unit") if isinstance(est.get("unit"), dict) else {}
+    name = unit.get("component")
+    if not _text(name):
+        return
+    comps = boundaries.by_id(ev.agent_system.agent())
+    comp = comps.get(name)
+    blocks = ["estimate", "decision"]
+    if comp is None:
+        c.miss("estimand.unit.component", f"'{name}' is not in agent.yaml's components: name it there "
+               "with its kind, context and whether it ships separately, so the eval can say why it has "
+               "an eval of its own (rule 3)", blocks)
+    else:
+        p = boundaries.placement(comp)
+        if p["placement"] == boundaries.UNKNOWN:
+            c.miss(f"agent.yaml components[{name}].{p['needs']}", p["why"] + " (rule 3)", blocks)
+        elif p["placement"] != boundaries.OWN_EVAL:
+            c.bad("estimand.unit.component", p["why"], blocks)
+    if systems:
+        other = _peek(ev, systems[0])
+        mine, theirs = (_decision_text(est), _decision_text((other or {}).get("estimand")))
+        if mine and mine == theirs:
+            c.bad("estimand.decision", f"the same decision as {systems[0]}: one decision, one eval "
+                  "(rule 1); a component eval decides about the component", ["decision"])
+    pop = est.get("population") if isinstance(est.get("population"), dict) else {}
+    frame = pop.get("frame")
+    entry = next((x for x in ev.exports() if isinstance(x, dict) and x.get("id") == frame), None)
+    if entry is None:
+        return  # a frame with no import is already missing
+    h = entry.get("handoffs") if isinstance(entry.get("handoffs"), dict) else None
+    if h is None or h.get("component") != name:
+        into = f"handoffs into {h.get('component')}" if h else "no handoffs"
+        src = f" --from {_peek_frame(ev, systems[0])}" if systems and _peek_frame(ev, systems[0]) else ""
+        c.miss("estimand.population.frame", f"import '{frame}' holds {into}, not the handoffs {name} "
+               f"receives (rule 4): `aot-evals --eval {ev.id} handoffs{src}` extracts them from the "
+               f"end-to-end traces, or `import FILE --handoffs-of {name}` records handoffs captured as "
+               "they happened", ["draw", "estimate"])
+        return
+    parent = h.get("from")
+    current = _peek_frame(ev, systems[0]) if systems else None
+    if parent and current and parent != current:
+        c.note("estimand.population.frame", f"its handoffs were extracted from {parent}, but "
+               f"{systems[0]} now draws from {current}: a new mix of traffic or a routing change upstream "
+               "changes the handoffs too, so extract them again (rule 26)")
+
+
+def _routes(c: _Check, ev: Eval, spec: dict) -> None:
+    """Behind a router, each route is a use case of the end-to-end eval; one whose model ships on its
+    own gets a use case gate (rule 20, v2-design §10.1). A subagent at a context boundary that ships
+    on its own is told it can have an eval of its own (rule 3)."""
+    from . import boundaries
+
+    est = spec.get("estimand") if isinstance(spec.get("estimand"), dict) else {}
+    ucs = {u.get("id") for u in est.get("use_cases") or [] if isinstance(u, dict)} if isinstance(
+        est.get("use_cases"), list) else set()
+    rule = spec.get("decision_rule") if isinstance(spec.get("decision_rule"), dict) else {}
+    gates = rule.get("use_case_gates") if isinstance(rule.get("use_case_gates"), list) else []
+    gated = {g.get("use_case") for g in gates if isinstance(g, dict)}
+    units = _component_units(ev)
+    for row in boundaries.plan(ev.agent_system.agent()):
+        name, uc = row["id"], row.get("use_case")
+        if row["placement"] in (boundaries.USE_CASE_GATE, boundaries.USE_CASE):
+            if not _text(uc):
+                c.miss("estimand.use_cases", f"route {name} gets the user's request as sent, so its "
+                       f"requests are a use case of this eval: name it in agent.yaml (components[{name}]."
+                       "use_case; rules 3, 20)", ["use_cases"] + (["decision"] if row["placement"] ==
+                                                     boundaries.USE_CASE_GATE else []))
+                continue
+            if ucs and uc not in ucs:
+                c.miss(f"estimand.use_cases[{uc}]", f"route {name} serves use case {uc}, which this eval "
+                       "does not have: use cases partition the requests (rule 3)", ["draw", "estimate", "use_cases"])
+            elif row["placement"] == boundaries.USE_CASE_GATE and uc not in gated:
+                c.miss(f"decision_rule.use_case_gates[{uc}]", f"route {name}'s model ships on its own, so "
+                       f"its use case needs a gate of its own (rule 20): {{use_case: {uc}, test: "
+                       "non_inferiority, margin: ...}", ["decision"])
+        elif row["placement"] == boundaries.OWN_EVAL and name not in units:
+            c.note(f"agent.yaml components[{name}]", f"{name} has a context boundary and ships on its "
+                   f"own: `aot-evals init --component {name}` gives it an eval of its own (rule 3)")
+
+
+def _peek(ev: Eval, eval_id: str) -> dict | None:
+    try:
+        data = load_yaml(ev.agent_system.p(eval_id, "eval.yaml"))
+    except ContractError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _peek_frame(ev: Eval, eval_id: str) -> str | None:
+    est = (_peek(ev, eval_id) or {}).get("estimand")
+    pop = est.get("population") if isinstance(est, dict) else None
+    f = pop.get("frame") if isinstance(pop, dict) else None
+    return f if _text(f) else None
+
+
+def _decision_text(est) -> str | None:
+    d = est.get("decision") if isinstance(est, dict) else None
+    if not isinstance(d, dict) or not _text(d.get("action")):
+        return None
+    return " ".join(str(d.get("action")).lower().split()) + "|" + " ".join(str(d.get("owner") or "").lower().split())
+
+
+def _component_units(ev: Eval) -> set[str]:
+    """The components that already have an eval in this agent."""
+    out = set()
+    for d in ev.agent_system.eval_dirs():
+        if d.name == ev.id:
+            continue
+        est = (_peek(ev, d.name) or {}).get("estimand")
+        unit = est.get("unit") if isinstance(est, dict) else None
+        if isinstance(unit, dict) and unit.get("kind") == "component" and _text(unit.get("component")):
+            out.add(unit["component"])
+    return out
 
 
 # ---- entry points ----------------------------------------------------------------------------

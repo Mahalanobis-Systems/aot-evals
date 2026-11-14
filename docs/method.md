@@ -156,7 +156,9 @@ leaves θ̂ null with the reason. `agreement` holds the whole eval to people: fl
 counted per kind against a count fixed in advance, and one gate per shortfall. `report` corrects
 θ̂ as the spec says (`rogan_gladen`, `ppi`), keeps the uncorrected number beside it, and adds the
 `measurement` key; `trials: auto` runs k = 3 until a baseline measures the variance split, then the
-k it implies. `screen --judges` reads a 2.0 eval's calibrated judges. The decision rule works on
+k it implies. `screen --judges` counts a 2.0 eval's calibrated judges in every screen as its code
+checks are counted, so a use case whose end state only a judge grades can pass screening (the
+judge must fail the do-nothing run). The decision rule works on
 the eval ([v2-design.md §5, §6](v2-design.md#5-runs)): `report` adds `decision` (each gate's
 threshold, superiority or non-inferiority test, the gates combined as `combine` says, `also_requires`
 on the other eval's runs of the same change, constraints, and one look per change under
@@ -166,8 +168,26 @@ design or measurement hash differs from the spec's, and a decision-rule change u
 record before the first run decided on: committed in eval.yaml (an ancestor of the runs' commits,
 or dated earlier when the evals have a repository of their own), or journaled with `log --kind
 decision`. A threshold rule on a rate tests its exact (Clopper–Pearson) bound at Kish's effective
-size, so 0 failures in 32 cases do not clear a 5% bar and 0 in 59 do. The other commands refuse such a folder
-until the 2.0 refactor reaches them; a 1.x suite is read as before.
+size, so 0 failures in 32 cases do not clear a 5% bar and 0 in 59 do.
+
+**Several evals per agent** ([estimators §1](estimators.md#1-where-evals-go), [v2-design.md
+§1](v2-design.md#1-layout)). agent.yaml's `components` lists the parts of the system: each
+subagent (called with a handoff the orchestrator writes), route (handed the user's request as
+sent by a router) and step (in the orchestrator's context), with its context, owner and whether it
+ships on its own. A component gets an eval of its own only with a context boundary and a separate
+decision; `validate` refuses one that doesn't (a shared context, a route, a part only changed with
+the system, or the end-to-end eval's own decision), and says when one that would earn an eval has
+none. A route whose model ships on its own needs a use case gate in the end-to-end eval instead. A
+component eval's frame is the handoffs it receives: `aot-evals --eval ID handoffs` extracts them
+from the end-to-end eval's traces (each trace row's `handoffs` list) into a new import with each
+handoff's source trace, `import --handoffs-of COMPONENT` records handoffs captured as they happened,
+and `handoffs --scan` counts the handoffs into each component, beside agent.yaml. A frame without
+the component's handoffs is missing (rule 4), and one extracted from an older end-to-end frame is
+noted (rule 26). `also_requires` on the end-to-end eval must be a paired test, and is unknown
+until the end-to-end runs of the same change (its declared variable at the same clean commit) hold
+cases of the use cases whose requests reach the component. `build` and `components` read 2.0
+agents (§4.1, §4.3). The other commands refuse such a folder until the 2.0 refactor reaches them;
+a 1.x suite is read as before.
 
 ```
 evals/agents/<agent>/
@@ -341,6 +361,16 @@ the coverage list from its situations (to be committed before the first case), a
 mode on every case checked by a generic code check, `end-state-matches` (the world ends as the
 case expects), so a first pass needs no check code. Each draft is marked for the owner to confirm.
 
+On a new agent, or one with 2.0 evals, `build` works around the four parts instead: it creates the
+end-to-end eval, drafts agent.yaml's `components` from the discovery report's `boundaries` and an
+eval for each component the rules give one, drafts the end-to-end use cases from the task types
+(shares from discovery, costs left unstated) and the coverage list from the situations, and counts
+one failure mode on every case through `end-state-matches`. Its checklist is per eval: the agent
+contract, then the estimand, sampling design, measurement model and decision rule, each done or
+naming its first missing field, then a drawn quality set, screened cases and a baseline; and the
+context boundaries agent.yaml and the traces show. `build --run` runs each eval that can run
+(smoke, baseline, report). A suite with its 1.x files builds the 1.x way until `migrate --to 2`.
+
 **Trust per category.** A category is `untested` until a finished baseline covers it,
 `provisional` once it has numbers, and `validated` when the suite agrees with a person on its
 runs: C19's floors met suite-wide, and the category's own dev catch rate and clean pass rate at
@@ -406,22 +436,18 @@ Rules:
 ### 4.3 The components
 
 An optimization loop around an agent has the same parts whatever the agent does. `aot-evals
-components` lists them, each with the phase that builds it and its state read from the suite
-(done, partly, not yet, not automated yet, or doesn't apply). The discovery report may record a
-component's state before a suite exists (`components:` in its front matter); the suite's own
-reading wins once it says more.
+components` lists them, grouped by the part of an eval each serves, with its state read from the
+agent's 2.0 evals or its 1.x suite (done, partly, not yet, not automated yet, or doesn't apply).
+The discovery report may record a component's state before a suite exists (`components:` in its
+front matter); the evals' own reading wins once it says more.
 
-| Area | Components |
+| Part | Components |
 |---|---|
-| Agent eval infrastructure | harness and sandbox runtime; mock services, staging accounts, a safe database; record and replay; seeded, realistic, anonymized data |
-| Golden test cases | cases by category; deterministic checks first; private holdouts |
-| Grader UI | each problem graded like a test, with the reason (`aot-evals serve`) |
-| Bench of graders | a calibration set first; two blind labels per run; graders from customer and expert pools |
-| LLM judges | calibrated on human labels; qualitative dimensions |
-| Synthetic test cases | generated from golden cases, validated by graders |
-| Evaluation engine | golden test and judge evals; change scoping against the test sets; A/B tests; trace monitoring |
-| Objective monitoring | value and traffic weighting; business alignment; distribution change detection |
-| Agent testing and modeling | significance testing; noise floor and k; misclassification analysis; test runner and isolated compute |
+| Agent contract and sandbox | harness and sandbox runtime; mock services, staging accounts, a safe database; record and replay; seeded, realistic, anonymized data; test runner and isolated compute; an engine that runs every eval |
+| Estimand | the decision each eval drives and its owner; context boundaries (one eval end to end, one per component decided on separately); use cases with shares and costs; distribution change detection |
+| Sampling design | a quality set drawn from real traffic with π; each component eval drawn from its handoffs; a bug-finding set against a coverage list; private holdouts |
+| Measurement model | code checks first, one counted per failure mode; judges within `max_inflation`; qualitative dimensions; each run graded like a test (`aot-evals serve`); a calibration set; two blind labels per run; graders from customer and expert pools; the whole eval held to people; trials from the variance split |
+| Decision rule | a powered decision rule per eval; paired comparisons; a component change gated on the end-to-end eval; trace monitoring |
 
 ---
 

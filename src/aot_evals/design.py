@@ -292,6 +292,8 @@ def draw(ev: Eval, n: dict[str, int] | None = None, skip: list[str] | None = Non
                 case["trigger"] = {"type": "message", "text": row["text"]}
             case["provenance"] = {"source": f"export:{frame}", "export": frame, "trace_ref": tid,
                                   "synthetic": False}
+            if row.get("source_trace") not in (None, ""):  # a handoff: the end-to-end trace it came from
+                case["provenance"]["source_trace"] = row["source_trace"]
             path = ev.p("cases", uc, f"{cid}.json")
             same = on_disk.get(str(path.relative_to(ev.root)))
             if same is not None and old is None:  # a file already there for this trace: keep its edits

@@ -1,0 +1,28 @@
+# The online store's support agent (docs/v2-design.md §9). Inventory only so far: the agent, its
+# fakes and its traces come with the example in stage 8.
+id: store
+description: Answers order-status, return and address requests, and routes refunds to a refund subagent.
+surface: support chat
+triggers: [user message]
+
+# The parts of the system and their context boundaries (estimators §1, rule 3). Each says where it
+# is graded: `aot-evals components` and `validate` read this list.
+components:
+  - id: refund-subagent
+    kind: subagent                 # subagent | route | step
+    context: own                   # starts from the handoff the orchestrator writes: a context boundary
+    called_by: the orchestrator's refund route
+    instructions: [agent/refunds_prompt.md]
+    model: claude-haiku-5-5
+    owner: refunds team
+    ships_separately: true         # its own prompt, model and owner, changed weekly: an eval of its own
+    use_case: refund               # the end-to-end use case whose requests reach it
+  - id: order-tools
+    kind: step                     # the order-reading and address-changing tools, called in the
+    context: shared                # orchestrator's own context: graded by checks in end-to-end
+    ships_separately: false
+
+invoke:
+  command: [python, agent/store.py]
+  cwd: .
+  timeout: 60

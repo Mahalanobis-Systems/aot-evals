@@ -30,7 +30,9 @@ def store(tmp_path: Path, monkeypatch) -> Evals:
     shutil.copytree(STORE, root)
     (root / "data").mkdir()
     (root / "data" / "export.manifest.json").write_text(json.dumps({"exports": [
-        {"id": "support-requests-2026-10"}, {"id": "refund-handoffs-2026-10"}]}))
+        {"id": "support-requests-2026-10"},
+        {"id": "refund-handoffs-2026-10", "handoffs": {"component": "refund-subagent",
+                                                       "from": "support-requests-2026-10"}}]}))
     for ev, ids in CODE_CHECKS.items():
         (root / ev / "checks" / "code").mkdir(parents=True)
         for i in ids:
@@ -133,6 +135,17 @@ def _set(path: str, value):
 
 _DEL = object()
 
+
+def _all(*fs):
+    def f(d):
+        for g in fs:
+            g(d)
+    return f
+
+
+E2E_DECISION = {"action": "ship a change to the support agent (prompt, model, tools or routing)",
+                "owner": "support platform team", "cadence": "weekly"}
+
 MUTATIONS = [
     # (eval, mutation, kind, field)
     # estimand
@@ -156,6 +169,8 @@ MUTATIONS = [
     ("refunds", _set("estimand.decision.owner", _DEL), "missing", "estimand.decision.owner"),
     ("refunds", _set("estimand.quantity", "failure_rate:no-such-mode"), "invalid", "estimand.quantity"),
     ("refunds", _set("estimand.quantity", "accuracy"), "invalid", "estimand.quantity"),
+    # estimators rule 1: a component eval decides about the component (rule 3's other gates: test_components)
+    ("refunds", _set("estimand.decision", E2E_DECISION), "invalid", "estimand.decision"),
     # design
     ("refunds", _set("design.quality_set.seed", _DEL), "missing", "design.quality_set.seed"),
     ("refunds", _set("design.quality_set.selection", "hand_picked"), "invalid", "design.quality_set.selection"),
@@ -205,6 +220,11 @@ MUTATIONS = [
     ("refunds", _set("decision_rule.also_requires.1", {"eval": "checkout", "test": "non_inferiority",
                                                        "margin": 0.02}), "missing",
      "decision_rule.also_requires[checkout]"),
+    # rule 27: the end-to-end eval shows no regression with a paired test, never a threshold
+    ("refunds", _all(_set("decision_rule.also_requires.0.test", "threshold"),
+                     _set("decision_rule.also_requires.0.bar", 0.9),
+                     _set("decision_rule.also_requires.0.margin", _DEL)), "invalid",
+     "decision_rule.also_requires[end-to-end].test"),
     ("refunds", _set("decision_rule.constraints.default", {"cost_per_turn_usd": 0.1}), "invalid",
      "decision_rule.constraints.default.cost_per_turn_usd"),
     # invoke

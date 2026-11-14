@@ -1,14 +1,15 @@
-"""The components of an agent's optimization loop, as a checklist (docs/method.md §4.3).
+"""The components of an agent's optimization loop, as a checklist, grouped by the part of an eval
+each serves (estimators §1–§6; docs/v2-design.md §7).
 
-The architecture behind every Mahal Systems engagement names the parts a graded environment
-needs around an agent: a safe place to run it, golden test cases, a grader application and a
-bench of graders, calibrated judges, synthetic cases, an evaluation engine, objective monitoring,
-and the testing and modeling that make numbers defensible. This module is that list, each part
-with the phase that builds it and the command that does, and a status read from the suite.
+An eval is an estimator with four parts: the estimand, the sampling design, the measurement model
+and the decision rule. Around them sits what lets the agent run at all: the agent contract and a
+sandbox. Every component of the loop serves one of those, so the list is grouped by them, each
+component with the command that builds it and a status read from the agent's evals (2.0) or its
+suite (1.x).
 
-The Assess report may set a component's state before a suite exists (`components:` in
-discovery.md's front matter, keyed by id); once the suite holds evidence, the suite's own reading
-wins wherever it says more than the report did. `aot-evals components` prints the list; `status
+The Assess report may set a component's state before any eval exists (`components:` in
+discovery.md's front matter, keyed by id); once the evals hold evidence, their own reading wins
+wherever it says more than the report did. `aot-evals components` prints the list; `status
 --json`, the checkpoint pages and the grader application carry it.
 """
 
@@ -16,46 +17,56 @@ from __future__ import annotations
 
 from .repo import Evals
 from .start import split_front_matter
-from .util import load_json
+from .util import ContractError, load_json
 
-# (group, id, name, phase, how aot-evals covers it)
+CONTRACT = "Agent contract and sandbox"
+ESTIMAND = "Estimand"
+DESIGN = "Sampling design"
+MEASUREMENT = "Measurement model"
+DECISION = "Decision rule"
+PARTS = (CONTRACT, ESTIMAND, DESIGN, MEASUREMENT, DECISION)
+
+# (part, id, name, how aot-evals covers it)
 COMPONENTS = [
-    ("Agent eval infrastructure", "sandbox", "Harness and sandbox runtime", "build",
+    (CONTRACT, "sandbox", "Harness and sandbox runtime",
      "the agent contract and invoke.isolate (references/agent-contract.md)"),
-    ("Agent eval infrastructure", "fakes", "Mock API services, staging accounts, a safe database", "build",
+    (CONTRACT, "fakes", "Mock API services, staging accounts, a safe database",
      "fakes in env/, hashed into every run manifest"),
-    ("Agent eval infrastructure", "replay", "Record and replay", "build", "aot-evals replay"),
-    ("Agent eval infrastructure", "seeded", "Self-hosted, seeded, realistic and anonymized data", "build",
+    (CONTRACT, "replay", "Record and replay", "aot-evals replay"),
+    (CONTRACT, "seeded", "Self-hosted, seeded, realistic and anonymized data",
      "the seed and observe hooks; scrubbed cases"),
-    ("Golden test cases", "golden", "Cases broken down by categories", "build", "cases/<category>/"),
-    ("Golden test cases", "deterministic", "Deterministic checks first", "build", "checks/code/"),
-    ("Golden test cases", "holdouts", "Private holdouts", "judge", "the hash-assigned 20% holdout of labels"),
-    ("Grader UI", "grader-ui", "Each problem graded like a test, with the reason", "judge", "aot-evals serve"),
-    ("Bench of graders", "calibration-set", "A calibration set first", "judge", "the warm-up on settled runs"),
-    ("Bench of graders", "two-blind", "Two blind labels per run", "judge", "overlaps in every labeller's queue"),
-    ("Bench of graders", "pool", "Graders sourced from customer and expert pools", "judge",
+    (CONTRACT, "runner", "Test runner and isolated compute", "aot-evals run, with invoke.isolate"),
+    (CONTRACT, "engine", "An eval engine that runs every eval", "aot-evals run, a baseline per eval"),
+    (ESTIMAND, "business", "The decision each eval drives, and its owner", "estimand.decision in each eval.yaml"),
+    (ESTIMAND, "boundaries", "Context boundaries: one eval end to end, one per component decided on separately",
+     "agent.yaml components; aot-evals init --component (rule 3)"),
+    (ESTIMAND, "weighting", "Use cases with their shares and the cost of a failure",
+     "estimand.use_cases and weights (rule 2)"),
+    (ESTIMAND, "distribution", "Distribution change detection",
+     "shares measured again on a schedule (rule 26); not automated yet"),
+    (DESIGN, "golden", "A quality set drawn at random from real traffic, with π",
+     "aot-evals draw (rules 5, 6)"),
+    (DESIGN, "handoff-frames", "Each component eval drawn from the handoffs it receives",
+     "aot-evals handoffs, from end-to-end traces (rule 4)"),
+    (DESIGN, "synthetic", "A bug-finding set against a coverage list", "pool: bug_finding cases; coverage.yaml"),
+    (DESIGN, "holdouts", "Private holdouts", "the hash-assigned 20% holdout of labels"),
+    (MEASUREMENT, "deterministic", "Code checks first, one counted check per failure mode",
+     "checks/code/; measurement.failure_modes (rules 11, 12, 14)"),
+    (MEASUREMENT, "judges", "Judges within max_inflation, from their catch and clean pass rates",
+     "aot-evals calibrate (rule 13)"),
+    (MEASUREMENT, "qualitative", "Qualitative dimensions", "judge specs in checks/judge/"),
+    (MEASUREMENT, "grader-ui", "Each run graded like a test, with the reason", "aot-evals serve"),
+    (MEASUREMENT, "calibration-set", "A calibration set first", "the warm-up on settled runs"),
+    (MEASUREMENT, "two-blind", "Two blind labels per run", "overlaps in every labeller's queue"),
+    (MEASUREMENT, "pool", "Graders sourced from customer and expert pools",
      "per-grader links (&labeller=NAME); people, not software"),
-    ("LLM judges", "judges", "Judges calibrated on human labels", "judge", "aot-evals calibrate"),
-    ("LLM judges", "qualitative", "Qualitative dimensions", "judge", "judge specs in checks/judge/"),
-    ("Synthetic test cases", "synthetic", "Synthetic cases generated from golden cases, validated by graders",
-     "judge", "drafted cases (labels/drafts/) and synthetic: true cases"),
-    ("Evaluation engine", "engine", "Golden test and judge evals", "build", "aot-evals run"),
-    ("Evaluation engine", "change-scoping", "Change scoping against the test sets", "judge",
-     "aot-evals status (what changed) and agreement label queue --changed"),
-    ("Evaluation engine", "ab", "A/B and blue-green tests", "judge",
-     "aot-evals compare; online tests are guidance only"),
-    ("Evaluation engine", "trace-monitoring", "Trace monitoring", "judge", "C16-C17, guidance only for now"),
-    ("Objective monitoring", "weighting", "Value and traffic weighting", "build",
-     "category worth and observed share; the quality-estimate set"),
-    ("Objective monitoring", "business", "Business alignment", "assess", "the discovery report's business context"),
-    ("Objective monitoring", "distribution", "Distribution change detection", "judge", "C16, guidance only for now"),
-    ("Agent testing and modeling", "significance", "Significance testing", "build",
-     "aot-evals compare (McNemar, bootstrap)"),
-    ("Agent testing and modeling", "noise-floor", "Noise floor and k", "build", "a baseline at k = 3 to 5"),
-    ("Agent testing and modeling", "misclassification", "Misclassification analysis", "judge",
-     "agreement: every disagreement with a cause"),
-    ("Agent testing and modeling", "runner", "Test runner and isolated compute", "build",
-     "aot-evals run, with invoke.isolate"),
+    (MEASUREMENT, "misclassification", "The whole eval held to people", "aot-evals agreement (rule 15)"),
+    (MEASUREMENT, "noise-floor", "Trials per case from the variance split", "measurement.trials (rule 16)"),
+    (DECISION, "significance", "A decision rule per eval, powered", "decision_rule; aot-evals plan (rule 7)"),
+    (DECISION, "ab", "Paired comparisons of a changed agent", "aot-evals compare (rule 18)"),
+    (DECISION, "change-scoping", "A component change gated on the end-to-end eval",
+     "decision_rule.also_requires (rule 27)"),
+    (DECISION, "trace-monitoring", "Trace monitoring", "not automated yet"),
 ]
 STATES = ("done", "partial", "todo", "later", "n/a")
 
@@ -146,6 +157,191 @@ def _from_suite(ev: Evals) -> dict[str, tuple[str, str]]:
     put("runner", "done" if base and isolated else "partial" if inv.get("command") else "todo",
         "isolated from the eval files" if isolated else "runs in the repository, beside the eval files "
         "(set invoke.isolate: true)")
+    put(*_boundaries(ev, {}))
+    put("handoff-frames", "n/a", "a 1.x suite is one eval; `migrate --to 2`, then a component eval per boundary")
+    return out
+
+
+def _boundaries(agent_dir: Evals, units: dict[str, str]) -> tuple[str, str, str]:
+    """agent.yaml's components, each placed (rule 3), and whether each that earns an eval has one."""
+    from . import boundaries
+
+    agent = agent_dir.agent()
+    if "components" not in agent:
+        return ("boundaries", "todo", "agent.yaml lists no components: name each subagent, route and "
+                "shared step, or `components: []` for one context")
+    rows = boundaries.plan(agent)
+    if not rows:
+        return ("boundaries", "done", "one context: the end-to-end eval covers it")
+    unknown = [r["id"] for r in rows if r["placement"] == boundaries.UNKNOWN]
+    owed = [r["id"] for r in rows if r["placement"] == boundaries.OWN_EVAL and r["id"] not in units]
+    word = {boundaries.OWN_EVAL: "own eval", boundaries.USE_CASE_GATE: "use case gate",
+            boundaries.USE_CASE: "use case", boundaries.CHECKS: "checks end to end", boundaries.UNKNOWN: "?"}
+    why = ", ".join(f"{r['id']}: {word[r['placement']]}" for r in rows)
+    if unknown:
+        return ("boundaries", "partial", f"{why}; not placed yet: {', '.join(unknown)}")
+    if owed:
+        return ("boundaries", "partial", f"{why}; no eval yet for {', '.join(owed)} "
+                f"(aot-evals init --component {owed[0]})")
+    return ("boundaries", "done", why)
+
+
+def _from_evals(ev: Evals) -> dict[str, tuple[str, str]]:
+    """id -> (state, evidence), read from a 2.0 agent's evals (docs/v2-design.md §1)."""
+    from . import agreement
+    from .calibrate import is_current, load_calibration
+    from .design import case_status
+    from .judges import load_spec
+    from .replay import records_dir
+
+    evals = ev.evals()
+    out: dict[str, tuple[str, str]] = {}
+
+    def put(cid, state, why):
+        out[cid] = (state, why)
+
+    def share(pred) -> tuple[list[str], list[str]]:
+        yes = [e.id for e in evals if pred(e)]
+        return yes, [e.id for e in evals if e.id not in yes]
+
+    def state(yes, no) -> str:
+        return "done" if yes and not no else "partial" if yes else "todo"
+
+    def names(ids):
+        return ", ".join(ids) or "none"
+
+    inv = ev.agent().get("invoke") or {}
+    specs = {e.id: e.spec() for e in evals}
+    units = {}
+    for e in evals:
+        unit = specs[e.id].part("estimand").get("unit") or {}
+        if isinstance(unit, dict) and unit.get("kind") == "component":
+            units[unit.get("component")] = e.id
+    wired = [e.id for e in evals if (e.agent().get("invoke") or {}).get("command")]
+    put("sandbox", state(wired, [e.id for e in evals if e.id not in wired]),
+        f"runs from its command: {names(wired)}" + (", isolated" if inv.get("isolate") else ""))
+    env_dir = ev.p("env")
+    env_files = [p for p in env_dir.rglob("*") if p.is_file() and p.name != ".gitkeep"] if env_dir.exists() else []
+    put("fakes", "done" if env_files else "n/a" if inv.get("seed") else "todo",
+        f"{len(env_files)} fake or fixture file(s) in env/, shared by every eval" if env_files else
+        "the seed hook sets up the world" if inv.get("seed") else "nothing in env/ and no seed hook")
+    put("replay", "done" if records_dir(inv) else "n/a", "replays " + records_dir(inv) if records_dir(inv)
+        else "the agent runs live")
+    put("seeded", "done" if inv.get("seed") and inv.get("observe") else "partial" if inv.get("observe") else "todo",
+        "seed and observe hooks" if inv.get("seed") else "no seed hook")
+    isolated = bool(inv.get("isolate") or records_dir(inv))
+    put("runner", "done" if isolated else "partial" if inv.get("command") else "todo",
+        "isolated from the eval files" if isolated else "runs in the repository, beside the eval files "
+        "(set invoke.isolate: true)")
+    yes, no = share(lambda e: bool(e.baseline_runs()))
+    put("engine", state(yes, no), f"a baseline in {names(yes)}" + (f"; none in {names(no)}" if no else ""))
+
+    def clean(e, prefix):
+        return not any(i.field.startswith(prefix) for i in (*specs[e.id].missing, *specs[e.id].invalid))
+
+    yes, no = share(lambda e: clean(e, "estimand.decision"))
+    put("business", state(yes, no), f"a decision and owner in {names(yes)}"
+        + (f"; missing in {names(no)}" if no else ""))
+    put(*_boundaries(ev, units))
+    yes, no = share(lambda e: clean(e, "estimand.use_cases") and clean(e, "estimand.weights"))
+    put("weighting", state(yes, no), f"use cases with shares and weights in {names(yes)}"
+        + (f"; incomplete in {names(no)}" if no else ""))
+    put("distribution", "later", "shares are measured again by hand (rule 26)")
+
+    statuses = {}
+    for e in evals:
+        try:
+            statuses[e.id] = [case_status(e, c) for c in e.cases(include_dropped=False)]
+        except ContractError:  # a case file that isn't JSON: validate names it
+            statuses[e.id] = []
+    yes, no = share(lambda e: any(x["counts"] for x in statuses[e.id]))
+    put("golden", state(yes, no), "; ".join(f"{e.id}: {sum(x['counts'] for x in statuses[e.id])} drawn"
+                                            for e in evals) or "no evals yet")
+    comps = [e for e in evals if e.id in units.values()]
+    if not comps:
+        put("handoff-frames", "n/a", "no component evals")
+    else:
+        def has_frame(e):
+            frame = (specs[e.id].part("estimand").get("population") or {}).get("frame")
+            entry = next((x for x in ev.exports() if isinstance(x, dict) and x.get("id") == frame), None)
+            return bool(entry and isinstance(entry.get("handoffs"), dict))
+        yes = [e.id for e in comps if has_frame(e)]
+        no = [e.id for e in comps if e.id not in yes]
+        put("handoff-frames", state(yes, no), f"handoff frames in {names(yes)}"
+            + (f"; none yet in {names(no)} (aot-evals --eval {no[0]} handoffs)" if no else ""))
+    bf = {e.id: sum(x["pool"] == "bug_finding" for x in statuses[e.id]) for e in evals}
+    put("synthetic", "partial" if any(bf.values()) else "todo",
+        "; ".join(f"{k}: {v} bug-finding" for k, v in bf.items()) or "no evals yet")
+    labels = {}
+    for e in evals:
+        try:
+            labels[e.id] = agreement.load_labels(e)
+        except Exception:
+            labels[e.id] = []
+    hold = sum(r.get("split") == "holdout" for rows in labels.values() for r in rows)
+    put("holdouts", "done" if hold >= 5 else "partial" if hold else "todo", f"{hold} held-out labelled runs")
+
+    counted, code, judges = 0, 0, []
+    for e in evals:
+        for fm in e.failure_modes():
+            cid = fm.get("check")
+            if not isinstance(cid, str):
+                continue
+            counted += 1
+            t = e.check_type(cid)
+            code += t == "code"
+            if t == "judge":
+                judges.append((e, cid))
+    put("deterministic", "done" if counted and code == counted else "partial" if code else "todo",
+        f"{code} of {counted} counted checks are code")
+    current = 0
+    for e, cid in judges:
+        try:
+            spec = load_spec(e.judge_check_path(cid))
+            cal = load_calibration(e, spec)
+            current += bool(cal and is_current(e, spec, cal) and cal.get("status") == "calibrated")
+        except Exception:
+            continue
+    put("judges", "n/a" if not judges else "done" if current == len(judges) else "partial",
+        "no AI judges: every counted check is code" if not judges else
+        f"{current} of {len(judges)} counted judge(s) calibrated; the report reads each against max_inflation")
+    put("qualitative", "n/a" if not judges else "done", f"{len(judges)} judge(s)")
+    by = {}
+    for e in evals:
+        try:
+            by.update({(e.id, k): v for k, v in agreement.per_labeller(e).items()})
+        except Exception:
+            continue
+    labellers = {k for people in by.values() for k in people}
+    overlapped = sum(len(p) >= 2 for p in by.values())
+    put("grader-ui", "done" if by else "todo", f"{len(by)} runs labelled" if by else "aot-evals serve, not used yet")
+    put("calibration-set", "done" if overlapped >= 5 else "partial" if overlapped else "todo",
+        f"{overlapped} runs labelled by two or more people")
+    put("two-blind", "done" if overlapped >= 15 else "partial" if overlapped else "todo",
+        f"{overlapped} runs labelled by two or more people")
+    put("pool", "done" if len(labellers) >= 2 else "partial" if labellers else "todo", f"{len(labellers)} labeller(s)")
+    measured = [e.id for e in evals if load_json(agreement.result_path(e))]
+    put("misclassification", state(measured, [e.id for e in evals if e.id not in measured]),
+        f"held to people in {names(measured)}" if measured else "no eval held to people yet (aot-evals agreement)")
+    ks = sorted({m.get("k") or 0 for e in evals for m in e.baseline_runs()})
+    put("noise-floor", "done" if ks and min(ks) >= 3 else "partial" if ks else "todo",
+        f"k = {', '.join(map(str, ks))}" if ks else "no baseline yet")
+    yes, no = share(lambda e: not specs[e.id].blocked("decision"))
+    put("significance", state(yes, no), f"a complete decision rule in {names(yes)}"
+        + (f"; incomplete in {names(no)}" if no else ""))
+    compared = [e.id for e in evals if e.p("report", "comparisons").is_dir()
+                and any(e.p("report", "comparisons").iterdir())]
+    put("ab", "done" if compared else "partial" if any(e.runs("candidate") for e in evals) else "todo",
+        f"compared in {names(compared)}" if compared else "no comparison yet")
+    if not comps:
+        put("change-scoping", "n/a", "no component evals: every change is decided end to end")
+    else:
+        yes = [e.id for e in comps if not any(i.field.startswith("decision_rule.also_requires")
+                                              for i in (*specs[e.id].missing, *specs[e.id].invalid))]
+        no = [e.id for e in comps if e.id not in yes]
+        put("change-scoping", state(yes, no), f"gated on the end-to-end eval: {names(yes)}"
+            + (f"; not yet: {names(no)}" if no else ""))
+    put("trace-monitoring", "later", "not automated yet")
     return out
 
 
@@ -155,15 +351,20 @@ def checklist(ev: Evals) -> list[dict]:
     if path.exists():
         fm, _ = split_front_matter(path.read_text())
         report = fm.get("components") or {}
-    suite = _from_suite(ev) if ev.exists() else {}
+    if not ev.exists():
+        suite = {}
+    elif ev.has_evals and not ev.has_v1_suite:
+        suite = _from_evals(ev)
+    else:
+        suite = _from_suite(ev)
     rank = {"done": 3, "partial": 2, "later": 1, "todo": 0, "n/a": 0}
     out = []
-    for group, cid, name, phase, how in COMPONENTS:
+    for part, cid, name, how in COMPONENTS:
         st, why = suite.get(cid, ("todo", ""))
         r = report.get(cid)
         if isinstance(r, dict) and r.get("state") in STATES and rank[r["state"]] > rank.get(st, 0):
             st, why = r["state"], r.get("note") or why
-        out.append({"group": group, "id": cid, "name": name, "phase": phase, "how": how, "state": st, "why": why})
+        out.append({"group": part, "part": part, "id": cid, "name": name, "how": how, "state": st, "why": why})
     return out
 
 
@@ -174,6 +375,6 @@ def render(items: list[dict]) -> str:
         if it["group"] != group:
             group = it["group"]
             lines.append(f"\n{group}")
-        lines.append(f"  [{mark[it['state']]}] {it['name']} ({it['phase']}) {it['why']}")
+        lines.append(f"  [{mark[it['state']]}] {it['name']}: {it['why']}")
     lines.append("\n[x] done  [~] partly  [ ] not yet  [-] not automated yet  [/] doesn't apply")
     return "\n".join(lines).lstrip("\n")

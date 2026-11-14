@@ -6,6 +6,37 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+- **2.0: several evals per agent** (stage 7, docs/v2-design.md §1–§3, §6, §7; estimators §1).
+  **agent.yaml lists the parts of the system** (`components`: each subagent, route and step, its
+  context, owner and whether it ships on its own), and `validate` reads it: a component eval
+  needs a context boundary and a decision of its own (rule 3), so one for a shared context, a
+  step, a route, a part only changed with the system, or the end-to-end eval's own decision is
+  invalid. A route whose model ships on its own needs a use case gate end to end instead (rule 20),
+  and a separately shipped subagent without an eval gets a note. **Frames of handoffs:** `aot-evals
+  --eval ID handoffs` extracts a component eval's frame from the end-to-end traces (each row's
+  `handoffs` list), one row per handoff with its source trace, and records where it came from;
+  `import --handoffs-of COMPONENT` imports handoffs captured as they happened; `handoffs --scan`
+  counts the handoffs into each component, beside agent.yaml. A component frame that holds no
+  handoffs into its component is missing (rule 4); one from an older end-to-end frame is noted
+  (rule 26). Drawn handoff cases record `provenance.source_trace`.
+- **`also_requires` on the end-to-end eval is enforced as rule 27 asks**: it must be a paired test
+  (a threshold is invalid), and it stays unknown until the end-to-end runs of the same change hold
+  cases of the use cases whose requests reach the component.
+- **`build` works around the four parts** on a new agent or one with 2.0 evals: it creates the
+  end-to-end eval, drafts agent.yaml's `components` from the discovery report's new `boundaries`
+  and an eval for each component that earns one, drafts the use cases (costs left unstated), the
+  coverage list and one generic code check, and prints its checklist per eval and per part.
+  `build --run` runs each eval that can run. A suite with 1.x files builds as before.
+- **`components` is grouped by the four parts** (agent contract and sandbox, estimand, sampling
+  design, measurement model, decision rule), with new entries for context boundaries, handoff
+  frames and the end-to-end gate on a component change, and reads 2.0 evals. Its JSON rows carry
+  `part` in place of `phase`; the discovery page's table follows, and adds "Where the evals go".
+- **`screen --judges` counts calibrated judges in every screen**, the reference and do-nothing
+  screens included, so a use case whose end state only a judge grades can pass screening. Without
+  `--judges`, such a case's note says to use it.
+- **Assess finds context boundaries**: discovery's first read lists each subagent, route and step
+  with its context and whether it ships on its own, and the report records them as `boundaries`.
+
 - **`stats.floor_evidence` no longer flatters `n_needed`.** It rounded the count at each candidate
   size, so 13 of 15 was sized as 42 of 48 (88%, not 87%) and reported 48 labels where 53 are
   needed. It now holds today's rate exactly, matching docs/statistics.md §4.2. The "about N labels"
