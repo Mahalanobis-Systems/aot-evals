@@ -182,7 +182,7 @@ def estimate(s: Scored, refused: str | None, weights: dict | None, source: str |
     out = {"theta": None, "ci": None, "ci_method": None, "se": None, "quantity": spec.part("estimand").get("quantity"),
            "weights": weights, "weights_source": source, "estimator": "hajek", "corrected": False,
            "correction": spec.part("measurement").get("correction"), "uncorrected": None,
-           "n_cases": 0, "n_clusters": 0, "k": s.k, "null_reason": None}
+           "n_cases": 0, "n_clusters": 0, "n_effective": None, "k": s.k, "null_reason": None}
     blocked = spec.blocked("estimate")
     if blocked:
         out["null_reason"] = "the spec does not say what the number means: " + ", ".join(
@@ -219,6 +219,7 @@ def estimate(s: Scored, refused: str | None, weights: dict | None, source: str |
         return out
     observed = {"point": r["point"], "ci": r["ci"], "se": r["se"]}
     out.update({"theta": r["point"], "ci": r["ci"], "ci_method": r["ci_method"], "se": r["se"],
+                "n_effective": r.get("n_effective"),
                 "uncorrected": {"theta": r["point"], "ci": r["ci"], "se": r["se"]}})
     if meas is None:
         return out

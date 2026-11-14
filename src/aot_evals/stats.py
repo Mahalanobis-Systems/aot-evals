@@ -175,7 +175,10 @@ def stratified_hajek(strata: dict[str, dict], z: float = Z95) -> dict | None:
     adjusted rate at its effective size, p~(1 - p~) / n_eff with p~ = (n_eff mu-hat + 1) /
     (n_eff + 2), so a use case at 0% or 100%, or one cluster, never contributes zero variance
     (statistics §2.3). Values outside [0, 1] (not rates) are not floored. The interval is clipped to
-    [0, 1] for rates. Below about 30 cases read it as a minimum width.
+    [0, 1] for rates. Below about 30 cases read it as a minimum width. `n_effective` is Kish's
+    effective size over every case's design weight in theta-hat, (w_s / sum w) * (1/pi_i) /
+    sum_{j in s} 1/pi_j, capped at the number of clusters as in `hajek_mean`: the n at which a
+    threshold test on a rate counts its cases (`rate_bound_test`).
 
     None when a weight is missing or negative, the weights sum to 0, or a use case with weight
     above 0 has no usable case: theta is then unknown, never estimated without it. `missing`
@@ -216,7 +219,16 @@ def stratified_hajek(strata: dict[str, dict], z: float = Z95) -> dict | None:
     lo, hi = point - z * se, point + z * se
     if rates:
         lo, hi = max(0.0, lo), min(1.0, hi)
+    unit, keys = [], set()
+    for s in per:
+        inv = [1 / p for p in strata[s]["inclusion_probs"]]
+        tot = sum(inv)
+        unit += [weights[s] / total * x / tot for x in inv]
+        cl = strata[s].get("clusters") or [None] * len(inv)
+        keys |= {("g", g) if g is not None else ("c", s, i) for i, g in enumerate(cl)}
+    n_eff = min(kish_n(unit) or 0.0, len(keys)) if unit else None
     return {"point": point, "ci": [lo, hi], "se": se, "missing": [], "per_use_case": per,
+            "n_effective": n_eff,
             "ci_method": ("normal, linearized Hájek variance per use case"
                           + (" over clusters" if any("n_clusters" in h for h in per.values()) else "")
                           + (", floored at an Agresti-Caffo-adjusted binomial variance" if rates else ""))}
@@ -965,6 +977,84 @@ def bound_test(point: float, se: float, boundary: float, side: str, alpha: float
     shown_wrong = (lo >= boundary) if side == "below" else (hi <= boundary)
     return {"p": p, "passed": p <= alpha, "shown_wrong_side": shown_wrong, "bound": bound,
             "interval": [lo, hi], "side": side, "boundary": boundary, "alpha": alpha}
+
+
+def kish_n(weights: Sequence[float]) -> float | None:
+    """Kish's effective sample size, (sum w)^2 / sum w^2: how many equally weighted cases a set of
+    weighted ones is worth (Kish 1965). None for no weight or all zero."""
+    sq = sum(w * w for w in weights)
+    return sum(weights) ** 2 / sq if sq > 0 else None
+
+
+def _cdf_le(x: float, n: float, p: float) -> float:
+    """P(X <= x), X ~ Binomial(n, p), continued to real x and n through the incomplete beta
+    function, as the Clopper-Pearson bounds use it."""
+    if x >= n or p <= 0:
+        return 1.0
+    if x < 0 or p >= 1:
+        return 0.0
+    return betainc_regularized(n - x, x + 1, 1 - p)
+
+
+def _sf_ge(x: float, n: float, p: float) -> float:
+    """P(X >= x), continued to real x and n as `_cdf_le`."""
+    if x <= 0 or p >= 1:
+        return 1.0
+    if x > n or p <= 0:
+        return 0.0
+    return betainc_regularized(x, n - x + 1, p)
+
+
+def rate_bound_test(rate: float, n_eff: float, boundary: float, side: str, alpha: float = 0.05) -> dict | None:
+    """One-sided exact test that a rate estimated from weighted, clustered cases lies on one side
+    of a fixed `boundary` (a threshold rule on theta-hat: statistics §4.1, §4.2).
+
+    Korn & Graubard's (1998) interval for a survey proportion: the Clopper-Pearson (1934) bound at
+    an effective size, here Kish's `n_eff` (`stratified_hajek`'s `n_effective`), with the count
+    set to rate * n_eff. Exact binomial at equal weights, so 0 failures in 59 cases clear a 5% bar
+    and 0 in 32 do not (the zero-failure rule, §4.1); a normal bound passes both. Keys as
+    `bound_test`, plus `n_effective` and `count`. side "below": H1 rate < boundary; "above": H1
+    rate > boundary. None when the inputs cannot support a test."""
+    if side not in ("below", "above") or not 0 < alpha < 0.5 or not 0 < boundary < 1:
+        return None
+    if n_eff is None or n_eff <= 0 or rate is None or not 0 <= rate <= 1:
+        return None
+    n, x = float(n_eff), rate * n_eff
+    hi = 1.0 if x >= n else _bisect(lambda u: _cdf_le(x, n, u) - alpha)
+    lo = 0.0 if x <= 0 else _bisect(lambda u: alpha - _sf_ge(x, n, u))
+    p = _cdf_le(x, n, boundary) if side == "below" else _sf_ge(x, n, boundary)
+    bound = hi if side == "below" else lo
+    shown_wrong = (lo >= boundary) if side == "below" else (hi <= boundary)
+    return {"p": p, "passed": p <= alpha, "shown_wrong_side": shown_wrong, "bound": bound,
+            "interval": [lo, hi], "side": side, "boundary": boundary, "alpha": alpha,
+            "n_effective": n, "count": x}
+
+
+def cases_for_rate_bound(rate: float, boundary: float, side: str, alpha: float = 0.05,
+                         design_effect: float = 1.0, limit: int = 1_000_000) -> int | None:
+    """Cases a `rate_bound_test` needs to clear `boundary` if the rate stays at `rate`: the
+    smallest n whose effective size n / `design_effect` passes, found by doubling then
+    bisection (the exact test saw-tooths in n, so read it as the size to plan for). 59 at a rate
+    of 0 against a 5% bar. None when the rate is on the wrong side of the boundary."""
+    if not 0 < boundary < 1 or rate is None or design_effect is None or design_effect <= 0:
+        return None
+    if (side == "below" and rate >= boundary) or (side == "above" and rate <= boundary):
+        return None
+
+    def ok(m: int) -> bool:
+        r = rate_bound_test(rate, m / design_effect, boundary, side, alpha)
+        return bool(r and r["passed"])
+
+    hi = 1
+    while not ok(hi):
+        hi *= 2
+        if hi > limit:
+            return None
+    lo = hi // 2
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        lo, hi = (lo, mid) if ok(mid) else (mid, hi)
+    return hi
 
 
 def cases_for_spread(n: int, se: float | None, effect: float | None, alpha: float = 0.05,

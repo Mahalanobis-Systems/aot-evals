@@ -162,8 +162,11 @@ threshold, superiority or non-inferiority test, the gates combined as `combine` 
 on the other eval's runs of the same change, constraints, and one look per change under
 `looks: fixed`), and `report --candidate` and `compare` add the paired `comparison`, whose verdict
 reads the design-weighted sign-flip test per cluster. A comparison refuses runs whose estimand,
-design or measurement hash differs from the spec's, and a decision-rule change unless `log --kind
-decision` recorded it before the first run decided on. The other commands refuse such a folder
+design or measurement hash differs from the spec's, and a decision-rule change unless it was on
+record before the first run decided on: committed in eval.yaml (an ancestor of the runs' commits,
+or dated earlier when the evals have a repository of their own), or journaled with `log --kind
+decision`. A threshold rule on a rate tests its exact (Clopper–Pearson) bound at Kish's effective
+size, so 0 failures in 32 cases do not clear a 5% bar and 0 in 59 do. The other commands refuse such a folder
 until the 2.0 refactor reaches them; a 1.x suite is read as before.
 
 ```

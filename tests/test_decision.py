@@ -143,6 +143,27 @@ def test_bound_test_and_cases_for_spread():
     assert stats.cases_for_spread(100, 0.0, 0.04) is None and stats.cases_for_spread(100, 0.02, -1) is None
 
 
+def test_the_rate_bound_is_clopper_pearson_at_the_effective_size():
+    """Equal weights: the exact binomial test (`threshold_test`), where the normal bound passed 0 of
+    32, 3 of 150 and 5 of 200 against a 5% bar."""
+    for k, n in ((0, 32), (0, 59), (3, 150), (5, 200), (1, 100)):
+        r, e = stats.rate_bound_test(k / n, n, 0.05, "below"), stats.threshold_test(k, n, 0.05)
+        assert r["p"] == pytest.approx(e["p"]) and r["bound"] == pytest.approx(e["bound"], abs=1e-9)
+        assert r["passed"] == e["passed"] == ((k, n) in ((0, 59), (1, 100)))
+    # the normal bound at θ̂'s floored se (stratified_hajek) passed 0 of 32
+    floored = stats.stratified_hajek({"u": {"weight": 1, "values": [0.0] * 32, "inclusion_probs": [1.0] * 32}})
+    assert stats.bound_test(0.0, floored["se"], 0.05, "below")["passed"] and floored["n_effective"] == 32
+    # weights cost cases: Kish's n_eff counts, and the bar is then out of reach of 59
+    assert stats.kish_n([1.0] * 59) == pytest.approx(59)
+    assert stats.kish_n([2.0] * 30 + [1.0] * 29) < 59
+    assert stats.cases_for_rate_bound(0.0, 0.05, "below") == 59
+    # n_eff is continuous: 117 cases at design effect 2 are worth 58.5, and 0.95^58.5 < 0.05
+    assert stats.cases_for_rate_bound(0.0, 0.05, "below", design_effect=2.0) == 117
+    assert stats.cases_for_rate_bound(0.06, 0.05, "below") is None
+    up = stats.rate_bound_test(0.95, 40, 0.80, "above")
+    assert up["passed"] and up["interval"][0] > 0.80 and not up["shown_wrong_side"]
+
+
 # ---- paired rules --------------------------------------------------------------------------------
 
 def test_a_paired_rule_without_a_candidate_is_unknown(store):
@@ -197,6 +218,10 @@ def test_the_refund_gate_alone_blocks(store):
     assert _results(d) == {"headline": "pass", "use_case:refund": "insufficient"}
     assert d["result"] == "insufficient" and d["gates"][0]["cases_needed"] > d["gates"][0]["n_cases"]
     assert d["gates"][0]["estimate"] == pytest.approx(-lost)
+    # the point estimate is already past the margin: the reason says so, not just "p > α"
+    reason = d["gates"][0]["reason"]
+    assert reason.startswith(f"the refund pass rate dropped {100 * lost:.3g} points, past the margin of 5")
+    assert "too few cases to show it at α 0.05" in reason
     assert d["headline"]["estimate"] == pytest.approx(-lost / 4.3)
 
 
@@ -251,11 +276,13 @@ def test_a_budget_breach_with_passing_gates_is_a_trade(store):
 # ---- threshold on the reported runs ----------------------------------------------------------------
 
 def test_threshold_on_the_reported_runs(store):
-    _setup(store, "refund-bug", rule={"test": "threshold", "bar": 0.80, "margin": None, "use_case_gates": []})
+    # θ̂ 0.93 on cost weights: Kish's n_eff is 27.7 of 32 cases, and the exact bound 0.79
+    _setup(store, "refund-bug", rule={"test": "threshold", "bar": 0.75, "margin": None, "use_case_gates": []})
     d = _report(store)["decision"]
     assert _results(d) == {"headline": "pass"} and d["result"] == "pass"
     head = d["headline"]
-    assert head["side"] == "above" and head["bound"] > 0.80 and head["detectable_effect"] > 0
+    assert head["side"] == "above" and head["bound"] > 0.75 and head["detectable_effect"] > 0
+    assert head["n_effective"] < head["n_cases"] and "Clopper-Pearson" in head["method"]
     data = _spec(store)
     data["decision_rule"]["bar"] = 0.85
     _write_spec(store, data)
@@ -328,6 +355,70 @@ def test_a_decision_rule_change_needs_a_journal_entry_first(store):
     assert r["comparison"]["refused"] is None and r["decision"]["result"] == "pass"
 
 
+def _git_at(repo, when: str, *args: str) -> None:
+    import subprocess
+
+    env = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com", "GIT_COMMITTER_NAME": "t",
+           "GIT_COMMITTER_EMAIL": "t@example.com", "GIT_AUTHOR_DATE": when, "GIT_COMMITTER_DATE": when,
+           "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"}
+    subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, env=env)
+
+
+def _margin(s: Store, m: float) -> None:
+    data = _spec(s)
+    data["decision_rule"]["margin"] = m
+    _write_spec(s, data)
+
+
+def test_a_committed_rule_change_counts_when_it_precedes_the_candidate(store):
+    """Evals in the agent's repository: a commit of eval.yaml is the record when it is an ancestor
+    of the candidate's commit. No journal entry is made."""
+    _setup(store, "refund-bug")
+    c1 = _candidate(store, "refund-bug")
+    _margin(store, 0.03)
+    store.commit("margin to 3 points")
+    # committed after c1 ran: not an ancestor of its commit
+    r = _report(store, c1)
+    assert r["comparison"]["refused"] and "committed in eval.yaml" in r["comparison"]["refused"]
+    c2 = _candidate(store, "refund-bug", variable="prompt=v3")
+    r = _report(store, c2)
+    assert r["comparison"]["refused"] is None and r["decision"]["result"] == "pass"
+    assert not (store.agent / "journal" / "activity.jsonl").exists() or '"decision"' not in (
+        store.agent / "journal" / "activity.jsonl").read_text()
+    # an uncommitted edit is no record: the committed rule is the one that counts
+    _margin(store, 0.04)
+    assert _report(store, c2)["comparison"]["refused"]
+
+
+def test_a_committed_rule_change_outside_the_agents_repository_counts_by_date(store, tmp_path):
+    """Evals in a repository of their own: the agent's commits can't order eval.yaml's, so the
+    commit counts when it is dated no later than the first decided run."""
+    other = tmp_path / "agent-repo"
+    other.mkdir()
+    (other / "store.py").write_text(AGENT)
+    git(other, "init", "-q")
+    git(other, "add", "-A")
+    git(other, "commit", "-q", "-m", "agent")
+    a = yaml.safe_load((store.agent / "agent.yaml").read_text())
+    a["invoke"].update(command=[sys.executable, str(other / "store.py")], cwd=str(other))
+    (store.agent / "agent.yaml").write_text(yaml.safe_dump(a))
+    _setup(store, "refund-bug")
+    assert store.cli("run", "--purpose", "candidate", "--variable", "prompt=v2") == 0
+    c1 = store.ev().runs("candidate")[-1]["run_id"]
+    assert store.ev().runs("candidate")[-1]["agent_commit"] != store.ev().runs("candidate")[-1]["evals_commit"]
+    _margin(store, 0.03)
+    git(store.root, "add", "-A")
+    _git_at(store.root, "2099-01-01T00:00:00Z", "commit", "-q", "-m", "margin, dated after c1")
+    assert "committed in eval.yaml" in _report(store, c1)["comparison"]["refused"]
+    _margin(store, 0.04)
+    git(store.root, "add", "-A")
+    _git_at(store.root, "2026-01-01T00:00:00Z", "commit", "-q", "-m", "margin, dated before c2")
+    assert store.cli("run", "--purpose", "candidate", "--variable", "prompt=v3") == 0
+    c2 = store.ev().runs("candidate")[-1]["run_id"]
+    r = _report(store, c2)
+    assert r["comparison"]["refused"] is None and r["decision"]["result"] == "pass"
+
+
 def test_comparison_refuses_another_measurement(store):
     _setup(store, "refund-bug")
     (store.eval / "checks" / "code" / "no-side-effects.py").write_text(
@@ -356,7 +447,7 @@ print(json.dumps({"answer": "ok", "usage": {"cost": 0.001}, "model_ids": {"main"
 REFUND_FRAME = {"full-refund": 16, "partial-refund": 8, "gift-card": 8}
 
 
-def _refunds(s: Store, tmp_path, *, judge: bool) -> None:
+def _refunds(s: Store, tmp_path, *, judge: bool, frame: dict | None = None) -> None:
     """The store's refunds eval (examples/store), on a toy subagent. With `judge`, breaks-policy is
     graded by the policy judge, calibrated on 20 failure and 100 pass labels at catch 0.95 and
     clean 0.99: the floor refuses it (v2-design §9: it needs about 100 and 500). Without, the
@@ -385,15 +476,20 @@ def _refunds(s: Store, tmp_path, *, judge: bool) -> None:
                                                 if fm["id"] != "breaks-policy"]
         data["measurement"]["correction"] = "none"
         data["decision_rule"]["bar"] = 0.30
+    if frame is not None:  # every case drawn, weights in proportion: equal design weights
+        data["estimand"]["weights"] = {uc: n / sum(frame.values()) for uc, n in frame.items()}
+        data["design"].pop("oversample", None)
+        data["decision_rule"]["bar"] = 0.05
+    frame = frame or REFUND_FRAME
     _write_spec(s, data, "refunds")
     rows = [{"id": f"tr_{uc}_{i:02d}", "use_case": uc, "order_template": f"{uc}-t{i}",
              "trigger": {"type": "handoff", "text": f"refund {uc} {i}"},
              "expected_end_state": {"world": None, "output": "ok"}}
-            for uc, n in REFUND_FRAME.items() for i in range(n)]
+            for uc, n in frame.items() for i in range(n)]
     (tmp_path / "handoffs.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
     assert s.cli("import", str(tmp_path / "handoffs.jsonl"), "--id", "refund-handoffs-2026-10", "--source",
                  "fixture", "--query", "all", "--window", "2026-10-01..2026-10-31", eval_id="refunds") == 0
-    assert s.cli("draw", *[a for uc, n in REFUND_FRAME.items() for a in ("--n", f"{uc}={n}")],
+    assert s.cli("draw", *[a for uc, n in frame.items() for a in ("--n", f"{uc}={n}")],
                  eval_id="refunds") == 0
     assert s.cli("screen", "--read-by", "tester", "--all", eval_id="refunds") == 0
     if judge:
@@ -439,3 +535,21 @@ def test_also_requires_reads_the_end_to_end_eval_for_the_same_change(store, tmp_
     d = _report(store, rc, eval_id="refunds")["decision"]
     assert _results(d) == {"headline": "pass", "also_requires:end-to-end": "pass"} and d["result"] == "pass"
     assert d["also_requires"][0]["gate"]["test"] == "non_inferiority"
+
+
+@pytest.mark.parametrize(("frame", "result"), [
+    ({"full-refund": 16, "partial-refund": 8, "gift-card": 8}, "insufficient"),
+    ({"full-refund": 30, "partial-refund": 15, "gift-card": 14}, "pass"),
+])
+def test_zero_failures_against_a_5_percent_bar_needs_59_cases(store, tmp_path, frame, result):
+    """The zero-failure rule (statistics §4.1): no wrong amount in 32 cases leaves the bound at
+    8.9%, above a 5% bar; in 59 it is 4.95%. The normal bound passed both."""
+    _refunds(store, tmp_path, judge=False, frame=frame)
+    d = _report(store, eval_id="refunds")["decision"]
+    head = d["headline"]
+    n = sum(frame.values())
+    assert head["estimate"] == 0 and head["n_effective"] == pytest.approx(n)
+    assert head["result"] == result and "Clopper-Pearson" in head["method"]
+    assert head["bound"] == pytest.approx(1 - 0.05 ** (1 / n))
+    if result == "insufficient":
+        assert head["cases_needed"] == 59 and not head["reason"].startswith("θ̂")

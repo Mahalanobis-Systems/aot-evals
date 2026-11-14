@@ -35,6 +35,16 @@ def run_id_stamp() -> str:
     return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
+def load_yaml_text(text: str, where: str) -> Any:
+    """YAML from a string (a file as committed, read with git show), with load_yaml's loader."""
+    if yaml is None:
+        raise ContractError("PyYAML is not available; run aot-evals through its bin/ wrapper")
+    try:
+        return yaml.load(text, Loader=_Loader)  # noqa: S506 - a SafeLoader
+    except yaml.YAMLError as e:
+        raise ContractError(f"{where}: invalid YAML: {e}") from e
+
+
 def load_yaml(path: Path) -> Any:
     if yaml is None:
         raise ContractError("PyYAML is not available; run aot-evals through its bin/ wrapper")

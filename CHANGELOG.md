@@ -27,6 +27,18 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
   (which now records the eval's `spec_sha`) journaled it before the first run decided on. New in
   `stats`: `superiority_test`, `bound_test`, `cases_for_spread`, `weighted_mean_delta`, and
   `case_weights` on the sign-flip tests.
+- **A threshold rule on a rate tests the exact bound.** The normal bound on θ̂ passed a 5%
+  failure-rate bar at 0 failures in 32 cases, and at 3 of 150 and 5 of 200, which the exact binomial
+  test fails. It is now the one-sided Clopper–Pearson bound at Kish's effective size over the design
+  weights (Korn & Graubard 1998), so 59 clean cases are needed at equal weights, and more at
+  unequal ones. A corrected estimate keeps the normal bound. `estimate` and each gate gain
+  `n_effective`; new in `stats`: `rate_bound_test`, `cases_for_rate_bound`, `kish_n`.
+- **A committed decision-rule change counts as on record.** Besides a `log --kind decision` entry,
+  a commit of eval.yaml holding the current rule lets a comparison stand when it is an ancestor of
+  the decided runs' agent or evals commit, or, when the evals live outside the agent's repository,
+  when it is dated no later than the first decided run.
+- **An insufficient gate says when its estimate is already past the margin**: "the refund pass rate
+  dropped 33 points, past the margin of 5; too few cases to show it at α 0.05", before the p-value.
 - **2.0 measurement** (stage 5, docs/v2-design.md §4–§6). Grader error is the **catch rate** and the
   **clean pass rate** everywhere in 2.0: calibrations add `catch`, `clean`, their intervals and lower
   bounds, `labels_per_kind` and J (beside 1.x's `tpr`/`tnr`), and `calibrate` and `label status` speak
