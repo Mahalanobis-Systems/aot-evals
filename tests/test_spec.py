@@ -389,7 +389,7 @@ def test_validate_and_status(store, capsys):
 def test_unready_commands_refuse_2_0_evals(store):
     evals = str(store.root.parents[1])
     with pytest.raises(SystemExit, match="does not read 2.0 evals"):
-        cli.main(["--evals", evals, "--agent", "store", "compare", "--candidate", "x"])
+        cli.main(["--evals", evals, "--agent", "store", "redundancy"])
 
 
 def test_init_eval(tmp_path, monkeypatch, capsys):

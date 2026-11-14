@@ -684,6 +684,20 @@ failure mode**: a use case at 70% is usually several failure modes at a few perc
 flags a good run: a code check, or a person. A judge with a clean pass rate below 1 flags good runs,
 so a clean run never comes, and the threshold test of §3.3 applies instead.
 
+**Threshold, on weighted cases: the exact bound.** θ̂ is a weighted mean, so the count above is
+an effective one. A threshold rule on a rate tests the one-sided Clopper–Pearson bound (Clopper &
+Pearson 1934) at Kish's effective size n_eff = (Σw)²/Σw² over the cases' design weights, with the
+count set to θ̂·n_eff: Korn & Graubard's (1998) interval for a proportion from survey data
+(`stats.rate_bound_test`). With equal weights it is the exact binomial test, so 0 failures in 32
+cases do not clear a 5% bar (the bound is 8.9%) and 0 in 59 do. A normal bound on θ̂, even with
+the variance floor of §2.3, passes 0 of 32, and 3 of 150 and 5 of 200, which the exact test fails:
+near 0 the normal interval is too short on the side that matters (Bowyer et al. 2025). Unequal
+weights lower n_eff below the number of cases, and clusters cap it at their count, as in §2.4.
+Korn & Graubard take the effective size from the estimated design variance, which is 0 at 0
+failures, where the bound matters most; Kish's weight-based size is defined there. A
+corrected estimate (Rogan–Gladen or PPI, §3.3) is not a count and its standard error carries the
+judge's calibration, so it keeps the normal bound.
+
 **Non-inferiority on a solved use case: a regression guard.** Near 100%, with noise ruled out, one
 new consistent failure is signal, so a guard is sized by detection: the smallest n with
 1 − (1 − δ)ⁿ ≥ 95% for a tolerated drop δ.
@@ -888,6 +902,7 @@ articles the check used the abstract; for books, standard bibliographic records.
 
 **Sampling and estimation.**
 - Bowyer, S., Aitchison, L. & Ivanova, D. R. (2025). Position: Don't use the CLT in LLM evals with fewer than a few hundred datapoints. *ICML 2025*. arXiv:2503.01747
+- Clopper, C. J. & Pearson, E. S. (1934). The use of confidence or fiducial limits illustrated in the case of the binomial. *Biometrika* 26(4):404–413. doi:10.1093/biomet/26.4.404
 - Cochran, W. G. (1977). *Sampling Techniques* (3rd ed.). New York: Wiley.
 - Frankl, P. G., Hamlet, R. G., Littlewood, B. & Strigini, L. (1998). Evaluating testing methods by delivered reliability. *IEEE Transactions on Software Engineering* 24(8):586–601. doi:10.1109/32.707695
 - Hájek, J. (1971). Comment on "An essay on the logical foundations of survey sampling, part one" by D. Basu. In V. P. Godambe & D. A. Sprott (Eds.), *Foundations of Statistical Inference* (p. 236). Toronto: Holt, Rinehart and Winston.
@@ -895,6 +910,7 @@ articles the check used the abstract; for books, standard bibliographic records.
 - Horvitz, D. G. & Thompson, D. J. (1952). A generalization of sampling without replacement from a finite universe. *JASA* 47(260):663–685. doi:10.1080/01621459.1952.10483446
 - Jones, E., Tong, M., Mu, J. et al. (2025). Forecasting rare language model behaviors. arXiv:2502.16797
 - Kish, L. (1965). *Survey Sampling.* New York: Wiley.
+- Korn, E. L. & Graubard, B. I. (1998). Confidence intervals for proportions with small expected number of positive counts estimated from survey data. *Survey Methodology* 24(2):193–201.
 - Kossen, J., Farquhar, S., Gal, Y. & Rainforth, T. (2021). Active testing: Sample-efficient model evaluation. *ICML 2021*. arXiv:2103.05331
 - Madaan, L., Singh, A. K., Schaeffer, R. et al. (2024). Quantifying variance in evaluation benchmarks. arXiv:2406.10229
 - Miller, E. (2024). Adding error bars to evals: A statistical approach to language model evaluations. arXiv:2411.00640

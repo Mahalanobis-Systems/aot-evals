@@ -334,9 +334,24 @@ any report that sets a candidate against a baseline:
 - **refuses** when the `estimand`, `design` or `measurement` hash differs. That is a revision
   ([estimators §9](estimators.md#9-changing-an-eval)): the two scores are different quantities. The
   message names the part that changed and says to re-run the baseline under the current spec.
-- **refuses** when only the `decision_rule` hash differs, unless the change has a journal entry
-  dated before the first candidate run. Moving the bar or the margin after seeing results is
-  problem 12 (rule 21).
+- **refuses** when only the `decision_rule` hash differs, unless the change was on record before
+  the first run decided on (the candidate's, or the reported runs' for a threshold rule with no
+  candidate). Moving the bar or the margin after seeing results is problem 12 (rule 21). Either
+  record counts:
+  - **a commit of `eval.yaml`.** The record is the oldest commit in the newest unbroken stretch of
+    eval.yaml's history whose `decision_rule` hash is the current one; an uncommitted edit is no
+    record. When the evals live in the agent's repository, it counts when it is an ancestor of
+    each decided run's agent commit or of the evals commit the run recorded (both are stamped
+    when the run starts; the agent commit ignores evals/, so a rule committed after the agent
+    change is an ancestor only of the evals commit). When the evals live in a repository of their
+    own, the agent's commits can't order it, so it counts when its commit date is no later than
+    the first decided run's start.
+  - **a journal entry**, `aot-evals --eval <id> log --kind decision "why"`, which records the eval
+    and its current `spec_sha`; it counts when its `decision_rule` hash is the current one and its
+    time is no later than the first run decided on. The journal is not committed, so the entry
+    lives where the decision was made, which is why a commit counts too.
+- **refuses**, as 1.x G7, when the two sides are not one build apart: they may differ only on the
+  manifest fields the candidate's declared variable covers.
 - **compares** when nothing but the cases or the calibrations changed. Adding cases drawn from the
   same frame and seed, or bug-finding cases, is an expansion. Recalibrating a judge refines its
   measured error rates without changing what it measures. A new judge, or a changed judge prompt,
@@ -352,12 +367,12 @@ values are null with a reason, never 0, and nothing is pre-rounded.
 | `schema`, `generated`, `runs`, `refused` | as 1.x | |
 | `eval` | `{id, version, unit, quantity, decision}` | Estimand |
 | `spec` | `{complete, missing[{field, why, blocks[]}], invalid[…], notes[…], defaults[{field, value}]}` (§2) | all |
-| `estimate` | the headline: `{theta, ci, ci_method, se, quantity, weights{use_case: w}, weights_source, estimator: "hajek", corrected, n_cases, n_clusters, k, null_reason}` | Estimand, design |
+| `estimate` | the headline: `{theta, ci, ci_method, se, quantity, weights{use_case: w}, weights_source, estimator: "hajek", corrected, n_cases, n_clusters, n_effective, k, null_reason}` | Estimand, design |
 | `use_cases` | one row per use case and pool: 1.x category rows, with `share`, `cost`, `weight`, `inclusion_prob_range`, and `estimate` (the use case's Hájek μ̂ of the quantity, quality pool only) | Estimand, design |
 | `design` | `{quality{n, drawn, frame, seed, oversample, strata, skips[], refused[]}, bug_finding{n, coverage}, clusters{n, n_bug_finding, cluster_key, design_effect, icc, largest, mean_size, shared_with_bug_finding}, cases_without_pool[]}` | Design |
 | `measurement` | `{failure_modes[{id, check, type, use_cases, observed_rate, catch, clean, j, labels{fail, pass}, inflation, inflation_at_lower_bounds, floor{status, reason, rate, max_inflation}, corrected_rate, feeds_estimate}], eval_vs_people{catch, clean, all, labels{fail, pass}, labels_needed, floor, failure_rate, stale}, person_anchored{ppi}, variance{icc, between, within, k_recommended}, people{pairs[{ac1, kappa, pass_agreement, fail_agreement}]}, trials, max_inflation, correction, gates[{id, detail}]}` | Measurement |
-| `decision` | `{test, quantity, bar, margin, alpha, power, looks, result: "pass" \| "fail" \| "insufficient", interval, detectable_effect, cases_needed, gates[{use_case, result, p, p_adjusted}], also_requires[{eval, result}], constraints{status, breaches[]}}` | Decision rule |
-| `comparison` | as 1.x, with the verdict read from the paired sign-flip test and `variance_band` removed | Decision rule |
+| `decision` | `{test, quantity, bar, margin, alpha, power, looks, combine, multiplicity, subject, result: "pass" \| "fail" \| "insufficient" \| "unknown" \| "trade", reasons[], null_reason, interval, detectable_effect, cases_needed, headline{…}, gates[{gate, use_case, result, p, p_adjusted, …}], also_requires[{eval, result, reason, runs, gate}], constraints{status, breaches[]}, look{n, prior[], recorded}, refused}` | Decision rule |
+| `comparison` | as 1.x, with Δθ̂ design-weighted, the verdict read from the paired sign-flip test per cluster, `per_use_case` adjusted p-values, `bug_finding` flips apart, and `variance_band` removed; null without `--candidate` | Decision rule |
 | `coverage`, `redundancy`, `cases`, `conditions`, `next_actions` | as 1.x (`conditions.simulator` removed) | |
 | `checks` | as 1.x, with `catch` and `clean` in place of `tnr` and `tpr` | Measurement |
 
@@ -392,6 +407,54 @@ one: `judge_floor` (refused, or no rate to read it at yet), `judge_calibration` 
 calibration), `people_unmeasured`, `people_stale`, and agreement.json's own: `people_labels` (a kind
 short of its count), `people_disputes`, `people_floor`, `people_triage`.
 
+**How the decision is computed** (estimators §6, statistics §4; `decision.py`). The decision is
+about the candidate's runs when `report --candidate` or `compare` gives them, else about the
+reported runs, so a paired rule with no candidate is `unknown`.
+
+- **Each gate** (the headline, each `use_case_gates` entry) is one one-sided test at α. A
+  **threshold** test reads θ̂ (or the use case's μ̂) as the report computed it, corrected where the
+  spec corrects. A rate as graded is tested by its one-sided Clopper–Pearson bound at Kish's
+  effective size over the design weights, with the count θ̂·n_eff (Korn & Graubard 1998;
+  `stats.rate_bound_test`; statistics §4.1), so with equal weights it is the exact binomial test
+  and 0 failures in 32 cases do not clear a 5% bar. A corrected estimate keeps a one-sided normal
+  bound (`stats.bound_test`), since it is not a count and its se carries the calibration. When a
+  counted judge feeds an uncorrected estimate, the bar is read on the grader's scale,
+  (1 − clean) + J·bar, at the judge's point rates (for a pass rate, the eval's against people). A
+  **superiority** test (H0 Δ ≤ 0) and a **non-inferiority** test (H0 Δ ≤ −margin) are one-sided
+  sign-flip tests on the paired deltas, the candidate's ŷ minus the baseline's per counted
+  quality case, negated for a failure rate, each case carrying its design weight in θ̂ so the mean
+  delta is Δθ̂, with signs flipped per cluster (`stats.superiority_test`,
+  `stats.non_inferiority_test`). A grader with J < 1 shrinks a true change to J·Δ, so a
+  non-inferiority margin is tested on the grader's scale at J's one-sided lower bound; with J
+  unknown (a pass rate graded by judges, the eval not yet held to people) the gate is unknown.
+- **A gate's result** is `pass` when its test rejects at α; `fail` when the two-sided 1 − 2α
+  interval sits at or beyond the null on the wrong side (shown worse than the margin, shown no
+  better, shown on the wrong side of the bar); `insufficient` otherwise, with `cases_needed`, the
+  cases like these that power 1 − β at the measured spread would take (`stats.cases_for_spread`;
+  for an exactly tested rate, the larger of the cases its bound needs to clear at the measured
+  rate and `stats.threshold_n`, both at the measured n/n_eff). When the point estimate is already
+  past the null (a drop past the margin, no gain, θ̂ on the wrong side of the bar), the reason
+  says so first: "the refund pass rate dropped 33 points, past the margin of 5; too few cases to
+  show it at α 0.05";
+  and `unknown` with its reason when there is nothing to test (rule 13 included: a judge that feeds
+  the quantity and does not count leaves every gate unknown, never a pass). `detectable_effect` is
+  (z₁₋α + z_power)·se on the true scale.
+- **Gates combine** by `combine`: `all` is the worst of fail, unknown, insufficient, pass, with no
+  correction (intersection–union); `any` adjusts the p-values by `multiplicity` and passes when one
+  gate passes at its adjusted p. `also_requires` must pass either way: each entry is tested on the
+  other eval's candidate runs that declare the same variable at the same agent commit, against that
+  eval's baseline, and is unknown (naming the command) until they exist.
+- **Constraints** are read per use case on the decided runs, each breach marked `new` when the
+  baseline did not have it. Gates that pass with a breach are a `trade`.
+- **Looks.** Under `looks: fixed` `report` and `compare` append each decision with a result to
+  `<eval>/report/looks.jsonl`, keyed by the decision rule's hash and the change (variable and commit).
+  Deciding the same change again on other runs is a second look and leaves the result unknown.
+  `sequential` and `optimizer_holdout` need intervals not built yet, so their decisions are unknown.
+- **The comparison's verdict** is the two-sided sign-flip test at 2α (so `better` is exactly the
+  superiority test passing at α), with its 1 − 2α interval; a new budget breach makes `better` a
+  `trade` and `indistinguishable` a `worse`, as in 1.x. Per-use-case rows are diagnostics, with
+  p-values adjusted by `multiplicity`, or Benjamini–Hochberg when it is `none`.
+
 **Removed from v1:** `validity` (compounded validity), `online` (always null), `regime`,
 `sets` (now `estimate`, `design` and `use_cases`), `categories` (now `use_cases`), the `simple`
 flag, `conditions.simulator`, and gates G9 and C16/C17. `gates` becomes `spec.missing` plus the
@@ -420,7 +483,9 @@ Unchanged in purpose: `start`, `doctor`, `init`, `status`, `validate`, `import`,
 | `validate`, `status` | on an agent folder with 2.0 evals, read the specs: each missing, invalid and (with `--warnings`) noted field, and the defaults filled |
 | `draw [--n UC=N] [--skip ID --reason R] [--prune] [--dry-run]` | new: seeded stratified draw of the quality set from the frame, with π (§3) |
 | `plan [--assumed-rate R] [--flip-rate D] [--total N] [--write]` | replaces `allocate`; targets from the decision rule (§2) |
-| `screen`, `run`, `report` | read a 2.0 eval: `run --use-case`, k from `measurement.trials` (`auto`: §5); `screen --judges` with the eval's calibrated judges; `report` writes the §6 keys so far (`--candidate` and `--html` not yet) |
+| `screen`, `run`, `report` | read a 2.0 eval: `run --use-case`, k from `measurement.trials` (`auto`: §5); `screen --judges` with the eval's calibrated judges; `report` writes the §6 keys, with `comparison` and the decision on the candidate under `--candidate` (`--html` not yet) |
+| `compare` | reads a 2.0 eval: the paired comparison and the decision on the candidate (§5, §6), saved under `report/comparisons/` |
+| `log --kind decision` | on a 2.0 eval, records the eval and its `spec_sha`, so a decision-rule change journaled before the candidate runs lets the comparison stand (§5) |
 | `label`, `calibrate`, `judge`, `agreement` | read a 2.0 eval: per-judge labels and calibration in catch and clean pass rates (§4); whole-run labels, rulings and triage in `<eval>/labels/` (§6) |
 | `migrate --to 2` | new: 1.x suite to a 2.0 end-to-end eval ([§8](#8-migration-from-1x)) |
 | `build`, `components`, `discovery-page` | rewritten around the four parts (stage 7) |
