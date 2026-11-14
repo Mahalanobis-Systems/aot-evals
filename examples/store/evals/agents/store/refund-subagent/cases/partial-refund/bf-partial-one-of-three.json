@@ -1,0 +1,140 @@
+{
+  "id": "bf-partial-one-of-three",
+  "use_case": "partial-refund",
+  "pool": "bug_finding",
+  "order_template": "bf-partial",
+  "failure_modes": [
+    "breaks-policy",
+    "wrong-amount",
+    "unrequested-change",
+    "wrong-reply"
+  ],
+  "coverage_entries": [
+    "partial-refund"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-partial",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "handoff",
+    "text": "Refund request: Refund just the mixing bowls on A8009."
+  },
+  "inputs": {
+    "order_id": "A8009",
+    "items": [
+      "SKU-105"
+    ],
+    "to": "original",
+    "today": "2026-10-22"
+  },
+  "start_state": {
+    "orders": {
+      "A8009": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-101",
+            "name": "blender",
+            "price": 49.99
+          },
+          {
+            "sku": "SKU-105",
+            "name": "mixing bowls",
+            "price": 18.75
+          },
+          {
+            "sku": "SKU-107",
+            "name": "cutting board",
+            "price": 22.4
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "98 Cedar Court",
+        "eta": null,
+        "delivered": "2026-10-19",
+        "customer": "c-0005"
+      },
+      "A8010": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-106",
+            "name": "chef's knife",
+            "price": 42.0
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "87 Harbor Road",
+        "eta": null,
+        "delivered": "2026-08-16",
+        "customer": "c-0005"
+      }
+    },
+    "refunds": [],
+    "returns": [],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A8009": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-101",
+              "name": "blender",
+              "price": 49.99
+            },
+            {
+              "sku": "SKU-105",
+              "name": "mixing bowls",
+              "price": 18.75
+            },
+            {
+              "sku": "SKU-107",
+              "name": "cutting board",
+              "price": 22.4
+            }
+          ],
+          "payment": "card",
+          "refunded": 18.75,
+          "address": "98 Cedar Court",
+          "eta": null,
+          "delivered": "2026-10-19",
+          "customer": "c-0005"
+        },
+        "A8010": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-106",
+              "name": "chef's knife",
+              "price": 42.0
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "87 Harbor Road",
+          "eta": null,
+          "delivered": "2026-08-16",
+          "customer": "c-0005"
+        }
+      },
+      "refunds": [
+        {
+          "order": "A8009",
+          "amount": 18.75,
+          "to": "original"
+        }
+      ],
+      "returns": [],
+      "log": []
+    },
+    "output": "Refunded $18.75 for order A8009 to your original payment."
+  }
+}

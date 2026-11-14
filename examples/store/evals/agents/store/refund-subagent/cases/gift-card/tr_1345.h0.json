@@ -1,0 +1,127 @@
+{
+  "id": "tr_1345.h0",
+  "use_case": "gift-card",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 5,
+    "inclusion_prob": 0.6666666666666666
+  },
+  "order_template": "ot-10",
+  "cluster": "ot-10",
+  "trigger": {
+    "text": "Refund request: Please refund order A1691 to a gift card.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": null,
+    "order_id": "A1691",
+    "to": "gift_card",
+    "today": "2026-10-30"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1691": {
+        "address": "62 Oak Avenue",
+        "customer": "c-0346",
+        "delivered": "2026-10-28",
+        "eta": null,
+        "items": [
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          }
+        ],
+        "payment": "gift_card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1692": {
+        "address": "88 Bay Street",
+        "customer": "c-0346",
+        "delivered": "2026-08-10",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $42.00 for order A1691 to your gift card.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1691": {
+          "address": "62 Oak Avenue",
+          "customer": "c-0346",
+          "delivered": "2026-10-28",
+          "eta": null,
+          "items": [
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            }
+          ],
+          "payment": "gift_card",
+          "refunded": 42.0,
+          "status": "delivered"
+        },
+        "A1692": {
+          "address": "88 Bay Street",
+          "customer": "c-0346",
+          "delivered": "2026-08-10",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 42.0,
+          "order": "A1691",
+          "to": "gift_card"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1345.h0",
+    "synthetic": false,
+    "source_trace": "tr_1345"
+  }
+}

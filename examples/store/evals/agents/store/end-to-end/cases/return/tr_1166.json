@@ -1,0 +1,143 @@
+{
+  "id": "tr_1166",
+  "use_case": "return",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 4,
+    "inclusion_prob": 0.13333333333333333
+  },
+  "template": "return-t1",
+  "cluster": "return-t1",
+  "trigger": {
+    "text": "I want to return order A1333.",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0167",
+    "today": "2026-10-09"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1333": {
+        "address": "66 Mill Lane",
+        "customer": "c-0167",
+        "delivered": "2026-09-09",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          },
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1334": {
+        "address": "22 Harbor Road",
+        "customer": "c-0167",
+        "delivered": "2026-08-02",
+        "eta": null,
+        "items": [
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          },
+          {
+            "name": "mixing bowls",
+            "price": 18.75,
+            "sku": "SKU-105"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "I've started a return for order A1333. You'll get a label by email.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1333": {
+          "address": "66 Mill Lane",
+          "customer": "c-0167",
+          "delivered": "2026-09-09",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            },
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        },
+        "A1334": {
+          "address": "22 Harbor Road",
+          "customer": "c-0167",
+          "delivered": "2026-08-02",
+          "eta": null,
+          "items": [
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            },
+            {
+              "name": "mixing bowls",
+              "price": 18.75,
+              "sku": "SKU-105"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": [
+        {
+          "opened": "2026-10-09",
+          "order": "A1333"
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1166",
+    "synthetic": false
+  }
+}

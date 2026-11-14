@@ -1,0 +1,117 @@
+{
+  "id": "tr_1300.h0",
+  "use_case": "full-refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 19,
+    "inclusion_prob": 0.3305785123966942
+  },
+  "order_template": "ot-02",
+  "cluster": "ot-02",
+  "trigger": {
+    "text": "Refund request: I'd like a refund for order A1601.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": null,
+    "order_id": "A1601",
+    "to": "original",
+    "today": "2026-10-07"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1601": {
+        "address": "36 Oak Avenue",
+        "customer": "c-0301",
+        "delivered": "2026-09-21",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1602": {
+        "address": "6 Cedar Court",
+        "customer": "c-0301",
+        "delivered": "2026-08-09",
+        "eta": null,
+        "items": [
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $34.50 for order A1601 to your original payment.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1601": {
+          "address": "36 Oak Avenue",
+          "customer": "c-0301",
+          "delivered": "2026-09-21",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            }
+          ],
+          "payment": "card",
+          "refunded": 34.5,
+          "status": "delivered"
+        },
+        "A1602": {
+          "address": "6 Cedar Court",
+          "customer": "c-0301",
+          "delivered": "2026-08-09",
+          "eta": null,
+          "items": [
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 34.5,
+          "order": "A1601",
+          "to": "original"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1300.h0",
+    "synthetic": false,
+    "source_trace": "tr_1300"
+  }
+}

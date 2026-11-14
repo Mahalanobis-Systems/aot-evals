@@ -1,0 +1,157 @@
+{
+  "id": "tr_1239.h0",
+  "use_case": "full-refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 28,
+    "inclusion_prob": 0.3305785123966942
+  },
+  "order_template": "ot-06",
+  "cluster": "ot-06",
+  "trigger": {
+    "text": "Refund request: I'd like a refund for order A1479.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": null,
+    "order_id": "A1479",
+    "to": "original",
+    "today": "2026-10-22"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1479": {
+        "address": "19 Harbor Road",
+        "customer": "c-0240",
+        "delivered": "2026-10-01",
+        "eta": null,
+        "items": [
+          {
+            "name": "blender",
+            "price": 49.99,
+            "sku": "SKU-101"
+          },
+          {
+            "name": "mixing bowls",
+            "price": 18.75,
+            "sku": "SKU-105"
+          },
+          {
+            "name": "cutting board",
+            "price": 22.4,
+            "sku": "SKU-107"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1480": {
+        "address": "83 Elm Street",
+        "customer": "c-0240",
+        "delivered": "2026-08-10",
+        "eta": null,
+        "items": [
+          {
+            "name": "blender",
+            "price": 49.99,
+            "sku": "SKU-101"
+          },
+          {
+            "name": "mixing bowls",
+            "price": 18.75,
+            "sku": "SKU-105"
+          },
+          {
+            "name": "cutting board",
+            "price": 22.4,
+            "sku": "SKU-107"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $91.14 for order A1479 to your original payment.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1479": {
+          "address": "19 Harbor Road",
+          "customer": "c-0240",
+          "delivered": "2026-10-01",
+          "eta": null,
+          "items": [
+            {
+              "name": "blender",
+              "price": 49.99,
+              "sku": "SKU-101"
+            },
+            {
+              "name": "mixing bowls",
+              "price": 18.75,
+              "sku": "SKU-105"
+            },
+            {
+              "name": "cutting board",
+              "price": 22.4,
+              "sku": "SKU-107"
+            }
+          ],
+          "payment": "card",
+          "refunded": 91.14,
+          "status": "delivered"
+        },
+        "A1480": {
+          "address": "83 Elm Street",
+          "customer": "c-0240",
+          "delivered": "2026-08-10",
+          "eta": null,
+          "items": [
+            {
+              "name": "blender",
+              "price": 49.99,
+              "sku": "SKU-101"
+            },
+            {
+              "name": "mixing bowls",
+              "price": 18.75,
+              "sku": "SKU-105"
+            },
+            {
+              "name": "cutting board",
+              "price": 22.4,
+              "sku": "SKU-107"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 91.14,
+          "order": "A1479",
+          "to": "original"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1239.h0",
+    "synthetic": false,
+    "source_trace": "tr_1239"
+  }
+}

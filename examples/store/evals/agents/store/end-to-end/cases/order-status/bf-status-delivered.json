@@ -1,0 +1,120 @@
+{
+  "id": "bf-status-delivered",
+  "use_case": "order-status",
+  "pool": "bug_finding",
+  "template": "bf-status-delivered",
+  "failure_modes": [
+    "wrong-answer",
+    "wrong-end-state",
+    "unrequested-change",
+    "wrong-route"
+  ],
+  "coverage_entries": [
+    "order-status"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-status-delivered",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "message",
+    "text": "Has A7003 shipped yet?"
+  },
+  "inputs": {
+    "today": "2026-10-20",
+    "customer": "c-0002"
+  },
+  "start_state": {
+    "orders": {
+      "A7003": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-103",
+            "name": "toaster",
+            "price": 29.99
+          },
+          {
+            "sku": "SKU-105",
+            "name": "mixing bowls",
+            "price": 18.75
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "25 Cedar Court",
+        "eta": null,
+        "delivered": "2026-10-18",
+        "customer": "c-0002"
+      },
+      "A7004": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-108",
+            "name": "french press",
+            "price": 27.99
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "80 Oak Avenue",
+        "eta": null,
+        "delivered": "2026-08-01",
+        "customer": "c-0002"
+      }
+    },
+    "refunds": [],
+    "returns": [],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A7003": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-103",
+              "name": "toaster",
+              "price": 29.99
+            },
+            {
+              "sku": "SKU-105",
+              "name": "mixing bowls",
+              "price": 18.75
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "25 Cedar Court",
+          "eta": null,
+          "delivered": "2026-10-18",
+          "customer": "c-0002"
+        },
+        "A7004": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-108",
+              "name": "french press",
+              "price": 27.99
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "80 Oak Avenue",
+          "eta": null,
+          "delivered": "2026-08-01",
+          "customer": "c-0002"
+        }
+      },
+      "refunds": [],
+      "returns": [],
+      "log": []
+    },
+    "output": "Order A7003 was delivered on 2026-10-18."
+  }
+}

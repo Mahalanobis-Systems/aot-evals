@@ -513,10 +513,11 @@ def _command(spec: JudgeSpec, cfg: dict, judge_input: dict, base: dict) -> Judge
 
 
 def _repo_root(spec: JudgeSpec) -> Path:
-    """<suite>/checks/judge/<id>.md -> the repository root; command judges run from there."""
-    from .repo import Evals
+    """<eval>/checks/judge/<id>.md -> the repository root; command judges run from there."""
+    from .repo import EVAL_FILE, Evals
 
-    return Evals(spec.path.resolve().parents[2]).repo_root
+    owner = spec.path.resolve().parents[2]
+    return Evals(owner.parent if (owner / EVAL_FILE).exists() else owner).repo_root
 
 
 def credentials_missing(cfg: dict) -> str | None:

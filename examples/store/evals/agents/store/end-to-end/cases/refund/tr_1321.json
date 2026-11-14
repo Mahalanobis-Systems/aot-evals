@@ -1,0 +1,114 @@
+{
+  "id": "tr_1321",
+  "use_case": "refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 11,
+    "inclusion_prob": 0.075
+  },
+  "template": "refund-gift-card-t1",
+  "cluster": "refund-gift-card-t1",
+  "trigger": {
+    "text": "Please refund order A1643 to a gift card.",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0322",
+    "today": "2026-10-20"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1643": {
+        "address": "20 Oak Avenue",
+        "customer": "c-0322",
+        "delivered": "2026-09-06",
+        "eta": null,
+        "items": [
+          {
+            "name": "blender",
+            "price": 49.99,
+            "sku": "SKU-101"
+          }
+        ],
+        "payment": "gift_card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1644": {
+        "address": "67 Elm Street",
+        "customer": "c-0322",
+        "delivered": "2026-08-05",
+        "eta": null,
+        "items": [
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Order A1643 was delivered 44 days ago, past the 30-day refund window.",
+    "world": {
+      "log": [
+        {
+          "order": "A1643",
+          "to": "refund-subagent",
+          "tool": "handoff"
+        }
+      ],
+      "orders": {
+        "A1643": {
+          "address": "20 Oak Avenue",
+          "customer": "c-0322",
+          "delivered": "2026-09-06",
+          "eta": null,
+          "items": [
+            {
+              "name": "blender",
+              "price": 49.99,
+              "sku": "SKU-101"
+            }
+          ],
+          "payment": "gift_card",
+          "refunded": 0.0,
+          "status": "delivered"
+        },
+        "A1644": {
+          "address": "67 Elm Street",
+          "customer": "c-0322",
+          "delivered": "2026-08-05",
+          "eta": null,
+          "items": [
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1321",
+    "synthetic": false
+  }
+}

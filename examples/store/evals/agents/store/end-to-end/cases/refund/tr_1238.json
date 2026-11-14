@@ -1,0 +1,130 @@
+{
+  "id": "tr_1238",
+  "use_case": "refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 0,
+    "inclusion_prob": 0.075
+  },
+  "template": "refund-full-refund-t3",
+  "cluster": "refund-full-refund-t3",
+  "trigger": {
+    "text": "Can I get my money back for A1477?",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0239",
+    "today": "2026-10-12"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1477": {
+        "address": "82 Oak Avenue",
+        "customer": "c-0239",
+        "delivered": "2026-09-24",
+        "eta": null,
+        "items": [
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1478": {
+        "address": "81 Elm Street",
+        "customer": "c-0239",
+        "delivered": "2026-07-26",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $27.99 for order A1477 to your original payment.",
+    "world": {
+      "log": [
+        {
+          "order": "A1477",
+          "to": "refund-subagent",
+          "tool": "handoff"
+        }
+      ],
+      "orders": {
+        "A1477": {
+          "address": "82 Oak Avenue",
+          "customer": "c-0239",
+          "delivered": "2026-09-24",
+          "eta": null,
+          "items": [
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 27.99,
+          "status": "delivered"
+        },
+        "A1478": {
+          "address": "81 Elm Street",
+          "customer": "c-0239",
+          "delivered": "2026-07-26",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 27.99,
+          "order": "A1477",
+          "to": "original"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1238",
+    "synthetic": false
+  }
+}

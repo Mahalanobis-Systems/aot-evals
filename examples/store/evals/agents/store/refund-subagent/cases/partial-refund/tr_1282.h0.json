@@ -1,0 +1,141 @@
+{
+  "id": "tr_1282.h0",
+  "use_case": "partial-refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 10,
+    "inclusion_prob": 0.4444444444444444
+  },
+  "order_template": "ot-11",
+  "cluster": "ot-11",
+  "trigger": {
+    "text": "Refund request: I want a refund for the chef's knife I bought.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": null,
+    "order_id": null,
+    "to": "original",
+    "today": "2026-10-16"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1565": {
+        "address": "68 Bay Street",
+        "customer": "c-0283",
+        "delivered": "2026-09-30",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          },
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1566": {
+        "address": "49 Cedar Court",
+        "customer": "c-0283",
+        "delivered": "2026-07-29",
+        "eta": null,
+        "items": [
+          {
+            "name": "coffee grinder",
+            "price": 59.0,
+            "sku": "SKU-104"
+          },
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "I can refund that for you. What is your order number?",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1565": {
+          "address": "68 Bay Street",
+          "customer": "c-0283",
+          "delivered": "2026-09-30",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            },
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        },
+        "A1566": {
+          "address": "49 Cedar Court",
+          "customer": "c-0283",
+          "delivered": "2026-07-29",
+          "eta": null,
+          "items": [
+            {
+              "name": "coffee grinder",
+              "price": 59.0,
+              "sku": "SKU-104"
+            },
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1282.h0",
+    "synthetic": false,
+    "source_trace": "tr_1282"
+  }
+}

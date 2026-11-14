@@ -1,0 +1,129 @@
+{
+  "id": "tr_1356.h0",
+  "use_case": "partial-refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 4,
+    "inclusion_prob": 0.4444444444444444
+  },
+  "order_template": "ot-05",
+  "cluster": "ot-05",
+  "trigger": {
+    "text": "Refund request: Refund just the cutting board on A1713.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": [
+      "SKU-107"
+    ],
+    "order_id": "A1713",
+    "to": "original",
+    "today": "2026-10-30"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1713": {
+        "address": "22 Elm Street",
+        "customer": "c-0357",
+        "delivered": "2026-10-12",
+        "eta": null,
+        "items": [
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          },
+          {
+            "name": "cutting board",
+            "price": 22.4,
+            "sku": "SKU-107"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1714": {
+        "address": "56 Bay Street",
+        "customer": "c-0357",
+        "delivered": "2026-08-31",
+        "eta": null,
+        "items": [
+          {
+            "name": "blender",
+            "price": 49.99,
+            "sku": "SKU-101"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $22.40 for order A1713 to your original payment.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1713": {
+          "address": "22 Elm Street",
+          "customer": "c-0357",
+          "delivered": "2026-10-12",
+          "eta": null,
+          "items": [
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            },
+            {
+              "name": "cutting board",
+              "price": 22.4,
+              "sku": "SKU-107"
+            }
+          ],
+          "payment": "card",
+          "refunded": 22.4,
+          "status": "delivered"
+        },
+        "A1714": {
+          "address": "56 Bay Street",
+          "customer": "c-0357",
+          "delivered": "2026-08-31",
+          "eta": null,
+          "items": [
+            {
+              "name": "blender",
+              "price": 49.99,
+              "sku": "SKU-101"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 22.4,
+          "order": "A1713",
+          "to": "original"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1356.h0",
+    "synthetic": false,
+    "source_trace": "tr_1356"
+  }
+}

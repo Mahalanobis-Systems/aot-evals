@@ -1,0 +1,108 @@
+{
+  "id": "tr_1096",
+  "use_case": "order-status",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 0,
+    "inclusion_prob": 0.08571428571428572
+  },
+  "template": "order-status-t3",
+  "cluster": "order-status-t3",
+  "trigger": {
+    "text": "Any update on A1193?",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0097",
+    "today": "2026-10-09"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1193": {
+        "address": "28 Cedar Court",
+        "customer": "c-0097",
+        "delivered": null,
+        "eta": "2026-10-12",
+        "items": [
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "shipped"
+      },
+      "A1194": {
+        "address": "32 Harbor Road",
+        "customer": "c-0097",
+        "delivered": "2026-07-29",
+        "eta": null,
+        "items": [
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Order A1193 is shipped; it should arrive on 2026-10-12.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1193": {
+          "address": "28 Cedar Court",
+          "customer": "c-0097",
+          "delivered": null,
+          "eta": "2026-10-12",
+          "items": [
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "shipped"
+        },
+        "A1194": {
+          "address": "32 Harbor Road",
+          "customer": "c-0097",
+          "delivered": "2026-07-29",
+          "eta": null,
+          "items": [
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1096",
+    "synthetic": false
+  }
+}

@@ -1,9 +1,18 @@
-# The online store's support agent (docs/v2-design.md §9). Inventory only so far: the agent, its
-# fakes and its traces come with the example in stage 8.
+# The online store's support agent (docs/v2-design.md §9; docs/problems.md). A toy: the agent and
+# its refund subagent are small Python programs, the order system and payments are fakes in env/.
 id: store
 description: Answers order-status, return and address requests, and routes refunds to a refund subagent.
 surface: support chat
 triggers: [user message]
+instructions: [agent/store_prompt.md]
+tools:
+  - {name: orders.read, kind: read}
+  - {name: orders.change_address, kind: write}
+  - {name: orders.start_return, kind: write}
+  - {name: handoff to refund-subagent, kind: write}
+harness: {name: toy, version: "1"}
+models: {main: toy-orchestrator-1, refund-subagent: toy-refunds-1}
+models_evidence: model_ids field in every agent result
 
 # The parts of the system and their context boundaries (estimators §1, rule 3). Each says where it
 # is graded: `aot-evals components` and `validate` read this list.
@@ -13,16 +22,22 @@ components:
     context: own                   # starts from the handoff the orchestrator writes: a context boundary
     called_by: the orchestrator's refund route
     instructions: [agent/refunds_prompt.md]
-    model: claude-haiku-5-5
+    model: toy-refunds-1
     owner: refunds team
     ships_separately: true         # its own prompt, model and owner, changed weekly: an eval of its own
     use_case: refund               # the end-to-end use case whose requests reach it
+    evidence: a handoff in every refund trace (traces.jsonl)
   - id: order-tools
     kind: step                     # the order-reading and address-changing tools, called in the
     context: shared                # orchestrator's own context: graded by checks in end-to-end
     ships_separately: false
 
 invoke:
-  command: [python, agent/store.py]
+  command: [python3, agent/store.py]
   cwd: .
-  timeout: 60
+  timeout: 20
+  max_attempts: 2
+  seed: python3 evals/agents/store/env/seed.py
+  observe: python3 evals/agents/store/env/observe.py
+  reset_scope: case
+  env: {AGENT_VARIANT: good, STORE_WORLD: world.json, STORE_ENV: evals/agents/store/env, AGENT_BREAK: ""}

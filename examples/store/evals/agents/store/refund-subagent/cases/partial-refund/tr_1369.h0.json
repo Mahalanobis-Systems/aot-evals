@@ -1,0 +1,129 @@
+{
+  "id": "tr_1369.h0",
+  "use_case": "partial-refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 2,
+    "inclusion_prob": 0.4444444444444444
+  },
+  "order_template": "ot-03",
+  "cluster": "ot-03",
+  "trigger": {
+    "text": "Refund request: Please refund the mixing bowls from order A1739.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": [
+      "SKU-105"
+    ],
+    "order_id": "A1739",
+    "to": "original",
+    "today": "2026-10-26"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1739": {
+        "address": "48 Elm Street",
+        "customer": "c-0370",
+        "delivered": "2026-10-04",
+        "eta": null,
+        "items": [
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          },
+          {
+            "name": "mixing bowls",
+            "price": 18.75,
+            "sku": "SKU-105"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1740": {
+        "address": "62 Mill Lane",
+        "customer": "c-0370",
+        "delivered": "2026-08-02",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $18.75 for order A1739 to your original payment.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1739": {
+          "address": "48 Elm Street",
+          "customer": "c-0370",
+          "delivered": "2026-10-04",
+          "eta": null,
+          "items": [
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            },
+            {
+              "name": "mixing bowls",
+              "price": 18.75,
+              "sku": "SKU-105"
+            }
+          ],
+          "payment": "card",
+          "refunded": 18.75,
+          "status": "delivered"
+        },
+        "A1740": {
+          "address": "62 Mill Lane",
+          "customer": "c-0370",
+          "delivered": "2026-08-02",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 18.75,
+          "order": "A1739",
+          "to": "original"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1369.h0",
+    "synthetic": false,
+    "source_trace": "tr_1369"
+  }
+}

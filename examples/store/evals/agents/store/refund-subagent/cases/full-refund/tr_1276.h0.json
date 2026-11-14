@@ -1,0 +1,111 @@
+{
+  "id": "tr_1276.h0",
+  "use_case": "full-refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 4,
+    "inclusion_prob": 0.3305785123966942
+  },
+  "order_template": "ot-02",
+  "cluster": "ot-02",
+  "trigger": {
+    "text": "Refund request: I want a refund for the kettle I bought.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": null,
+    "order_id": null,
+    "to": "original",
+    "today": "2026-10-20"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1553": {
+        "address": "6 Bay Street",
+        "customer": "c-0277",
+        "delivered": "2026-09-30",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1554": {
+        "address": "90 Cedar Court",
+        "customer": "c-0277",
+        "delivered": "2026-08-16",
+        "eta": null,
+        "items": [
+          {
+            "name": "blender",
+            "price": 49.99,
+            "sku": "SKU-101"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "I can refund that for you. What is your order number?",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1553": {
+          "address": "6 Bay Street",
+          "customer": "c-0277",
+          "delivered": "2026-09-30",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        },
+        "A1554": {
+          "address": "90 Cedar Court",
+          "customer": "c-0277",
+          "delivered": "2026-08-16",
+          "eta": null,
+          "items": [
+            {
+              "name": "blender",
+              "price": 49.99,
+              "sku": "SKU-101"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1276.h0",
+    "synthetic": false,
+    "source_trace": "tr_1276"
+  }
+}

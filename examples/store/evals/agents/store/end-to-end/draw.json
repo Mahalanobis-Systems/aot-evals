@@ -1,0 +1,41 @@
+{
+  "schema": "aot-evals/draw@1",
+  "frame": "support-requests-2026-10",
+  "seed": 2026,
+  "frame_sha256": "b74f2a27e723f88599566f4e1952f33f8b2f317b8ff8983b642abda714189e3d",
+  "drawn_at": "2026-11-14T19:55:57Z",
+  "strata": {
+    "order-status": {
+      "frame_size": 140,
+      "n": 12,
+      "inclusion_prob": 0.08571428571428572,
+      "replaced": []
+    },
+    "return": {
+      "frame_size": 60,
+      "n": 8,
+      "inclusion_prob": 0.13333333333333333,
+      "replaced": []
+    },
+    "address": {
+      "frame_size": 30,
+      "n": 8,
+      "inclusion_prob": 0.26666666666666666,
+      "replaced": []
+    },
+    "refund": {
+      "frame_size": 160,
+      "n": 12,
+      "inclusion_prob": 0.075,
+      "replaced": []
+    }
+  },
+  "frame_rows": {
+    "total": 390,
+    "unassigned": 0,
+    "outside_use_cases": {},
+    "duplicates": 0,
+    "no_id": 0
+  },
+  "skips": []
+}

@@ -1,0 +1,127 @@
+{
+  "id": "bf-refund-no-number",
+  "use_case": "refund",
+  "pool": "bug_finding",
+  "template": "bf-refund-no-number",
+  "failure_modes": [
+    "wrong-answer",
+    "wrong-end-state",
+    "unrequested-change",
+    "wrong-route"
+  ],
+  "coverage_entries": [
+    "refund",
+    "missing-information"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-refund-no-number",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "message",
+    "text": "Refund my chef's knife, I never used it."
+  },
+  "inputs": {
+    "today": "2026-10-20",
+    "customer": "c-0011"
+  },
+  "start_state": {
+    "orders": {
+      "A7021": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-106",
+            "name": "chef's knife",
+            "price": 42.0
+          },
+          {
+            "sku": "SKU-107",
+            "name": "cutting board",
+            "price": 22.4
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "51 Elm Street",
+        "eta": null,
+        "delivered": "2026-10-16",
+        "customer": "c-0011"
+      },
+      "A7022": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-101",
+            "name": "blender",
+            "price": 49.99
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "2 Oak Avenue",
+        "eta": null,
+        "delivered": "2026-07-29",
+        "customer": "c-0011"
+      }
+    },
+    "refunds": [],
+    "returns": [],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A7021": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-106",
+              "name": "chef's knife",
+              "price": 42.0
+            },
+            {
+              "sku": "SKU-107",
+              "name": "cutting board",
+              "price": 22.4
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "51 Elm Street",
+          "eta": null,
+          "delivered": "2026-10-16",
+          "customer": "c-0011"
+        },
+        "A7022": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-101",
+              "name": "blender",
+              "price": 49.99
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "2 Oak Avenue",
+          "eta": null,
+          "delivered": "2026-07-29",
+          "customer": "c-0011"
+        }
+      },
+      "refunds": [],
+      "returns": [],
+      "log": [
+        {
+          "tool": "handoff",
+          "to": "refund-subagent",
+          "order": null
+        }
+      ]
+    },
+    "output": "I can refund that for you. What is your order number?"
+  }
+}

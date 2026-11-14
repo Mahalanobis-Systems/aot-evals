@@ -1,0 +1,121 @@
+{
+  "id": "tr_1269.h0",
+  "use_case": "partial-refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 6,
+    "inclusion_prob": 0.4444444444444444
+  },
+  "order_template": "ot-04",
+  "cluster": "ot-04",
+  "trigger": {
+    "text": "Refund request: Refund my french press, I never used it.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": null,
+    "order_id": null,
+    "to": "original",
+    "today": "2026-10-12"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1539": {
+        "address": "89 Elm Street",
+        "customer": "c-0270",
+        "delivered": "2026-08-28",
+        "eta": null,
+        "items": [
+          {
+            "name": "coffee grinder",
+            "price": 59.0,
+            "sku": "SKU-104"
+          },
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1540": {
+        "address": "3 Oak Avenue",
+        "customer": "c-0270",
+        "delivered": "2026-08-24",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "I can refund that for you. What is your order number?",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1539": {
+          "address": "89 Elm Street",
+          "customer": "c-0270",
+          "delivered": "2026-08-28",
+          "eta": null,
+          "items": [
+            {
+              "name": "coffee grinder",
+              "price": 59.0,
+              "sku": "SKU-104"
+            },
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        },
+        "A1540": {
+          "address": "3 Oak Avenue",
+          "customer": "c-0270",
+          "delivered": "2026-08-24",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1269.h0",
+    "synthetic": false,
+    "source_trace": "tr_1269"
+  }
+}

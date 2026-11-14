@@ -1,0 +1,127 @@
+{
+  "id": "tr_1323.h0",
+  "use_case": "gift-card",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 0,
+    "inclusion_prob": 0.6666666666666666
+  },
+  "order_template": "ot-10",
+  "cluster": "ot-10",
+  "trigger": {
+    "text": "Refund request: Please refund order A1647 to a gift card.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": null,
+    "order_id": "A1647",
+    "to": "gift_card",
+    "today": "2026-10-31"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1647": {
+        "address": "70 Harbor Road",
+        "customer": "c-0324",
+        "delivered": "2026-10-29",
+        "eta": null,
+        "items": [
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          }
+        ],
+        "payment": "gift_card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1648": {
+        "address": "68 Elm Street",
+        "customer": "c-0324",
+        "delivered": "2026-09-09",
+        "eta": null,
+        "items": [
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          },
+          {
+            "name": "mixing bowls",
+            "price": 18.75,
+            "sku": "SKU-105"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $42.00 for order A1647 to your gift card.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1647": {
+          "address": "70 Harbor Road",
+          "customer": "c-0324",
+          "delivered": "2026-10-29",
+          "eta": null,
+          "items": [
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            }
+          ],
+          "payment": "gift_card",
+          "refunded": 42.0,
+          "status": "delivered"
+        },
+        "A1648": {
+          "address": "68 Elm Street",
+          "customer": "c-0324",
+          "delivered": "2026-09-09",
+          "eta": null,
+          "items": [
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            },
+            {
+              "name": "mixing bowls",
+              "price": 18.75,
+              "sku": "SKU-105"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 42.0,
+          "order": "A1647",
+          "to": "gift_card"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1323.h0",
+    "synthetic": false,
+    "source_trace": "tr_1323"
+  }
+}

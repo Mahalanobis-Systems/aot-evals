@@ -1,0 +1,111 @@
+{
+  "id": "tr_1271.h0",
+  "use_case": "full-refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 6,
+    "inclusion_prob": 0.3305785123966942
+  },
+  "order_template": "ot-10",
+  "cluster": "ot-10",
+  "trigger": {
+    "text": "Refund request: Refund my chef's knife, I never used it.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": null,
+    "order_id": null,
+    "to": "original",
+    "today": "2026-10-07"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1543": {
+        "address": "91 Elm Street",
+        "customer": "c-0272",
+        "delivered": "2026-09-23",
+        "eta": null,
+        "items": [
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1544": {
+        "address": "8 Harbor Road",
+        "customer": "c-0272",
+        "delivered": "2026-08-27",
+        "eta": null,
+        "items": [
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "I can refund that for you. What is your order number?",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1543": {
+          "address": "91 Elm Street",
+          "customer": "c-0272",
+          "delivered": "2026-09-23",
+          "eta": null,
+          "items": [
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        },
+        "A1544": {
+          "address": "8 Harbor Road",
+          "customer": "c-0272",
+          "delivered": "2026-08-27",
+          "eta": null,
+          "items": [
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1271.h0",
+    "synthetic": false,
+    "source_trace": "tr_1271"
+  }
+}

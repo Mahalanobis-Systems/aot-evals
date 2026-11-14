@@ -1,0 +1,118 @@
+{
+  "id": "tr_1226",
+  "use_case": "address",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 2,
+    "inclusion_prob": 0.26666666666666666
+  },
+  "template": "address-t1",
+  "cluster": "address-t1",
+  "trigger": {
+    "text": "Please send order A1453 to 466 Harbor Road instead.",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0227",
+    "today": "2026-10-02"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1453": {
+        "address": "71 Oak Avenue",
+        "customer": "c-0227",
+        "delivered": null,
+        "eta": "2026-10-06",
+        "items": [
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          },
+          {
+            "name": "mixing bowls",
+            "price": 18.75,
+            "sku": "SKU-105"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "processing"
+      },
+      "A1454": {
+        "address": "33 Elm Street",
+        "customer": "c-0227",
+        "delivered": "2026-08-07",
+        "eta": null,
+        "items": [
+          {
+            "name": "coffee grinder",
+            "price": 59.0,
+            "sku": "SKU-104"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Order A1453 will now go to 466 Harbor Road.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1453": {
+          "address": "466 Harbor Road",
+          "customer": "c-0227",
+          "delivered": null,
+          "eta": "2026-10-06",
+          "items": [
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            },
+            {
+              "name": "mixing bowls",
+              "price": 18.75,
+              "sku": "SKU-105"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "processing"
+        },
+        "A1454": {
+          "address": "33 Elm Street",
+          "customer": "c-0227",
+          "delivered": "2026-08-07",
+          "eta": null,
+          "items": [
+            {
+              "name": "coffee grinder",
+              "price": 59.0,
+              "sku": "SKU-104"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1226",
+    "synthetic": false
+  }
+}

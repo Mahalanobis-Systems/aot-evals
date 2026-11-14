@@ -1,0 +1,139 @@
+{
+  "id": "tr_1342.h0",
+  "use_case": "gift-card",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 3,
+    "inclusion_prob": 0.6666666666666666
+  },
+  "order_template": "ot-07",
+  "cluster": "ot-07",
+  "trigger": {
+    "text": "Refund request: Refund the kettle from A1685 to a gift card.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": [
+      "SKU-102"
+    ],
+    "order_id": "A1685",
+    "to": "gift_card",
+    "today": "2026-10-01"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1685": {
+        "address": "51 Oak Avenue",
+        "customer": "c-0343",
+        "delivered": "2026-09-07",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          }
+        ],
+        "payment": "gift_card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1686": {
+        "address": "19 Elm Street",
+        "customer": "c-0343",
+        "delivered": "2026-08-14",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $34.50 for order A1685 to your gift card.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1685": {
+          "address": "51 Oak Avenue",
+          "customer": "c-0343",
+          "delivered": "2026-09-07",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            }
+          ],
+          "payment": "gift_card",
+          "refunded": 34.5,
+          "status": "delivered"
+        },
+        "A1686": {
+          "address": "19 Elm Street",
+          "customer": "c-0343",
+          "delivered": "2026-08-14",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 34.5,
+          "order": "A1685",
+          "to": "gift_card"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1342.h0",
+    "synthetic": false,
+    "source_trace": "tr_1342"
+  }
+}

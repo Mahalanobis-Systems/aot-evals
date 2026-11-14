@@ -1,0 +1,137 @@
+{
+  "id": "tr_1261.h0",
+  "use_case": "full-refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 36,
+    "inclusion_prob": 0.3305785123966942
+  },
+  "order_template": "ot-06",
+  "cluster": "ot-06",
+  "trigger": {
+    "text": "Refund request: Can I get my money back for A1523?",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": null,
+    "order_id": "A1523",
+    "to": "original",
+    "today": "2026-10-01"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1523": {
+        "address": "56 Harbor Road",
+        "customer": "c-0262",
+        "delivered": "2026-09-01",
+        "eta": null,
+        "items": [
+          {
+            "name": "blender",
+            "price": 49.99,
+            "sku": "SKU-101"
+          },
+          {
+            "name": "mixing bowls",
+            "price": 18.75,
+            "sku": "SKU-105"
+          },
+          {
+            "name": "cutting board",
+            "price": 22.4,
+            "sku": "SKU-107"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1524": {
+        "address": "77 Cedar Court",
+        "customer": "c-0262",
+        "delivered": "2026-07-10",
+        "eta": null,
+        "items": [
+          {
+            "name": "coffee grinder",
+            "price": 59.0,
+            "sku": "SKU-104"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $91.14 for order A1523 to your original payment.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1523": {
+          "address": "56 Harbor Road",
+          "customer": "c-0262",
+          "delivered": "2026-09-01",
+          "eta": null,
+          "items": [
+            {
+              "name": "blender",
+              "price": 49.99,
+              "sku": "SKU-101"
+            },
+            {
+              "name": "mixing bowls",
+              "price": 18.75,
+              "sku": "SKU-105"
+            },
+            {
+              "name": "cutting board",
+              "price": 22.4,
+              "sku": "SKU-107"
+            }
+          ],
+          "payment": "card",
+          "refunded": 91.14,
+          "status": "delivered"
+        },
+        "A1524": {
+          "address": "77 Cedar Court",
+          "customer": "c-0262",
+          "delivered": "2026-07-10",
+          "eta": null,
+          "items": [
+            {
+              "name": "coffee grinder",
+              "price": 59.0,
+              "sku": "SKU-104"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 91.14,
+          "order": "A1523",
+          "to": "original"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1261.h0",
+    "synthetic": false,
+    "source_trace": "tr_1261"
+  }
+}

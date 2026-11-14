@@ -1,0 +1,120 @@
+{
+  "id": "bf-address-processing",
+  "use_case": "address",
+  "pool": "bug_finding",
+  "template": "bf-address-processing",
+  "failure_modes": [
+    "wrong-answer",
+    "wrong-end-state",
+    "unrequested-change",
+    "wrong-route"
+  ],
+  "coverage_entries": [
+    "address"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-address-processing",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "message",
+    "text": "Change the delivery address of A7015 to 77 Mill Lane."
+  },
+  "inputs": {
+    "today": "2026-10-20",
+    "customer": "c-0008"
+  },
+  "start_state": {
+    "orders": {
+      "A7015": {
+        "status": "processing",
+        "items": [
+          {
+            "sku": "SKU-103",
+            "name": "toaster",
+            "price": 29.99
+          },
+          {
+            "sku": "SKU-105",
+            "name": "mixing bowls",
+            "price": 18.75
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "68 Oak Avenue",
+        "eta": "2026-10-25",
+        "delivered": null,
+        "customer": "c-0008"
+      },
+      "A7016": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-108",
+            "name": "french press",
+            "price": 27.99
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "86 Elm Street",
+        "eta": null,
+        "delivered": "2026-09-10",
+        "customer": "c-0008"
+      }
+    },
+    "refunds": [],
+    "returns": [],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A7015": {
+          "status": "processing",
+          "items": [
+            {
+              "sku": "SKU-103",
+              "name": "toaster",
+              "price": 29.99
+            },
+            {
+              "sku": "SKU-105",
+              "name": "mixing bowls",
+              "price": 18.75
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "77 Mill Lane",
+          "eta": "2026-10-25",
+          "delivered": null,
+          "customer": "c-0008"
+        },
+        "A7016": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-108",
+              "name": "french press",
+              "price": 27.99
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "86 Elm Street",
+          "eta": null,
+          "delivered": "2026-09-10",
+          "customer": "c-0008"
+        }
+      },
+      "refunds": [],
+      "returns": [],
+      "log": []
+    },
+    "output": "Order A7015 will now go to 77 Mill Lane."
+  }
+}

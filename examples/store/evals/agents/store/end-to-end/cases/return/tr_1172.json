@@ -1,0 +1,123 @@
+{
+  "id": "tr_1172",
+  "use_case": "return",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 7,
+    "inclusion_prob": 0.13333333333333333
+  },
+  "template": "return-t2",
+  "cluster": "return-t2",
+  "trigger": {
+    "text": "Can I send back A1345?",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0173",
+    "today": "2026-10-09"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1345": {
+        "address": "39 Harbor Road",
+        "customer": "c-0173",
+        "delivered": "2026-09-30",
+        "eta": null,
+        "items": [
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1346": {
+        "address": "64 Elm Street",
+        "customer": "c-0173",
+        "delivered": "2026-08-14",
+        "eta": null,
+        "items": [
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          },
+          {
+            "name": "mixing bowls",
+            "price": 18.75,
+            "sku": "SKU-105"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "I've started a return for order A1345. You'll get a label by email.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1345": {
+          "address": "39 Harbor Road",
+          "customer": "c-0173",
+          "delivered": "2026-09-30",
+          "eta": null,
+          "items": [
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        },
+        "A1346": {
+          "address": "64 Elm Street",
+          "customer": "c-0173",
+          "delivered": "2026-08-14",
+          "eta": null,
+          "items": [
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            },
+            {
+              "name": "mixing bowls",
+              "price": 18.75,
+              "sku": "SKU-105"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": [
+        {
+          "opened": "2026-10-09",
+          "order": "A1345"
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1172",
+    "synthetic": false
+  }
+}

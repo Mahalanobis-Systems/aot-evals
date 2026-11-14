@@ -1,0 +1,123 @@
+{
+  "id": "tr_1152",
+  "use_case": "return",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 5,
+    "inclusion_prob": 0.13333333333333333
+  },
+  "template": "return-t3",
+  "cluster": "return-t3",
+  "trigger": {
+    "text": "Start a return for A1305 please.",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0153",
+    "today": "2026-10-05"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1305": {
+        "address": "95 Bay Street",
+        "customer": "c-0153",
+        "delivered": "2026-09-27",
+        "eta": null,
+        "items": [
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1306": {
+        "address": "48 Bay Street",
+        "customer": "c-0153",
+        "delivered": "2026-08-23",
+        "eta": null,
+        "items": [
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          },
+          {
+            "name": "mixing bowls",
+            "price": 18.75,
+            "sku": "SKU-105"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "I've started a return for order A1305. You'll get a label by email.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1305": {
+          "address": "95 Bay Street",
+          "customer": "c-0153",
+          "delivered": "2026-09-27",
+          "eta": null,
+          "items": [
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        },
+        "A1306": {
+          "address": "48 Bay Street",
+          "customer": "c-0153",
+          "delivered": "2026-08-23",
+          "eta": null,
+          "items": [
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            },
+            {
+              "name": "mixing bowls",
+              "price": 18.75,
+              "sku": "SKU-105"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": [
+        {
+          "opened": "2026-10-05",
+          "order": "A1305"
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1152",
+    "synthetic": false
+  }
+}

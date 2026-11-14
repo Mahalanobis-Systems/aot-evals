@@ -1,0 +1,118 @@
+{
+  "id": "tr_1218",
+  "use_case": "address",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 4,
+    "inclusion_prob": 0.26666666666666666
+  },
+  "template": "address-t2",
+  "cluster": "address-t2",
+  "trigger": {
+    "text": "Change the delivery address of A1437 to 389 Harbor Road.",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0219",
+    "today": "2026-10-03"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1437": {
+        "address": "26 Elm Street",
+        "customer": "c-0219",
+        "delivered": null,
+        "eta": "2026-10-06",
+        "items": [
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          },
+          {
+            "name": "cutting board",
+            "price": 22.4,
+            "sku": "SKU-107"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "shipped"
+      },
+      "A1438": {
+        "address": "38 Oak Avenue",
+        "customer": "c-0219",
+        "delivered": "2026-08-10",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Order A1437 has already shipped, so I can't change its address.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1437": {
+          "address": "26 Elm Street",
+          "customer": "c-0219",
+          "delivered": null,
+          "eta": "2026-10-06",
+          "items": [
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            },
+            {
+              "name": "cutting board",
+              "price": 22.4,
+              "sku": "SKU-107"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "shipped"
+        },
+        "A1438": {
+          "address": "38 Oak Avenue",
+          "customer": "c-0219",
+          "delivered": "2026-08-10",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1218",
+    "synthetic": false
+  }
+}

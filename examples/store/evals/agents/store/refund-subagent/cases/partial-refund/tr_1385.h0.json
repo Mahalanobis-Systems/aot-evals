@@ -1,0 +1,129 @@
+{
+  "id": "tr_1385.h0",
+  "use_case": "partial-refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 1,
+    "inclusion_prob": 0.4444444444444444
+  },
+  "order_template": "ot-07",
+  "cluster": "ot-07",
+  "trigger": {
+    "text": "Refund request: Please refund the toaster from order A1771.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": [
+      "SKU-103"
+    ],
+    "order_id": "A1771",
+    "to": "original",
+    "today": "2026-10-27"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1771": {
+        "address": "3 Cedar Court",
+        "customer": "c-0386",
+        "delivered": "2026-09-28",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1772": {
+        "address": "94 Cedar Court",
+        "customer": "c-0386",
+        "delivered": "2026-08-22",
+        "eta": null,
+        "items": [
+          {
+            "name": "coffee grinder",
+            "price": 59.0,
+            "sku": "SKU-104"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $29.99 for order A1771 to your original payment.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1771": {
+          "address": "3 Cedar Court",
+          "customer": "c-0386",
+          "delivered": "2026-09-28",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            }
+          ],
+          "payment": "card",
+          "refunded": 29.99,
+          "status": "delivered"
+        },
+        "A1772": {
+          "address": "94 Cedar Court",
+          "customer": "c-0386",
+          "delivered": "2026-08-22",
+          "eta": null,
+          "items": [
+            {
+              "name": "coffee grinder",
+              "price": 59.0,
+              "sku": "SKU-104"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 29.99,
+          "order": "A1771",
+          "to": "original"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1385.h0",
+    "synthetic": false,
+    "source_trace": "tr_1385"
+  }
+}

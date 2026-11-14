@@ -1,0 +1,123 @@
+{
+  "id": "bf-no-order-number",
+  "use_case": "full-refund",
+  "pool": "bug_finding",
+  "order_template": "bf-no-order",
+  "failure_modes": [
+    "breaks-policy",
+    "wrong-amount",
+    "unrequested-change",
+    "wrong-reply"
+  ],
+  "coverage_entries": [
+    "full-refund",
+    "missing-information"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-no-order",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "handoff",
+    "text": "Refund request: Refund my kettle, I never used it."
+  },
+  "inputs": {
+    "order_id": null,
+    "items": null,
+    "to": "original",
+    "today": "2026-10-22"
+  },
+  "start_state": {
+    "orders": {
+      "A8017": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-102",
+            "name": "kettle",
+            "price": 34.5
+          },
+          {
+            "sku": "SKU-103",
+            "name": "toaster",
+            "price": 29.99
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "18 Cedar Court",
+        "eta": null,
+        "delivered": "2026-10-20",
+        "customer": "c-0009"
+      },
+      "A8018": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-108",
+            "name": "french press",
+            "price": 27.99
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "32 Cedar Court",
+        "eta": null,
+        "delivered": "2026-08-08",
+        "customer": "c-0009"
+      }
+    },
+    "refunds": [],
+    "returns": [],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A8017": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-102",
+              "name": "kettle",
+              "price": 34.5
+            },
+            {
+              "sku": "SKU-103",
+              "name": "toaster",
+              "price": 29.99
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "18 Cedar Court",
+          "eta": null,
+          "delivered": "2026-10-20",
+          "customer": "c-0009"
+        },
+        "A8018": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-108",
+              "name": "french press",
+              "price": 27.99
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "32 Cedar Court",
+          "eta": null,
+          "delivered": "2026-08-08",
+          "customer": "c-0009"
+        }
+      },
+      "refunds": [],
+      "returns": [],
+      "log": []
+    },
+    "output": "I can refund that for you. What is your order number?"
+  }
+}

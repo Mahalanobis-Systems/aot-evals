@@ -1,0 +1,134 @@
+{
+  "id": "bf-window-35",
+  "use_case": "full-refund",
+  "pool": "bug_finding",
+  "order_template": "bf-window-31",
+  "failure_modes": [
+    "breaks-policy",
+    "wrong-amount",
+    "unrequested-change",
+    "wrong-reply"
+  ],
+  "coverage_entries": [
+    "full-refund",
+    "not-allowed",
+    "window-edge"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-window-31",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "handoff",
+    "text": "Refund request: Please refund order A8007."
+  },
+  "inputs": {
+    "order_id": "A8007",
+    "items": null,
+    "to": "original",
+    "today": "2026-10-22"
+  },
+  "start_state": {
+    "orders": {
+      "A8007": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-106",
+            "name": "chef's knife",
+            "price": 42.0
+          },
+          {
+            "sku": "SKU-107",
+            "name": "cutting board",
+            "price": 22.4
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "59 Bay Street",
+        "eta": null,
+        "delivered": "2026-09-17",
+        "customer": "c-0004"
+      },
+      "A8008": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-102",
+            "name": "kettle",
+            "price": 34.5
+          },
+          {
+            "sku": "SKU-103",
+            "name": "toaster",
+            "price": 29.99
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "34 Harbor Road",
+        "eta": null,
+        "delivered": "2026-09-04",
+        "customer": "c-0004"
+      }
+    },
+    "refunds": [],
+    "returns": [],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A8007": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-106",
+              "name": "chef's knife",
+              "price": 42.0
+            },
+            {
+              "sku": "SKU-107",
+              "name": "cutting board",
+              "price": 22.4
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "59 Bay Street",
+          "eta": null,
+          "delivered": "2026-09-17",
+          "customer": "c-0004"
+        },
+        "A8008": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-102",
+              "name": "kettle",
+              "price": 34.5
+            },
+            {
+              "sku": "SKU-103",
+              "name": "toaster",
+              "price": 29.99
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "34 Harbor Road",
+          "eta": null,
+          "delivered": "2026-09-04",
+          "customer": "c-0004"
+        }
+      },
+      "refunds": [],
+      "returns": [],
+      "log": []
+    },
+    "output": "Order A8007 was delivered 35 days ago, past the 30-day refund window."
+  }
+}

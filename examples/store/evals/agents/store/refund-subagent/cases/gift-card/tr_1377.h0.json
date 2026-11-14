@@ -1,0 +1,127 @@
+{
+  "id": "tr_1377.h0",
+  "use_case": "gift-card",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 2,
+    "inclusion_prob": 0.6666666666666666
+  },
+  "order_template": "ot-01",
+  "cluster": "ot-01",
+  "trigger": {
+    "text": "Refund request: Please refund order A1755 to a gift card.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": null,
+    "order_id": "A1755",
+    "to": "gift_card",
+    "today": "2026-10-31"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1755": {
+        "address": "15 Elm Street",
+        "customer": "c-0378",
+        "delivered": "2026-10-04",
+        "eta": null,
+        "items": [
+          {
+            "name": "blender",
+            "price": 49.99,
+            "sku": "SKU-101"
+          }
+        ],
+        "payment": "gift_card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1756": {
+        "address": "38 Oak Avenue",
+        "customer": "c-0378",
+        "delivered": "2026-09-17",
+        "eta": null,
+        "items": [
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          },
+          {
+            "name": "cutting board",
+            "price": 22.4,
+            "sku": "SKU-107"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $49.99 for order A1755 to your gift card.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1755": {
+          "address": "15 Elm Street",
+          "customer": "c-0378",
+          "delivered": "2026-10-04",
+          "eta": null,
+          "items": [
+            {
+              "name": "blender",
+              "price": 49.99,
+              "sku": "SKU-101"
+            }
+          ],
+          "payment": "gift_card",
+          "refunded": 49.99,
+          "status": "delivered"
+        },
+        "A1756": {
+          "address": "38 Oak Avenue",
+          "customer": "c-0378",
+          "delivered": "2026-09-17",
+          "eta": null,
+          "items": [
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            },
+            {
+              "name": "cutting board",
+              "price": 22.4,
+              "sku": "SKU-107"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 49.99,
+          "order": "A1755",
+          "to": "gift_card"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1377.h0",
+    "synthetic": false,
+    "source_trace": "tr_1377"
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "id": "tr_1160",
+  "use_case": "return",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 1,
+    "inclusion_prob": 0.13333333333333333
+  },
+  "template": "return-t1",
+  "cluster": "return-t1",
+  "trigger": {
+    "text": "I want to return order A1321.",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0161",
+    "today": "2026-10-23"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1321": {
+        "address": "60 Cedar Court",
+        "customer": "c-0161",
+        "delivered": "2026-10-22",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1322": {
+        "address": "47 Elm Street",
+        "customer": "c-0161",
+        "delivered": "2026-08-10",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "I've started a return for order A1321. You'll get a label by email.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1321": {
+          "address": "60 Cedar Court",
+          "customer": "c-0161",
+          "delivered": "2026-10-22",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        },
+        "A1322": {
+          "address": "47 Elm Street",
+          "customer": "c-0161",
+          "delivered": "2026-08-10",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": [
+        {
+          "opened": "2026-10-23",
+          "order": "A1321"
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1160",
+    "synthetic": false
+  }
+}

@@ -1,0 +1,128 @@
+{
+  "id": "bf-refund-day-31",
+  "use_case": "refund",
+  "pool": "bug_finding",
+  "template": "bf-refund-window",
+  "failure_modes": [
+    "wrong-answer",
+    "wrong-end-state",
+    "unrequested-change",
+    "wrong-route"
+  ],
+  "coverage_entries": [
+    "refund",
+    "not-allowed",
+    "window-edge"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-refund-window",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "message",
+    "text": "Please refund order A7017."
+  },
+  "inputs": {
+    "today": "2026-10-20",
+    "customer": "c-0009"
+  },
+  "start_state": {
+    "orders": {
+      "A7017": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-108",
+            "name": "french press",
+            "price": 27.99
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "85 Harbor Road",
+        "eta": null,
+        "delivered": "2026-09-19",
+        "customer": "c-0009"
+      },
+      "A7018": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-102",
+            "name": "kettle",
+            "price": 34.5
+          },
+          {
+            "sku": "SKU-103",
+            "name": "toaster",
+            "price": 29.99
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "12 Bay Street",
+        "eta": null,
+        "delivered": "2026-08-06",
+        "customer": "c-0009"
+      }
+    },
+    "refunds": [],
+    "returns": [],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A7017": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-108",
+              "name": "french press",
+              "price": 27.99
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "85 Harbor Road",
+          "eta": null,
+          "delivered": "2026-09-19",
+          "customer": "c-0009"
+        },
+        "A7018": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-102",
+              "name": "kettle",
+              "price": 34.5
+            },
+            {
+              "sku": "SKU-103",
+              "name": "toaster",
+              "price": 29.99
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "12 Bay Street",
+          "eta": null,
+          "delivered": "2026-08-06",
+          "customer": "c-0009"
+        }
+      },
+      "refunds": [],
+      "returns": [],
+      "log": [
+        {
+          "tool": "handoff",
+          "to": "refund-subagent",
+          "order": "A7017"
+        }
+      ]
+    },
+    "output": "Order A7017 was delivered 31 days ago, past the 30-day refund window."
+  }
+}
