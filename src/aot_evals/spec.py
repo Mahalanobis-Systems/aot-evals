@@ -607,6 +607,9 @@ def _decision_rule(c: _Check, spec: dict, ids: list[str], quantity: Any) -> None
         c.default(r, "looks", "decision_rule.looks", DEFAULT_LOOKS)
     elif looks not in LOOKS:
         c.bad("decision_rule.looks", f"must be one of {', '.join(LOOKS)} (rule 21)", ["decision"])
+    elif looks != "fixed":
+        c.note("decision_rule.looks", f"{looks} needs an always-valid interval this version does not compute: "
+               "the decision stays unknown until it does (rule 21)")
 
     gates = r.get("use_case_gates")
     n_gates = 1  # the headline

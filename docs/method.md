@@ -156,8 +156,15 @@ leaves θ̂ null with the reason. `agreement` holds the whole eval to people: fl
 counted per kind against a count fixed in advance, and one gate per shortfall. `report` corrects
 θ̂ as the spec says (`rogan_gladen`, `ppi`), keeps the uncorrected number beside it, and adds the
 `measurement` key; `trials: auto` runs k = 3 until a baseline measures the variance split, then the
-k it implies. `screen --judges` reads a 2.0 eval's calibrated judges. The other commands refuse
-such a folder until the 2.0 refactor reaches them; a 1.x suite is read as before.
+k it implies. `screen --judges` reads a 2.0 eval's calibrated judges. The decision rule works on
+the eval ([v2-design.md §5, §6](v2-design.md#5-runs)): `report` adds `decision` (each gate's
+threshold, superiority or non-inferiority test, the gates combined as `combine` says, `also_requires`
+on the other eval's runs of the same change, constraints, and one look per change under
+`looks: fixed`), and `report --candidate` and `compare` add the paired `comparison`, whose verdict
+reads the design-weighted sign-flip test per cluster. A comparison refuses runs whose estimand,
+design or measurement hash differs from the spec's, and a decision-rule change unless `log --kind
+decision` recorded it before the first run decided on. The other commands refuse such a folder
+until the 2.0 refactor reaches them; a 1.x suite is read as before.
 
 ```
 evals/agents/<agent>/

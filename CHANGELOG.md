@@ -10,6 +10,23 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
   size, so 13 of 15 was sized as 42 of 48 (88%, not 87%) and reported 48 labels where 53 are
   needed. It now holds today's rate exactly, matching docs/statistics.md §4.2. The "about N labels"
   hint in `calibrate` and `agreement` changes with it.
+- **2.0 decision rules** (stage 6, docs/v2-design.md §5–§7). **report.json v2 adds `decision`**:
+  each gate (the headline and each use case gate) is a one-sided **threshold** test on θ̂'s bound
+  (the bar read on the grader's scale when a judge feeds an uncorrected estimate), or a
+  **superiority** or **non-inferiority** sign-flip test on paired, design-weighted per-case deltas
+  with signs flipped per cluster (a non-inferiority margin read through the grader's J at its lower
+  bound). Each gate is `pass`, `fail`, `insufficient` (with `cases_needed` at the measured spread)
+  or `unknown` with its reason, so a judge that does not count (rule 13) never yields a pass.
+  Gates combine as `combine` says (all: no correction; any: `holm` or `benjamini_hochberg`);
+  `also_requires` is tested on the other eval's candidate runs of the same change; a passing
+  decision with a breached budget is a `trade`; and under `looks: fixed` a change is decided once
+  (`report/looks.jsonl`). **`report --candidate` and `compare` read 2.0 evals**: `comparison`'s
+  verdict comes from the two-sided sign-flip test at 2α with a weighted Δθ̂, adjusted per-use-case
+  p-values and bug-finding flips listed apart. A comparison **refuses** runs whose estimand, design
+  or measurement hash differs from the spec, and a decision-rule change unless `log --kind decision`
+  (which now records the eval's `spec_sha`) journaled it before the first run decided on. New in
+  `stats`: `superiority_test`, `bound_test`, `cases_for_spread`, `weighted_mean_delta`, and
+  `case_weights` on the sign-flip tests.
 - **2.0 measurement** (stage 5, docs/v2-design.md §4–§6). Grader error is the **catch rate** and the
   **clean pass rate** everywhere in 2.0: calibrations add `catch`, `clean`, their intervals and lower
   bounds, `labels_per_kind` and J (beside 1.x's `tpr`/`tnr`), and `calibrate` and `label status` speak

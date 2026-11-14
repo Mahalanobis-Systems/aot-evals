@@ -753,15 +753,58 @@ def trials_for_split(between: float, within: float, case_cost: float = 1.0, k_mi
 WEBB = (-math.sqrt(1.5), -1.0, -math.sqrt(0.5), math.sqrt(0.5), 1.0, math.sqrt(1.5))
 
 
-def _cluster_sums(deltas: Sequence[float], clusters: Sequence[str | None] | None, mu: float = 0.0) -> list[float]:
-    """Sum of (delta - mu) per cluster; a case without a key is its own cluster."""
+def _unit_weights(n: int, case_weights: Sequence[float] | None) -> list[float]:
+    """Case weights scaled to average 1, so that the weighted mean of the deltas is
+    sum(w_i * d_i) / n. None means every case weighs the same."""
+    if case_weights is None:
+        return [1.0] * n
+    w = [float(x) for x in case_weights]
+    if len(w) != n or any(x < 0 for x in w) or sum(w) <= 0:
+        raise ValueError("case_weights must be one non-negative weight per delta, not all zero")
+    total = sum(w)
+    return [x * n / total for x in w]
+
+
+def _cluster_sums(deltas: Sequence[float], clusters: Sequence[str | None] | None, mu: float = 0.0,
+                  case_weights: Sequence[float] | None = None) -> list[float]:
+    """Sum of w_i * (delta_i - mu) per cluster; a case without a key is its own cluster. With
+    design weights (scaled to average 1) each case's delta counts as much as its share of the
+    estimate, and under the null each unit's weighted, shifted delta is symmetric about zero."""
+    w = _unit_weights(len(deltas), case_weights)
     if clusters is None:
-        return [d - mu for d in deltas]
+        return [wi * (d - mu) for d, wi in zip(deltas, w, strict=True)]
     sums: dict = {}
-    for i, (d, g) in enumerate(zip(deltas, clusters, strict=True)):
+    for i, (d, g, wi) in enumerate(zip(deltas, clusters, w, strict=True)):
         key = ("g", g) if g is not None else ("c", i)
-        sums[key] = sums.get(key, 0.0) + (d - mu)
+        sums[key] = sums.get(key, 0.0) + wi * (d - mu)
     return list(sums.values())
+
+
+def weighted_mean_delta(deltas: Sequence[float], case_weights: Sequence[float] | None = None,
+                        clusters: Sequence[str | None] | None = None) -> dict | None:
+    """The design-weighted mean of paired deltas, sum(W_i d_i) with the W_i summing to 1, and its
+    standard error over clusters: with u_g = sum over cluster g of w_i d_i (w scaled to average
+    1) and n cases, Var = G/(G - 1) * sum_g (u_g - m_g * mean)^2 / n^2, where m_g is the cluster's
+    total weight. With equal weights and no clusters it is the usual sd/sqrt(n). With design
+    weights from a stratified Hájek estimate the mean is the change in theta-hat itself
+    (statistics §2.3, §4.3). None on fewer than two units."""
+    n = len(deltas)
+    if n == 0:
+        return None
+    w = _unit_weights(n, case_weights)
+    mean = sum(wi * d for wi, d in zip(w, deltas, strict=True)) / n
+    units: dict = {}
+    for i, (d, wi) in enumerate(zip(deltas, w, strict=True)):
+        g = clusters[i] if clusters is not None else None
+        key = ("g", g) if g is not None else ("c", i)
+        u = units.setdefault(key, [0.0, 0.0])
+        u[0] += wi * d
+        u[1] += wi
+    g_ = len(units)
+    if g_ < 2:
+        return {"mean": mean, "se": None, "n": n, "n_clusters": g_}
+    ss = sum((s - m * mean) ** 2 for s, m in units.values())
+    return {"mean": mean, "se": math.sqrt(g_ / (g_ - 1) * ss) / n, "n": n, "n_clusters": g_}
 
 
 def min_attainable_p(n_clusters: int) -> float | None:
@@ -789,7 +832,8 @@ def _flip_p(sums: Sequence[float], patterns: list[list[float]], exact: bool) -> 
 
 
 def sign_flip_test(deltas: Sequence[float], draws: int = 20_000, seed: int = 0,
-                   clusters: Sequence[str | None] | None = None, weights: str | None = None) -> float | None:
+                   clusters: Sequence[str | None] | None = None, weights: str | None = None,
+                   case_weights: Sequence[float] | None = None) -> float | None:
     """Two-sided paired permutation (sign-flip) test of a zero mean per-case delta.
 
     Under no effect each case's delta is as likely to have either sign, so the observed mean is
@@ -803,10 +847,13 @@ def sign_flip_test(deltas: Sequence[float], draws: int = 20_000, seed: int = 0,
     six-point weights, for 6 to 9 clusters, where +/-1 has too few distinct patterns; Webb
     2023); by default Webb is used for 6 <= G < 10 and Rademacher otherwise. At G <= 5 the test
     cannot reach 5% (see `min_attainable_p`).
+
+    `case_weights` (design weights, one per case) make it a test of the weighted mean delta, so
+    a stratified estimate's change is tested as estimated (`weighted_mean_delta`).
     """
     if not deltas:
         return None
-    sums = [x for x in _cluster_sums(deltas, clusters) if x != 0]
+    sums = [x for x in _cluster_sums(deltas, clusters, case_weights=case_weights) if x != 0]
     if not sums:
         return 1.0
     g = len(_cluster_sums(deltas, clusters))
@@ -816,14 +863,16 @@ def sign_flip_test(deltas: Sequence[float], draws: int = 20_000, seed: int = 0,
 
 
 def sign_flip_interval(deltas: Sequence[float], clusters: Sequence[str | None] | None = None,
-                       alpha: float = 0.05, draws: int = 4_000, seed: int = 0) -> list[float] | None:
+                       alpha: float = 0.05, draws: int = 4_000, seed: int = 0,
+                       case_weights: Sequence[float] | None = None) -> list[float] | None:
     """A confidence interval for the mean per-case delta, by inverting the sign-flip test: every
     mu at which flipping the signs of (delta - mu) per case, or per cluster, is not rejected.
 
     It assumes only that each unit's delta is symmetric about mu, not that the mean is normal,
     so it holds its coverage on small suites near a ceiling where the percentile bootstrap does
     not. The same sign patterns are reused at every mu, so the bounds are deterministic. None
-    when there are too few units for any interval at this alpha (2 / 2^G >= alpha).
+    when there are too few units for any interval at this alpha (2 / 2^G >= alpha). With
+    `case_weights` it is an interval for the weighted mean (`weighted_mean_delta`).
     """
     n = len(deltas)
     if n < 2:
@@ -833,10 +882,11 @@ def sign_flip_interval(deltas: Sequence[float], clusters: Sequence[str | None] |
         return None
     w = "webb" if clusters is not None and 6 <= g < 10 else "rademacher"
     patterns, exact = _sign_patterns(g, draws, seed, w)
-    mean = sum(deltas) / n
+    uw = _unit_weights(n, case_weights)
+    mean = sum(wi * d for wi, d in zip(uw, deltas, strict=True)) / n
 
     def accepted(mu: float) -> bool:
-        return _flip_p(_cluster_sums(deltas, clusters, mu), patterns, exact) > alpha
+        return _flip_p(_cluster_sums(deltas, clusters, mu, case_weights), patterns, exact) > alpha
 
     def bound(direction: int) -> float:
         inside, outside = mean, mean + direction * (max(abs(d) for d in deltas) + 1.0)
@@ -853,9 +903,87 @@ def sign_flip_interval(deltas: Sequence[float], clusters: Sequence[str | None] |
     return [bound(-1), bound(+1)]
 
 
+def _one_sided_flip(deltas: Sequence[float], null: float, clusters: Sequence[str | None] | None,
+                    case_weights: Sequence[float] | None, draws: int, seed: int) -> dict:
+    """One-sided sign-flip p-value for H1: mean delta > `null`: the observed sum of the units'
+    weighted (delta - null) against its sum under every sign pattern."""
+    units = _cluster_sums(deltas, clusters, mu=null, case_weights=case_weights)
+    g = len(units)
+    sums = [x for x in units if x != 0]
+    w = "webb" if clusters is not None and 6 <= g < 10 else "rademacher"
+    if not sums:
+        p = 1.0
+    else:
+        patterns, exact = _sign_patterns(len(sums), draws, seed, w)
+        obs = sum(sums)
+        eps = 1e-12 * (1 + abs(obs))
+        hits = sum(sum(s * x for s, x in zip(pat, sums, strict=True)) >= obs - eps for pat in patterns)
+        p = hits / len(patterns) if exact else (hits + 1) / (len(patterns) + 1)
+    return {"p": p, "n_clusters": g, "weights": w}
+
+
+def superiority_test(deltas: Sequence[float], alpha: float = 0.05,
+                     clusters: Sequence[str | None] | None = None,
+                     case_weights: Sequence[float] | None = None, draws: int = 20_000,
+                     seed: int = 0) -> dict | None:
+    """Is the candidate better than the baseline? A one-sided sign-flip test of H0: mean delta
+    <= 0 on paired per-case deltas (statistics §4.3, §4.4; rule 18).
+
+    `deltas` are candidate minus baseline per case, higher is better. The margin of a
+    superiority rule (the smallest change that matters) sizes the test and its detectable
+    effect; it does not move the null, so a real gain smaller than the margin can still pass,
+    as in the standard design. `lower` is the one-sided 1 - alpha bound from the inverted
+    sign-flip interval at 2 * alpha. With `clusters`, signs flip per cluster; with
+    `case_weights`, it tests the design-weighted mean (`weighted_mean_delta`).
+    """
+    if not deltas or not 0 < alpha < 0.5:
+        return None
+    r = _one_sided_flip(deltas, 0.0, clusters, case_weights, draws, seed)
+    interval = sign_flip_interval(deltas, clusters=clusters, alpha=2 * alpha, seed=seed,
+                                  case_weights=case_weights)
+    mean = weighted_mean_delta(deltas, case_weights)["mean"]
+    return {"test": "superiority", "alpha": alpha, "mean": mean, "lower": interval[0] if interval else None,
+            "interval": interval, "p": r["p"], "passed": r["p"] <= alpha, "n": len(deltas),
+            "n_clusters": r["n_clusters"], "min_attainable_p": 1 / 2 ** r["n_clusters"], "weights": r["weights"],
+            "method": "one-sided sign-flip, per cluster" if clusters is not None else "one-sided sign-flip"}
+
+
+def bound_test(point: float, se: float, boundary: float, side: str, alpha: float = 0.05) -> dict | None:
+    """One-sided normal test that an estimate lies on one side of a fixed `boundary` (a
+    threshold rule on theta-hat: statistics §4.1, §4.2). side "below": H1 theta < boundary;
+    "above": H1 theta > boundary. `bound` is the one-sided 1 - alpha bound on the side that must
+    clear; `interval` the two-sided 1 - 2 alpha interval, whose far end decides "shown on the
+    wrong side". For a stratified Hájek estimate with its floored variance (`stratified_hajek`)
+    this is the test the interval implies; below about 30 cases read it as approximate."""
+    if side not in ("below", "above") or se is None or se <= 0 or not 0 < alpha < 0.5:
+        return None
+    z = _z(1 - alpha)
+    lo, hi = point - z * se, point + z * se
+    t = (boundary - point) / se if side == "below" else (point - boundary) / se
+    p = 1 - NormalDist().cdf(t)
+    bound, far = (hi, lo) if side == "below" else (lo, hi)
+    shown_wrong = (lo >= boundary) if side == "below" else (hi <= boundary)
+    return {"p": p, "passed": p <= alpha, "shown_wrong_side": shown_wrong, "bound": bound,
+            "interval": [lo, hi], "side": side, "boundary": boundary, "alpha": alpha}
+
+
+def cases_for_spread(n: int, se: float | None, effect: float | None, alpha: float = 0.05,
+                     power: float = 0.80) -> int | None:
+    """Cases a one-sided test at `alpha` needs for power `power` against a true distance
+    `effect` from its null, at the spread `n` cases measured (standard error `se`): the n at
+    which (z_(1-alpha) + z_power) * se * sqrt(n_now / n) = effect. It carries whatever made the
+    spread, unequal weights, clusters, flips and a judge's noise, so it answers "how many cases
+    like these" after a run, where `paired_n` and `threshold_n` plan before one."""
+    if n <= 0 or se is None or se <= 0 or effect is None or effect <= 0:
+        return None
+    if not (0 < alpha < 0.5 and 0 < power < 1):
+        return None
+    return math.ceil(n * ((_z(1 - alpha) + _z(power)) * se / effect) ** 2 - 1e-9)
+
+
 def non_inferiority_test(deltas: Sequence[float], margin: float, alpha: float = 0.05,
                          clusters: Sequence[str | None] | None = None, draws: int = 20_000,
-                         seed: int = 0) -> dict | None:
+                         seed: int = 0, case_weights: Sequence[float] | None = None) -> dict | None:
     """Is the candidate no worse than the baseline by more than `margin`? A one-sided sign-flip
     test on paired per-case deltas (statistics §4.4, §4.5; rule 19).
 
@@ -871,27 +999,21 @@ def non_inferiority_test(deltas: Sequence[float], margin: float, alpha: float = 
     `passed` is p <= alpha. `lower` is the lower end of the inverted sign-flip interval at
     2 * alpha (a one-sided 1 - alpha bound), shown beside it; it is None when there are too few
     clusters for any interval. A one-sided test on G units cannot return p below 1 / 2^G
-    (`min_attainable_p`), so at four clusters or fewer it cannot pass at 5%.
+    (`min_attainable_p`), so at four clusters or fewer it cannot pass at 5%. With `case_weights`
+    it tests the design-weighted mean (`weighted_mean_delta`): each unit's weighted
+    w_i (delta_i + margin) is symmetric under H0's boundary.
     """
     if not deltas or margin is None or margin <= 0 or not 0 < alpha < 0.5:
         return None
     n = len(deltas)
-    units = _cluster_sums(deltas, clusters, mu=-margin)
-    g = len(units)
-    sums = [x for x in units if x != 0]
-    w = "webb" if clusters is not None and 6 <= g < 10 else "rademacher"
-    if not sums:
-        p = 1.0
-    else:
-        patterns, exact = _sign_patterns(len(sums), draws, seed, w)
-        obs = sum(sums)
-        eps = 1e-12 * (1 + abs(obs))
-        hits = sum(sum(s * x for s, x in zip(pat, sums, strict=True)) >= obs - eps for pat in patterns)
-        p = hits / len(patterns) if exact else (hits + 1) / (len(patterns) + 1)
-    interval = sign_flip_interval(deltas, clusters=clusters, alpha=2 * alpha, seed=seed)
-    return {"test": "non_inferiority", "margin": margin, "alpha": alpha, "mean": sum(deltas) / n,
-            "lower": interval[0] if interval else None, "p": p, "passed": p <= alpha, "n": n,
-            "n_clusters": g, "min_attainable_p": 1 / 2 ** g, "weights": w,
+    r = _one_sided_flip(deltas, -margin, clusters, case_weights, draws, seed)
+    interval = sign_flip_interval(deltas, clusters=clusters, alpha=2 * alpha, seed=seed,
+                                  case_weights=case_weights)
+    mean = weighted_mean_delta(deltas, case_weights)["mean"]
+    return {"test": "non_inferiority", "margin": margin, "alpha": alpha, "mean": mean,
+            "lower": interval[0] if interval else None, "interval": interval, "p": r["p"],
+            "passed": r["p"] <= alpha, "n": n, "n_clusters": r["n_clusters"],
+            "min_attainable_p": 1 / 2 ** r["n_clusters"], "weights": r["weights"],
             "method": "one-sided sign-flip, per cluster" if clusters is not None else "one-sided sign-flip"}
 
 

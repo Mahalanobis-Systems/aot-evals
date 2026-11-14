@@ -80,7 +80,7 @@ def _evals(args) -> Evals:
 # Commands that work on an agent folder holding 2.0 evals (docs/v2-design.md §1). The rest read a
 # 1.x suite only, until their stage of the 2.0 refactor.
 V2_READY = {"init", "validate", "status", "import", "log", "activity", "snapshot", "plan", "draw",
-            "screen", "run", "report", "label", "calibrate", "agreement", "judge"}
+            "screen", "run", "report", "label", "calibrate", "agreement", "judge", "compare"}
 
 
 def _one_eval(args, ev: Evals):
@@ -783,6 +783,8 @@ def cmd_compare(args) -> int:
     from . import compare as compare_mod
 
     ev = _evals(args)
+    if _v2(args, ev):
+        return _compare_v2(args, ev)
     base = args.baseline or report_mod.default_runs(ev)
     cands = args.candidate or [m["run_id"] for m in ev.runs("candidate") if m.get("finished")][-1:]
     if not base or not cands:
@@ -792,6 +794,28 @@ def cmd_compare(args) -> int:
     path = compare_mod.save(ev, c)
     print(f"  wrote {path}")
     return 1 if c.get("refused") else 0
+
+
+def _compare_v2(args, ev: Evals) -> int:
+    """`compare` on a 2.0 eval: the paired comparison and the decision on the candidate
+    (docs/v2-design.md §5, §6), saved under report/comparisons/."""
+    from . import compare as compare_mod
+    from . import decision as decision_mod
+    from .report_v2 import Side, default_runs
+
+    e = _one_eval(args, ev)
+    base = args.baseline or default_runs(e)
+    cands = args.candidate or [m["run_id"] for m in e.runs("candidate") if m.get("finished")][-1:]
+    if not base or not cands:
+        sys.exit("needs a baseline and a candidate run (aot-evals run --purpose candidate ...)")
+    b, c = Side(e, base), Side(e, cands)
+    comp = decision_mod.comparison(e, b, c)
+    comp["decision"] = decision_mod.decide(e, b, c, comp)
+    print(decision_mod.render_comparison(comp), flush=True)  # the result first: saving must never lose it
+    print(decision_mod.render_decision(comp["decision"]), flush=True)
+    print(f"  wrote {compare_mod.save(e, comp)}")
+    decision_mod.record_look(e, comp["decision"])
+    return 1 if comp.get("refused") else 0
 
 
 def cmd_coverage(args) -> int:
@@ -817,13 +841,15 @@ def cmd_redundancy(args) -> int:
 def cmd_report(args) -> int:
     ev = _evals(args)
     if _v2(args, ev):
+        from . import decision as decision_mod
         from . import report_v2
 
         e = _one_eval(args, ev)
-        if args.candidate or args.html:
-            sys.exit("--candidate and --html do not read 2.0 evals yet; report writes the estimate")
-        r = report_v2.build(e, args.run or None)
+        if args.html:
+            sys.exit("--html does not read 2.0 evals yet; report writes report.json")
+        r = report_v2.build(e, args.run or None, args.candidate or None)
         print(f"wrote {report_v2.write(e, r)}")
+        decision_mod.record_look(e, r["decision"])
         est = r["estimate"]
         if est["theta"] is not None:
             lo, hi = est["ci"]
@@ -833,6 +859,9 @@ def cmd_report(args) -> int:
             print(f"  θ̂ unknown: {est['null_reason']}")
         if r.get("refused"):
             print(f"  refused: {r['refused']}")
+        if r.get("comparison"):
+            print(decision_mod.render_comparison(r["comparison"]))
+        print(decision_mod.render_decision(r["decision"]))
         return 0
     r = report_mod.build(ev, args.run or None, args.candidate or None)
     path = report_mod.write(ev, r)
@@ -863,7 +892,15 @@ def _progress(ev: Evals, gate: str | None):
 
 def cmd_log(args) -> int:
     ev = _evals(args)
-    journal.append(ev, args.kind, args.text, gate=args.gate, detail=args.detail, by=args.by)
+    extra = {}
+    if args.kind == "decision" and _v2(args, ev):
+        # a decision about a 2.0 eval carries its spec's hashes, so a decision-rule change journaled
+        # before the candidate ran lets the comparison stand (docs/v2-design.md §5)
+        from .spec import part_hashes
+
+        e = _one_eval(args, ev)
+        extra = {"eval": e.id, "spec_sha": part_hashes(e.spec(), e)}
+    journal.append(ev, args.kind, args.text, gate=args.gate, detail=args.detail, by=args.by, **extra)
     return 0
 
 

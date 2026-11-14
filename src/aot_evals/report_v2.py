@@ -5,6 +5,7 @@ This module writes the keys of the estimand, the sampling design and the measure
 `eval`, `spec`, `estimate` (the headline θ̂), `use_cases` (the per-use-case table, the
 diagnostic beside it), `design` and `measurement` (each failure mode's grader with its catch and
 clean pass rates and its floor, the eval held to people, the variance split; measurement.py).
+The decision rule's keys, `decision` and `comparison`, come from decision.py.
 Keys may be added within v2, never removed or renamed. Everything is recomputed from per-trial
 records, nothing is pre-rounded, and an unknown value is null with its reason, never 0.
 
@@ -343,27 +344,64 @@ def design_key(s: Scored) -> dict:
     }
 
 
-def build(ev: Eval, run_ids: list[str] | None = None) -> dict:
+class Side:
+    """One set of runs scored under the current spec, with what the report computes on it: the
+    refusal, the measurement model, the estimate and the per-use-case rows. A comparison and a
+    decision read two sides scored the same way."""
+
+    def __init__(self, ev: Eval, run_ids: list[str]):
+        from .measurement import section
+
+        self.ev = ev
+        self.spec = ev.spec()
+        self.s = Scored(ev, run_ids)
+        self.weights, self.source = use_case_weights(self.spec)
+        self.refused = refusal(ev, self.spec, self.s.manifests)
+        self.meas = section(self.s, self.weights, self.refused)
+        self.est = estimate(self.s, self.refused, self.weights, self.source, self.meas)
+        self._rows: list[dict] | None = None
+
+    @property
+    def manifests(self) -> list[dict]:
+        return self.s.manifests
+
+    @property
+    def run_ids(self) -> list[str]:
+        return [m["run_id"] for m in self.s.manifests]
+
+    def rows(self) -> list[dict] | None:
+        if self.refused:
+            return None
+        if self._rows is None:
+            self._rows = use_case_rows(self.s, self.weights, self.meas)
+        return self._rows
+
+
+def build(ev: Eval, run_ids: list[str] | None = None, candidate_runs: list[str] | None = None) -> dict:
+    """report.json v2. With `candidate_runs`, adds the paired comparison against the reported
+    (baseline) runs and decides on the candidate; without, `decision` decides a threshold rule
+    on the reported runs and leaves a paired rule unknown until there is a candidate."""
+    from . import decision as decision_mod
+
     spec = ev.spec()
     run_ids = run_ids if run_ids is not None else default_runs(ev)
-    s = Scored(ev, run_ids)
-    weights, source = use_case_weights(spec)
-    refused = refusal(ev, spec, s.manifests)
-    from .measurement import section
-
-    meas = section(s, weights, refused)
+    base = Side(ev, run_ids)
+    cand = Side(ev, candidate_runs) if candidate_runs else None
     report = {
         "schema": SCHEMA,
         "generated": now_iso(),
-        "refused": refused,
-        "runs": [m["run_id"] for m in s.manifests],
+        "refused": base.refused,
+        "runs": base.run_ids,
         "eval": eval_key(spec),
         "spec": {**spec.as_dict(), "sha": part_hashes(spec, ev)},
-        "estimate": estimate(s, refused, weights, source, meas),
-        "use_cases": None if refused else use_case_rows(s, weights, meas),
-        "design": design_key(s),
-        "measurement": meas,
+        "estimate": base.est,
+        "use_cases": base.rows(),
+        "design": design_key(base.s),
+        "measurement": base.meas,
     }
+    comparison = decision_mod.comparison(ev, base, cand) if cand else None
+    report["comparison"] = comparison
+    report["decision"] = decision_mod.decide(ev, base, cand, comparison)
     return report
 
 
