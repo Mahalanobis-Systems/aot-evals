@@ -35,7 +35,8 @@ has a folder inside it:
 
 ```
 evals/agents/<agent>/            the agent system
-  agent.yaml                     inventory of the system and how to invoke it end to end
+  agent.yaml                     inventory of the system (its components: where the evals go) and
+                                 how to invoke it end to end
   discovery.md                   the Assess report (unchanged)
   env/                           sandbox fakes, shared by the system's evals
   data/                          imported traces: the frames evals draw from
@@ -61,6 +62,37 @@ evals/agents/<agent>/            the agent system
   labeling standard and the journal. **What is not:** cases, checks, judges and their calibration,
   labels, runs and reports. A judge's error rates belong to the population it was calibrated on.
 - `--eval <id>` selects an eval, as `--agent` selects an agent. With one eval it is optional.
+
+**The parts of the system** (estimators §1, rule 3). agent.yaml's `components` lists each part the
+orchestrator calls, so the specs can say why a part has an eval of its own or doesn't
+(`boundaries.py`):
+
+```yaml
+components:
+  - id: refund-subagent
+    kind: subagent          # subagent: called with a handoff the orchestrator writes
+                            # route: handed the user's request as sent, picked by a router
+                            # step: runs inside the orchestrator's context
+    context: own            # own: starts from its handoff (a context boundary) | shared
+    called_by: the orchestrator's refund route
+    model: claude-haiku-5-5
+    owner: refunds team
+    ships_separately: true  # its own prompt, model or owner, changed on its own schedule
+    use_case: refund        # the end-to-end use case whose requests reach it
+```
+
+| Component | Where it is graded |
+|---|---|
+| subagent, own context, ships separately | an eval of its own, drawn from the handoffs it receives (rules 3, 4), gated on the end-to-end eval (rule 27) |
+| subagent, own context, ships only with the system | checks in the end-to-end eval: an eval of it would drive no decision |
+| route whose model ships on its own | a use case gate in the end-to-end eval (rule 20), not an eval of its own |
+| route that ships with the system | a use case of the end-to-end eval |
+| step, or a shared context | checks on its steps in the end-to-end eval |
+
+A route's input is the user's request, so its population is the routed share of requests: a use
+case of the end-to-end eval. A subagent's input is a handoff the orchestrator writes, a population
+of its own. The discovery report names the boundaries first (`boundaries:` in its front matter,
+the same fields), and `build` drafts agent.yaml's list from it.
 
 ## 2. The eval spec: eval.yaml
 
@@ -183,13 +215,13 @@ invoke:                            # component evals only; the system eval uses 
 
 | Field | Part | Required | Rule |
 |---|---|---|---|
-| `estimand.unit` | Estimand | yes | `system` once per agent; `component` needs `component` and `boundary` |
+| `estimand.unit` | Estimand | yes | `system` once per agent; `component` needs `component` and `boundary`, and the component in agent.yaml's `components`, placed at an eval of its own (§1, rule 3): missing when it isn't listed or its context or `ships_separately` isn't stated; invalid for a shared context, a step, a route or a part that ships only with the system |
 | `estimand.quantity` | Estimand | yes | |
-| `estimand.population.frame` | Estimand | yes | an import id; a component's frame holds handoffs (rule 4) |
+| `estimand.population.frame` | Estimand | yes | an import id; a component's frame is an import whose `handoffs.component` is the component (rule 4), else missing; one extracted from another frame than the end-to-end eval's current one is a note (rule 26) |
 | `estimand.use_cases[]` | Estimand | yes | `id`, `definition`, `example`, `share`; shares sum to 1 ± 0.02 |
 | `use_cases[].cost` | Estimand | when `weights: cost` | a positive number; null means not stated |
 | `estimand.weights` | Estimand | yes | an unstated weight is unknown, never 1 |
-| `estimand.decision` | Estimand | yes | `action` and `owner` |
+| `estimand.decision` | Estimand | yes | `action` and `owner`; a component eval with the end-to-end eval's action and owner is invalid (rule 1) |
 | `design.quality_set` | Design | yes | `seed`; `oversample` optional |
 | `design.cluster_key` | Design | yes | a case field; `id` means every case is its own cluster |
 | `measurement.failure_modes[]` | Measurement | yes | exactly one counted `check` per mode |
@@ -205,7 +237,8 @@ invoke:                            # component evals only; the system eval uses 
 | `decision_rule.looks` | Decision rule | yes | default `fixed` |
 | `decision_rule.combine` | Decision rule | yes | `all` (default): the action needs every gate (the headline and each use case gate) to pass; `any`: one gate alone triggers it. `also_requires` always must pass (rule 27) |
 | `decision_rule.multiplicity` | Decision rule | when one gate alone can trigger the action | required with `combine: any` and more than one gate, and `none` is then invalid; otherwise defaults to `none`, the intersection–union case (statistics §4.6) |
-| `decision_rule.also_requires` | Decision rule | for a component eval | must name the agent's end-to-end eval (rule 27) |
+| `decision_rule.also_requires` | Decision rule | for a component eval | must name the agent's end-to-end eval (rule 27), with a paired test (`non_inferiority` or `superiority`); a threshold there is invalid (rule 19) |
+| `decision_rule.use_case_gates` | Decision rule | per separately shipped route | the end-to-end eval needs a gate on the use case of each route in agent.yaml whose model ships on its own (rule 20); a route with no `use_case`, or one this eval lacks, is missing |
 | `measurement.people.floors` | Measurement | no | `{catch, clean}`, each a rate or null; null (the default) means from `max_inflation`, as for a judge |
 | `measurement.people.margin`, `labels_per_kind` | Measurement | no | defaults 0.10 and `auto` |
 | `invoke` | Agent contract | for a component eval | `command` as argv; a system eval has none (it uses `agent.yaml`) |
@@ -247,7 +280,25 @@ A case keeps the 1.x shape. Changes:
 | `trigger`, `inputs`, `start_state`, `followups`, `expected_end_state` | unchanged: these are what the agent receives | |
 | `requirements`, `rules_not_applicable`, `provenance`, `screen` | unchanged | |
 
-For a component eval, `trigger` and `inputs` hold the handoff as the component receives it.
+For a component eval, `trigger` and `inputs` hold the handoff as the component receives it, and
+`provenance.source_trace` names the end-to-end trace it came from.
+
+**Frames of handoffs** (rule 4; `handoffs.py`). A component eval's frame is the handoffs it
+receives in production, taken from end-to-end traces, never written by hand. Each row of an
+end-to-end frame records its handoffs as `handoffs: [{to, use_case, <cluster key>, trigger, inputs,
+start_state, expected_end_state, ...}]` (or the case fields under `input`); `to` names the
+component as agent.yaml does. `aot-evals --eval <component eval> handoffs [--from ID] [--id ID]`
+reads the end-to-end eval's frame (or `--from`) and imports one row per handoff into the eval's
+component, with id `<trace>.h<k>`, `source_trace` and `source_use_case`, as a new frame (default id:
+the spec's `population.frame`). Its manifest entry records `handoffs: {component, from,
+from_sha256, traces, traces_with_handoff, multi, source_use_cases}`. Handoffs from one trace are
+related, so when a trace hands off more than once the command says so and `cluster_key:
+source_trace` counts them once (rule 9). `import FILE --handoffs-of COMPONENT` records handoffs the
+team's own tracing captured as they happened (`handoffs: {component, from: null, captured: true}`).
+`handoffs --scan` counts the handoffs into each component in a frame, beside agent.yaml's
+`components`: where the traces show context boundaries. A routing change makes a new end-to-end
+frame, so the handoffs are extracted again into a new frame, which changes the component eval's
+estimand hash: a revision (rule 26).
 
 **Quality cases come from `aot-evals draw`, never by hand.** It draws from the frame with the
 eval's seed, stratified by use case and oversampled as declared, records `inclusion_prob` on each
@@ -443,7 +494,11 @@ reported runs, so a paired rule with no candidate is `unknown`.
   correction (intersection–union); `any` adjusts the p-values by `multiplicity` and passes when one
   gate passes at its adjusted p. `also_requires` must pass either way: each entry is tested on the
   other eval's candidate runs that declare the same variable at the same agent commit, against that
-  eval's baseline, and is unknown (naming the command) until they exist.
+  eval's baseline, and is unknown (naming the command) until they exist. Uncommitted changes on either side
+  leave it unknown (the comparison refuses them). For a component eval whose frame records the
+  end-to-end use cases its handoffs came from (`handoffs.source_use_cases`), the end-to-end runs
+  must hold a case of one of them, or they never ran the component and the entry is unknown
+  (rule 27).
 - **Constraints** are read per use case on the decided runs, each breach marked `new` when the
   baseline did not have it. Gates that pass with a breach are a `trade`.
 - **Looks.** Under `looks: fixed` `report` and `compare` append each decision with a result to
@@ -483,12 +538,16 @@ Unchanged in purpose: `start`, `doctor`, `init`, `status`, `validate`, `import`,
 | `validate`, `status` | on an agent folder with 2.0 evals, read the specs: each missing, invalid and (with `--warnings`) noted field, and the defaults filled |
 | `draw [--n UC=N] [--skip ID --reason R] [--prune] [--dry-run]` | new: seeded stratified draw of the quality set from the frame, with π (§3) |
 | `plan [--assumed-rate R] [--flip-rate D] [--total N] [--write]` | replaces `allocate`; targets from the decision rule (§2) |
-| `screen`, `run`, `report` | read a 2.0 eval: `run --use-case`, k from `measurement.trials` (`auto`: §5); `screen --judges` with the eval's calibrated judges; `report` writes the §6 keys, with `comparison` and the decision on the candidate under `--candidate` (`--html` not yet) |
+| `screen`, `run`, `report` | read a 2.0 eval: `run --use-case`, k from `measurement.trials` (`auto`: §5); `screen --judges` counts the eval's calibrated judges in every screen as its code checks, so a use case only a judge grades can pass (the judge must fail the do-nothing run); `report` writes the §6 keys, with `comparison` and the decision on the candidate under `--candidate` (`--html` not yet) |
 | `compare` | reads a 2.0 eval: the paired comparison and the decision on the candidate (§5, §6), saved under `report/comparisons/` |
 | `log --kind decision` | on a 2.0 eval, records the eval and its `spec_sha`, so a decision-rule change journaled before the candidate runs lets the comparison stand (§5) |
 | `label`, `calibrate`, `judge`, `agreement` | read a 2.0 eval: per-judge labels and calibration in catch and clean pass rates (§4); whole-run labels, rulings and triage in `<eval>/labels/` (§6) |
 | `migrate --to 2` | new: 1.x suite to a 2.0 end-to-end eval ([§8](#8-migration-from-1x)) |
-| `build`, `components`, `discovery-page` | rewritten around the four parts (stage 7) |
+| `handoffs [--from ID] [--id ID] [--scan] [--dry-run]` | new: a component eval's frame, the handoffs into its component extracted from the end-to-end traces (§3); `--scan` counts the handoffs into each component beside agent.yaml |
+| `import --handoffs-of COMPONENT` | new: an import of handoffs captured as they happened, usable as that component's frame |
+| `build [--run]` | on a new agent or one with 2.0 evals: creates the end-to-end eval, drafts agent.yaml's `components` from the discovery report's `boundaries` and an eval for each component §1 gives one, drafts the use cases (shares from the task types, costs null), the coverage list and one generic code check on every case; prints per eval the agent contract and the four parts, each done or naming its first missing field, a drawn quality set, screened cases and a baseline, then the context boundaries; `--run` runs each eval that can run (smoke, baseline, report). A suite with 1.x files builds as 1.x |
+| `components` | the optimization loop's components grouped by part (agent contract and sandbox, estimand, sampling design, measurement model, decision rule), read from the agent's evals |
+| `discovery-page` | adds "Where the evals go": each boundary in the front matter with where it is graded |
 | `demo` | the online store ([§9](#9-the-online-store-example)) |
 
 ## 8. Migration from 1.x
@@ -538,6 +597,10 @@ fixture. It is the agent from the [problems](problems.md):
 - **Two evals.** `end-to-end` (unit: the system; use cases order status 0.70, returns 0.20, address
   0.08, refunds 0.02; costs $1, $5, $20, $50; weights: cost; decision: non-inferiority, margin 2
   points) and `refunds` (unit: the subagent; frame: refund handoffs; the threshold test above).
+  agent.yaml's `components` places the refund subagent at an eval of its own (own context, its own
+  team) and the order tools at checks in `end-to-end` (they run in the orchestrator's context). The
+  trace export records each refund handoff, so `aot-evals --eval refunds handoffs` extracts the
+  refunds frame from it.
 - **Checks.** Code checks for end state, amount and side effects; one policy judge at catch 0.95
   and clean 0.99 on a labeled set shipped with the example, and a weaker one (0.80, 0.90) that the
   floor refuses. At those point rates the policy judge costs 1.43× at a 3% failure rate, but the

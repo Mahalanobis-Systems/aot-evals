@@ -468,9 +468,35 @@ def _required(ev, req: dict, base: Side, cand: Side | None) -> dict:
     if problems:
         out.update(reason=f"{name}: " + "; ".join(problems), runs=theirs, baseline_runs=base_runs)
         return out
+    unreached = _unreached(ev, other, theirs)
+    if unreached:
+        out.update(reason=unreached, runs=theirs, baseline_runs=base_runs)
+        return out
     g = evaluate(f"also_requires:{name}", rule, ob, oc)
     out.update(result=g["result"], reason=g["reason"], runs=theirs, baseline_runs=base_runs, p=g["p"], gate=g)
     return out
+
+
+def _unreached(ev, other, runs: list[str]) -> str | None:
+    """A component eval's frame records which end-to-end use cases hand off to the component; the
+    end-to-end runs of the change must hold cases of them, or they never ran the component."""
+    unit = ev.spec().part("estimand").get("unit") or {}
+    if not isinstance(unit, dict) or unit.get("kind") != "component":
+        return None
+    pop = ev.spec().part("estimand").get("population") or {}
+    frame = pop.get("frame") if isinstance(pop, dict) else None
+    entry = next((x for x in ev.exports() if isinstance(x, dict) and x.get("id") == frame), None)
+    h = (entry or {}).get("handoffs") if isinstance((entry or {}).get("handoffs"), dict) else {}
+    routed = {uc for uc, n in (h.get("source_use_cases") or {}).items() if n and uc != "(none)"}
+    if not routed:
+        return None
+    by_id = {c.get("id"): c.get("use_case") for c in other.cases()}
+    ran = {by_id.get(cid) for r in runs
+           for cid in ((other.run_manifest(r) or {}).get("case_set") or {}).get("ids") or []}
+    if routed & ran:
+        return None
+    return (f"{other.id}'s runs of this change hold no case of {', '.join(sorted(routed))}, the use case(s) "
+            f"whose requests reach {unit.get('component')}: they never ran it")
 
 
 # ---- constraints -----------------------------------------------------------------------------

@@ -488,7 +488,8 @@ def _refunds(s: Store, tmp_path, *, judge: bool, frame: dict | None = None) -> N
             for uc, n in frame.items() for i in range(n)]
     (tmp_path / "handoffs.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
     assert s.cli("import", str(tmp_path / "handoffs.jsonl"), "--id", "refund-handoffs-2026-10", "--source",
-                 "fixture", "--query", "all", "--window", "2026-10-01..2026-10-31", eval_id="refunds") == 0
+                 "fixture", "--query", "all", "--window", "2026-10-01..2026-10-31",
+                 "--handoffs-of", "refund-subagent", eval_id="refunds") == 0
     assert s.cli("draw", *[a for uc, n in frame.items() for a in ("--n", f"{uc}={n}")],
                  eval_id="refunds") == 0
     assert s.cli("screen", "--read-by", "tester", "--all", eval_id="refunds") == 0

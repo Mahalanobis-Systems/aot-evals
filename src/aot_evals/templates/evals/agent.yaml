@@ -17,6 +17,20 @@ stable_window:
   since:                # date of the last behaviour-changing edit
   evidence:             # how that was established (commit log, runtime records, owner confirmed on <date>)
 
+# The parts of the system and their context boundaries (estimators §1, rule 3): one entry per
+# subagent, route and shared step. Each says where it is graded (`aot-evals components`). An agent
+# with one context writes `components: []`.
+# components:
+#   - id: refund-subagent
+#     kind: subagent        # subagent: gets a handoff the orchestrator writes | route: gets the user's
+#                           #   request as sent, picked by a router | step: runs in the orchestrator's context
+#     context: own          # own: starts from its handoff (a context boundary) | shared
+#     called_by: the orchestrator's refund route
+#     model: claude-haiku-5-5
+#     owner: refunds team
+#     ships_separately: true   # its own prompt, model or owner, changed on its own schedule
+#     use_case: refund      # the end-to-end use case whose requests reach it
+
 # How to invoke it: the agent contract (references/agent-contract.md in the plugin).
 invoke:
   command: []           # argv, e.g. [python, -m, my_agent.eval_entry]; runs in `cwd` with the case JSON on stdin

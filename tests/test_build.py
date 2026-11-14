@@ -13,10 +13,14 @@ from aot_evals.repo import Evals
 
 
 def test_build_drafts_categories_and_a_check_from_the_discovery_report(tmp_path, capsys):
+    """A 1.x suite (its files written by `init`) builds the 1.x way until `migrate --to 2`; a new
+    agent builds as 2.0 (test_components)."""
     suite = tmp_path / "repo" / "evals" / "agents" / "cal"
     suite.mkdir(parents=True)
     shutil.copyfile(FIXTURE / "evals" / "discovery.md", suite / "discovery.md")
     subprocess.run(["git", "init", "-q"], cwd=tmp_path / "repo", check=True)
+    assert cli.main(["--evals", str(suite), "init"]) == 0
+    assert not build.is_v2(Evals(suite))
     assert cli.main(["--evals", str(suite), "build"]) == 0
     out = capsys.readouterr().out
     ev = Evals(suite)

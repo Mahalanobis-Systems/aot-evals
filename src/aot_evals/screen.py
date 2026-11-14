@@ -25,12 +25,17 @@ wording fails correct answers written another way (in our experiments: "$1.413M"
 - **a non-answer fails**: "Done!", or the request echoed back, with nothing changed fails at
   least one check. Unlike do-nothing, this applies when no change is expected: a question whose
   answer is "that isn't on record" still needs an answer (in our experiments, a bare "Done!" passed every such
-  case in two suites). With `--judges`, calibrated judges count in this screen and the liar's;
+  case in two suites);
 - **a wrong number fails**: the reference answer with every number changed fails at least one
   check. Reported, not blocking: it says whether anything checks the answer's numbers, which is
   where every suite in our experiments was blind.
 
 The screens run the checks against the states written in the case. They do not run the agent.
+
+With `--judges`, the case's calibrated judges count in every screen as its code checks do (their
+calls cost money, so only then): the reference must pass them, and doing nothing, a non-answer or
+the liar must fail one. A use case whose end state only a judge grades has no code check to fail a
+do-nothing run, so it can pass screening only with `--judges`.
 """
 
 from __future__ import annotations
@@ -48,7 +53,9 @@ SUCCESS_CLAIM = ("Done. I completed everything you asked: all changes were made 
 
 def screen_case(ev: Evals, case: dict, judges=None) -> dict:
     """`judges`, when given, is a callable (start, end) -> [(check_id, passed)] for the case's
-    calibrated judges; the non-answer and liar screens then count their verdicts too."""
+    calibrated judges. Their verdicts then count in every screen as the code checks' do: the
+    reference must pass them, and doing nothing, a non-answer or the liar must fail one. A use case
+    whose end state only a judge grades can pass screening only this way."""
     checks = ev.checks_for_case(case, check_type="code")
     start_world = case.get("start_state")
     expected = case.get("expected_end_state") or {}
@@ -73,19 +80,30 @@ def screen_case(ev: Evals, case: dict, judges=None) -> dict:
         "dropped": bool(prior.get("dropped", False)),
         "drop_reason": prior.get("drop_reason"),
     }
-    if not checks:
-        result["notes"].append("no code checks apply to this case")
+    judged = judges is not None and bool(ev.checks_for_case(case, check_type="judge"))
+
+    def verdicts(end) -> list[tuple[str, bool | None, str]]:
+        """(check, passed, detail) for every code check and, with judges, every calibrated judge."""
+        out = [(r.id, r.passed, r.detail) for r in
+               (run_check(cid, ev.code_check_path(cid), start, end, case) for cid, _ in checks)]
+        if judges is not None:
+            out += [(cid, v, "judge") for cid, v in judges(start, end)]
+        return out
+
+    ref, silent, claim = verdicts(ref_end), verdicts(nothing_silent), verdicts(nothing_claim)
+    if not ref:
+        jids = [cid for cid, _ in ev.checks_for_case(case, check_type="judge")]
+        result["notes"].append(
+            "no code checks apply to this case" + (
+                f"; its judges ({', '.join(jids)}) are not calibrated, so they cannot screen it yet"
+                if judged else f"; a judge grades it ({', '.join(jids)}): screen with --judges" if jids else ""))
         return result
 
-    ref = [run_check(cid, ev.code_check_path(cid), start, ref_end, case) for cid, _ in checks]
-    silent = [run_check(cid, ev.code_check_path(cid), start, nothing_silent, case) for cid, _ in checks]
-    claim = [run_check(cid, ev.code_check_path(cid), start, nothing_claim, case) for cid, _ in checks]
-
-    errored = [r.id for r in ref + silent + claim if r.passed is None]
+    errored = [cid for cid, v, _ in ref + silent + claim if v is None]
     if errored:
         result["notes"].append(f"checks raised during screen: {sorted(set(errored))}")
-    result["reference_passes"] = all(r.passed is True for r in ref)
-    result["failing_reference_checks"] = [f"{r.id}: {r.detail}" for r in ref if r.passed is not True]
+    result["reference_passes"] = all(v is True for _, v, _ in ref)
+    result["failing_reference_checks"] = [f"{cid}: {d}" for cid, v, d in ref if v is not True]
 
     no_change_expected = _same(exp_world, start_world) and not exp_output
     if no_change_expected:
@@ -93,18 +111,19 @@ def screen_case(ev: Evals, case: dict, judges=None) -> dict:
         result["notes"].append("expected end state equals start state: doing nothing is the "
                                "reference, so the do-nothing screen does not apply")
     else:
-        result["donothing_fails"] = any(r.passed is False for r in silent)
+        result["donothing_fails"] = any(v is False for _, v, _ in silent)
+        if not result["donothing_fails"] and not judged and ev.checks_for_case(case, check_type="judge"):
+            result["notes"].append("doing nothing passes every code check; if a judge grades this case's "
+                                   "end state, screen with --judges")
     result["claim_sensitive_checks"] = [
-        s.id for s, c in zip(silent, claim, strict=True) if s.passed is False and c.passed is True
+        s[0] for s, c in zip(silent, claim, strict=True) if s[1] is False and c[1] is True
     ]
 
     def run_all(end):
         return [run_check(cid, ev.code_check_path(cid), start, end, case) for cid, _ in checks]
 
     def fails(end) -> bool:
-        if any(r.passed is False for r in run_all(end)):
-            return True
-        return bool(judges) and any(v is False for _, v in judges(start, end))
+        return any(v is False for _, v, _ in verdicts(end))
 
     if exp_output:
         trigger = case.get("trigger") or {}
@@ -113,7 +132,8 @@ def screen_case(ev: Evals, case: dict, judges=None) -> dict:
         result["non_answer_fails"] = all(fails({"world": start_world, "output": o}) for o in non_answers)
         if not result["non_answer_fails"]:
             result["notes"].append("a non-answer ('Done!', or the request echoed back) with nothing changed passes"
-                                   + ("" if judges else "; if a judge decides this case, screen with --judges"))
+                                   + ("" if judges is not None else
+                                      "; if a judge decides this case, screen with --judges"))
     else:
         result["non_answer_fails"] = None
 

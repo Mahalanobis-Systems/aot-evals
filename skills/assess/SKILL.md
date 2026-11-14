@@ -79,6 +79,12 @@ point, and where the records are.
    of its instructions lives (files, scheduler text, files outside git) and which one wins when
    they disagree; what it remembers between runs; each guard rail and whether instructions,
    code or permissions enforce it; dated history of changes; how stable it is; contradictions.
+   **Its context boundaries**: every subagent, route and step the orchestrator calls, and for each
+   whether it starts from a handoff the orchestrator writes (its own context: a subagent), gets the
+   user's request as sent because a router picked it (a route), or runs inside the orchestrator's
+   context (a step); where it is called from; its own prompt, model and owner, if any; and whether
+   it is changed on its own schedule (git history per folder, separate owners, separate deploys).
+   If traces exist, say whether they record each handoff and its input.
 2. **Tools and test space.** Every outside service: what it reads and writes, side effects,
    whether they can be undone, its kind (fixed data, live internet, changing records, changes
    records, acts on the outside world, own state), login names only. Whether any model call
@@ -162,7 +168,7 @@ overview:                        # one entry per pillar, all four, these keys
     state: done                  # done | partial | risk | todo
     label: Clear                 # 1-3 words for the state, e.g. Understood, Partly there, Not safe yet
     open: ...                    # what's still open, under 12 words; "Nothing open" if none
-  agent_architecture: {...}      # code, prompts, models, tools, production setup, traces
+  agent_architecture: {...}      # code, prompts, models, tools, production setup, traces, context boundaries
   safe_testing_env: {...}        # can runs touch real people, data or money; cost and speed
   golden_use_cases: {...}        # task types found, cases that exist, how many are needed; name the empty grid cells
 components:                      # the optimization loop's parts that exist today (method §4.3); only
@@ -174,6 +180,16 @@ components:                      # the optimization loop's parts that exist toda
                                  #   pool, judges, qualitative, synthetic, engine, change-scoping, ab,
                                  #   trace-monitoring, weighting, business, distribution, significance,
                                  #   noise-floor, misclassification, runner
+boundaries:                      # the context boundaries read 1 found (estimators §1); leave out for one context
+  - id: refund-subagent          # as the code names it
+    kind: subagent               # subagent (gets a handoff) | route (gets the request as sent) | step (shared context)
+    context: own                 # own | shared
+    called_by: the orchestrator's refund route
+    model: claude-haiku-5-5
+    owner: refunds team
+    ships_separately: true       # its own prompt, model or owner, changed on its own schedule; null if unknown
+    use_case: refund             # the task type whose requests reach it
+    evidence: "`agent/refunds.py`, its own prompt; 14 commits in 30 days, none touching the orchestrator"
 grid:                            # the golden test case grid: task types (rows) by situations (columns)
   note: ...                      # one sentence on how the targets were set (optional)
   columns:                       # from the situations `aot-evals benchmarks` printed; order as printed
@@ -199,6 +215,14 @@ next:
     - {name: ..., why: ...}      # what it gets, and its catch, in one sentence
 ---
 ```
+
+**The boundaries.** Fill `boundaries` from read 1. They decide how many evals the agent gets: one
+end to end always, plus one for each subagent that has its own context and ships on its own (rule
+3). A route behind a router is a use case of the end-to-end eval, with a gate of its own when its
+model ships on its own; a step in the orchestrator's context is graded by checks in the end-to-end
+eval. Leave `ships_separately` null when discovery can't tell, and ask the owner in the next steps.
+The page shows them under "Where the evals go", and `aot-evals build` drafts agent.yaml's
+`components` from them and creates the evals they call for.
 
 **The components.** Fill `components` from what the four reads found: the test space and its
 fakes, record and replay, seeded or anonymized data (reads 2 and 4); earlier eval work, golden
