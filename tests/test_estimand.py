@@ -352,16 +352,16 @@ def test_plan_keeps_status_marks_and_takes_a_total(store):
 def test_plan_for_a_threshold_test_counts_the_judge(store, tmp_path):
     """The refund eval: policy errors under 5%, planned against a true rate of 1%. Its policy judge
     has no calibration, so it is planned at max_inflation (2.0): twice the code check's 123."""
-    ref = store.agent / "refunds"
+    ref = store.agent / "refund-subagent"
     ref.mkdir()
-    shutil.copyfile(STORE / "refunds" / "eval.yaml", ref / "eval.yaml")
+    shutil.copyfile(STORE / "refund-subagent" / "eval.yaml", ref / "eval.yaml")
     (ref / "checks" / "code").mkdir(parents=True)
     (ref / "checks" / "judge").mkdir(parents=True)
     for cid in ("amount-matches", "no-side-effects"):
         (ref / "checks" / "code" / f"{cid}.py").write_text(PASS)
     (ref / "checks" / "judge" / "policy-judge.md").write_text("---\nid: policy-judge\n---\nIs it policy?\n")
-    assert store.cli("plan", "--assumed-rate", "0.01", "--json", eval_id="refunds") == 0
-    p = __import__("aot_evals.plan", fromlist=["plan"]).plan(Evals(store.agent).eval("refunds"),
+    assert store.cli("plan", "--assumed-rate", "0.01", "--json", eval_id="refund-subagent") == 0
+    p = __import__("aot_evals.plan", fromlist=["plan"]).plan(Evals(store.agent).eval("refund-subagent"),
                                                               assumed_rate=0.01)
     h = p["headline"]
     assert h["n_code"] == stats.threshold_n(0.05, 0.01) == 123

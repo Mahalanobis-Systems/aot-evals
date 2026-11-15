@@ -64,13 +64,13 @@ def _drop_refund_subagent(a):
 
 AGENT_MUTATIONS = [
     # (eval, mutate agent.yaml, kind, field)
-    ("refunds", _drop_refund_subagent, "missing", "estimand.unit.component"),
-    ("refunds", lambda a: _comp(a).update(context="shared"), "invalid", "estimand.unit.component"),
-    ("refunds", lambda a: _comp(a).update(kind="route"), "invalid", "estimand.unit.component"),
-    ("refunds", lambda a: _comp(a).update(ships_separately=False), "invalid", "estimand.unit.component"),
-    ("refunds", lambda a: _comp(a).pop("ships_separately"), "missing",
+    ("refund-subagent", _drop_refund_subagent, "missing", "estimand.unit.component"),
+    ("refund-subagent", lambda a: _comp(a).update(context="shared"), "invalid", "estimand.unit.component"),
+    ("refund-subagent", lambda a: _comp(a).update(kind="route"), "invalid", "estimand.unit.component"),
+    ("refund-subagent", lambda a: _comp(a).update(ships_separately=False), "invalid", "estimand.unit.component"),
+    ("refund-subagent", lambda a: _comp(a).pop("ships_separately"), "missing",
      "agent.yaml components[refund-subagent].ships_separately"),
-    ("refunds", lambda a: _comp(a).pop("context"), "missing", "agent.yaml components[refund-subagent].context"),
+    ("refund-subagent", lambda a: _comp(a).pop("context"), "missing", "agent.yaml components[refund-subagent].context"),
     # behind a router, a route whose model ships on its own is a use case gate end to end (rule 20)
     ("end-to-end", lambda a: a["components"].append(
         {"id": "returns-bot", "kind": "route", "ships_separately": True, "use_case": "return"}),
@@ -123,7 +123,7 @@ def _set_frame(ev: Evals, handoffs_meta) -> None:
 def test_a_component_frame_must_hold_its_handoffs(spec_store, meta):  # noqa: F811
     """Rule 4: a frame imported without its handoffs, or another component's, is missing."""
     _set_frame(spec_store, meta)
-    s = spec_store.eval("refunds").spec()
+    s = spec_store.eval("refund-subagent").spec()
     assert _issues(s) == [("missing", "estimand.population.frame")], spec.render(s)
     assert "rule 4" in s.missing[0].why and "handoffs --from support-requests-2026-10" in s.missing[0].why
     assert s.blocked("draw") and s.blocked("estimate") and not s.blocked("plan")
@@ -132,13 +132,13 @@ def test_a_component_frame_must_hold_its_handoffs(spec_store, meta):  # noqa: F8
 def test_handoffs_from_an_old_end_to_end_frame_are_a_note(spec_store):  # noqa: F811
     """Rule 26: the end-to-end eval moved to a new frame; the handoffs came from the old one."""
     _set_frame(spec_store, {"component": "refund-subagent", "from": "support-requests-2026-09"})
-    s = spec_store.eval("refunds").spec()
+    s = spec_store.eval("refund-subagent").spec()
     assert s.complete
     assert [(n.field, "rule 26" in n.why) for n in s.notes] == [("estimand.population.frame", True)]
 
 
 def test_a_boundary_without_its_eval_is_a_note(spec_store):  # noqa: F811
-    shutil.rmtree(spec_store.p("refunds"))
+    shutil.rmtree(spec_store.p("refund-subagent"))
     s = spec_store.eval("end-to-end").spec()
     assert s.complete
     assert [n.field for n in s.notes] == ["agent.yaml components[refund-subagent]"]
@@ -184,15 +184,15 @@ def traced(tmp_path, monkeypatch):
     _write(Evals(s.agent), "end-to-end", data)
     from test_spec import STORE
 
-    (s.agent / "refunds").mkdir()
-    shutil.copyfile(STORE / "refunds" / "eval.yaml", s.agent / "refunds" / "eval.yaml")
+    (s.agent / "refund-subagent").mkdir()
+    shutil.copyfile(STORE / "refund-subagent" / "eval.yaml", s.agent / "refund-subagent" / "eval.yaml")
     return s
 
 
 def test_handoffs_are_extracted_from_end_to_end_traces(traced, capsys):
     s = traced
     capsys.readouterr()
-    assert s.cli("handoffs", eval_id="refunds") == 0
+    assert s.cli("handoffs", eval_id="refund-subagent") == 0
     out = capsys.readouterr().out
     assert "9 handoff(s) into refund-subagent from 8 of 12 trace(s) in support-traces-2026-10" in out
     assert "1 trace(s) hand off more than once" in out and "cluster_key: source_trace" in out
@@ -208,26 +208,26 @@ def test_handoffs_are_extracted_from_end_to_end_traces(traced, capsys):
     assert first["trigger"] == {"type": "handoff", "text": "refund order 0"} and "to" not in first
     assert {r["id"] for r in rows} >= {"tr_000.h0", "tr_000.h1"}
     # the frame is now what the component receives: nothing about it is missing
-    s2 = ev.eval("refunds").spec()
+    s2 = ev.eval("refund-subagent").spec()
     assert not [i for i in s2.missing if i.field == "estimand.population.frame"], spec.render(s2)
     # and a second extraction under the same id is refused, not appended
     with pytest.raises(Exception, match="already in data/export.manifest.json"):
-        handoffs.extract(ev.eval("refunds"))
+        handoffs.extract(ev.eval("refund-subagent"))
 
 
 def test_drawn_handoff_cases_point_at_their_trace(traced):
     s = traced
-    assert s.cli("handoffs", eval_id="refunds") == 0
+    assert s.cli("handoffs", eval_id="refund-subagent") == 0
     assert s.cli("draw", "--n", "full-refund=2", "--n", "partial-refund=2", "--n", "gift-card=2",
-                 eval_id="refunds") == 0
-    cases = Evals(s.agent).eval("refunds").cases()
+                 eval_id="refund-subagent") == 0
+    cases = Evals(s.agent).eval("refund-subagent").cases()
     assert cases and all(c["provenance"]["source_trace"] == c["id"].split(".h")[0] for c in cases)
     assert all(c["provenance"]["export"] == "refund-handoffs-2026-10" for c in cases)
 
 
 def test_handoffs_scan_shows_the_boundaries_in_the_traces(traced, capsys):
     capsys.readouterr()
-    assert traced.cli("handoffs", "--scan", eval_id="refunds") == 0
+    assert traced.cli("handoffs", "--scan", eval_id="refund-subagent") == 0
     out = capsys.readouterr().out
     assert "refund-subagent" in out and "9 handoff(s) in 8 trace(s)" in out
     assert "fraud-check" in out and "not in agent.yaml's components" in out
@@ -253,13 +253,13 @@ def two_evals(tmp_path, monkeypatch):
 
 
 def _refunds_candidate(s, *variable: str) -> str:
-    assert s.cli("run", "--purpose", "candidate", *variable, eval_id="refunds") == 0
-    return Evals(s.agent).eval("refunds").runs("candidate")[-1]["run_id"]
+    assert s.cli("run", "--purpose", "candidate", *variable, eval_id="refund-subagent") == 0
+    return Evals(s.agent).eval("refund-subagent").runs("candidate")[-1]["run_id"]
 
 
 def _decision(s, rc: str) -> dict:
-    assert s.cli("report", "--candidate", rc, eval_id="refunds") == 0
-    return json.loads((s.agent / "refunds" / "report" / "report.json").read_text())["decision"]
+    assert s.cli("report", "--candidate", rc, eval_id="refund-subagent") == 0
+    return json.loads((s.agent / "refund-subagent" / "report" / "report.json").read_text())["decision"]
 
 
 def test_also_requires_refuses_an_end_to_end_run_with_uncommitted_changes(two_evals):
@@ -428,7 +428,7 @@ def test_the_discovery_page_shows_where_the_evals_go():
 
 def test_the_component_eval_runs_its_own_invoke(two_evals):
     """A component eval invokes the component, never the system (v2-design §2)."""
-    m = Evals(two_evals.agent).eval("refunds").runs("baseline")[-1]
+    m = Evals(two_evals.agent).eval("refund-subagent").runs("baseline")[-1]
     assert m["invoke"]["command"][-1] == "agent/refunds.py"
     e2e = Evals(two_evals.agent).eval("end-to-end").runs("baseline")[-1]
     assert e2e["invoke"]["command"][-1] == "agent/store.py"
