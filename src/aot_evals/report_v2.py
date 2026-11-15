@@ -351,7 +351,9 @@ class Side:
     refusal, the measurement model, the estimate and the per-use-case rows. A comparison and a
     decision read two sides scored the same way."""
 
-    def __init__(self, ev: Eval, run_ids: list[str]):
+    def __init__(self, ev: Eval, run_ids: list[str], reference: Side | None = None):
+        """`reference`: the baseline side when this side is a candidate; its judges' floors are
+        then read at the reference's rates (measurement.section)."""
         from .measurement import section
 
         self.ev = ev
@@ -359,13 +361,18 @@ class Side:
         self.s = Scored(ev, run_ids)
         self.weights, self.source = use_case_weights(self.spec)
         self.refused = refusal(ev, self.spec, self.s.manifests)
-        self.meas = section(self.s, self.weights, self.refused)
+        self.meas = section(self.s, self.weights, self.refused,
+                            reference.floor_rates() if reference is not None else None)
         self.est = estimate(self.s, self.refused, self.weights, self.source, self.meas)
         self._rows: list[dict] | None = None
 
     @property
     def manifests(self) -> list[dict]:
         return self.s.manifests
+
+    def floor_rates(self) -> dict:
+        """Each judged failure mode's floor rate on these runs, for a candidate to be read at."""
+        return {r["id"]: r.get("floor_rate") for r in self.meas["failure_modes"] if r["type"] == "judge"}
 
     @property
     def run_ids(self) -> list[str]:
@@ -388,7 +395,7 @@ def build(ev: Eval, run_ids: list[str] | None = None, candidate_runs: list[str] 
     spec = ev.spec()
     run_ids = run_ids if run_ids is not None else default_runs(ev)
     base = Side(ev, run_ids)
-    cand = Side(ev, candidate_runs) if candidate_runs else None
+    cand = Side(ev, candidate_runs, reference=base) if candidate_runs else None
     report = {
         "schema": SCHEMA,
         "generated": now_iso(),

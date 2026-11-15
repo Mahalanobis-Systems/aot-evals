@@ -347,8 +347,13 @@ def trials_for_run(ev) -> dict:
 
 # ---- the report's measurement key and the correction -----------------------------------------
 
-def section(s, weights: dict | None, refused: str | None) -> dict:
-    """report.json's `measurement` (v2-design §6) and what the estimate needs from it."""
+def section(s, weights: dict | None, refused: str | None, floor_at: dict | None = None) -> dict:
+    """report.json's `measurement` (v2-design §6) and what the estimate needs from it.
+
+    `floor_at` maps a failure mode to the rate its judge's floor is read at, taken from the
+    reference (baseline) runs when these runs are a candidate: whether a judge counts is fixed
+    before the candidate is looked at, so a candidate can't lose its measurement by failing less
+    (v2-design §4). Without it the floor is read at these runs' own rate."""
     from . import agreement as ag
 
     ev, spec = s.ev, s.spec
@@ -374,9 +379,13 @@ def section(s, weights: dict | None, refused: str | None) -> dict:
                        corrected_rate=obs)
         elif ctype == "judge":
             cal = judge_calibration(ev, cid, alpha)
-            fr = floor_rate(obs, cal)
+            own = floor_rate(obs, cal)
+            fr = (floor_at or {}).get(fm["id"]) if floor_at is not None else own
             fl = judge_floor(cal, fr, limit, alpha)
             fl["max_inflation_source"] = limit_src
+            fl["read_on"] = "reference runs" if floor_at is not None else "these runs"
+            fl["rate_on_these_runs"] = own["rate"] if own else None
+            row["floor_rate"] = fr
             row.update(catch=cal["catch"], catch_ci=cal["catch_ci"], catch_lower=cal["catch_lower"],
                        clean=cal["clean"], clean_ci=cal["clean_ci"], clean_lower=cal["clean_lower"],
                        j=cal["j"], labels=cal["labels"], calibration=cal["status"],

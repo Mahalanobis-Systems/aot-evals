@@ -344,6 +344,12 @@ refused). Judge files keep their front matter, with these changes:
   - **The current rate** is the mode's failure rate in the report's runs (the weighted Hájek mean
     over the counted quality cases of the use cases the mode applies to), corrected with the
     judge's point rates and kept half a failure away from 0 and 1 over the trials it rests on.
+  - **A candidate is read at its reference's rate**: on `report --candidate`, `compare` and an
+    `also_requires` check, the candidate's judges are held to the floor at the baseline runs'
+    rate, never their own. Whether the measurement counts is then fixed before the candidate is
+    looked at, and a candidate that fails less can't lose its judge by doing so (a judge that
+    clears the floor at 3.3% can cost 10× at 0.3%). The floor records `read_on` (`these runs` or
+    `reference runs`) and `rate_on_these_runs`.
   - **A judge with no current calibration** (none, stale, or labels of one kind only) has unknown
     error rates and does not count either (rule 13). With no scored run yet the floor is `unknown`,
     and `plan` counts the judge at `max_inflation`.
@@ -427,7 +433,7 @@ values are null with a reason, never 0, and nothing is pre-rounded.
 | `estimate` | the headline: `{theta, ci, ci_method, se, quantity, weights{use_case: w}, weights_source, estimator: "hajek", corrected, n_cases, n_clusters, n_effective, k, null_reason}` | Estimand, design |
 | `use_cases` | one row per use case and pool: 1.x category rows, with `share`, `cost`, `weight`, `inclusion_prob_range`, and `estimate` (the use case's Hájek μ̂ of the quantity, quality pool only) | Estimand, design |
 | `design` | `{quality{n, drawn, frame, seed, oversample, strata, skips[], refused[]}, bug_finding{n, coverage}, clusters{n, n_bug_finding, cluster_key, design_effect, icc, largest, mean_size, shared_with_bug_finding}, cases_without_pool[]}` | Design |
-| `measurement` | `{failure_modes[{id, check, type, use_cases, observed_rate, catch, clean, j, labels{fail, pass}, inflation, inflation_at_lower_bounds, floor{status, reason, rate, max_inflation}, corrected_rate, feeds_estimate}], eval_vs_people{catch, clean, all, labels{fail, pass}, labels_needed, floor, failure_rate, stale}, person_anchored{ppi}, variance{icc, between, within, k_recommended}, people{pairs[{ac1, kappa, pass_agreement, fail_agreement}]}, trials, max_inflation, correction, gates[{id, detail}]}` | Measurement |
+| `measurement` | `{failure_modes[{id, check, type, use_cases, observed_rate, catch, clean, j, labels{fail, pass}, inflation, inflation_at_lower_bounds, floor{status, reason, rate, max_inflation, read_on, rate_on_these_runs}, floor_rate, corrected_rate, feeds_estimate}], eval_vs_people{catch, clean, all, labels{fail, pass}, labels_needed, floor, failure_rate, stale}, person_anchored{ppi}, variance{icc, between, within, k_recommended}, people{pairs[{ac1, kappa, pass_agreement, fail_agreement}]}, trials, max_inflation, correction, gates[{id, detail}]}` | Measurement |
 | `decision` | `{test, quantity, bar, margin, alpha, power, looks, combine, multiplicity, subject, result: "pass" \| "fail" \| "insufficient" \| "unknown" \| "trade", reasons[], null_reason, interval, detectable_effect, cases_needed, headline{…}, gates[{gate, use_case, result, p, p_adjusted, …}], also_requires[{eval, result, reason, runs, gate}], constraints{status, breaches[]}, look{n, prior[], recorded}, refused}` | Decision rule |
 | `comparison` | as 1.x, with Δθ̂ design-weighted, the verdict read from the paired sign-flip test per cluster, `per_use_case` adjusted p-values, `bug_finding` flips apart, and `variance_band` removed; null without `--candidate` | Decision rule |
 | `coverage`, `redundancy`, `cases`, `conditions`, `next_actions` | not in v2 yet; `aot-evals coverage` prints the coverage grid (§7) | |
