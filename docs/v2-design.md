@@ -119,7 +119,7 @@ An eval is complete when `missing` and `invalid` are both empty.
 The values below are the store's refund eval ([§9](#9-the-online-store-example)).
 
 ```yaml
-eval: refunds
+eval: refund-subagent
 version: 1.0                       # major.minor; see estimators §9 for which changes are major
 
 estimand:
@@ -170,7 +170,7 @@ measurement:
       description: Refunds an order the policy does not allow, or refuses one it does.
       use_cases: "*"
       check: policy-judge          # the one check that counts (rule 12)
-      diagnostics: []              # other checks on this mode, reported, never counted
+      diagnostics: [policy-judge-weak]   # other checks on this mode, reported, never counted
     - id: wrong-amount
       use_cases: "*"
       check: amount-matches
@@ -178,8 +178,11 @@ measurement:
       use_cases: "*"
       check: no-side-effects
       side_effect: true            # at least one counted side-effect check is required
+    - id: wrong-reply
+      use_cases: "*"
+      check: reply-matches-refund
   trials: 3                        # or: auto (from the measured variance split, rule 16)
-  correction: ppi                  # none | rogan_gladen | ppi
+  correction: rogan_gladen         # none | rogan_gladen | ppi; the judge's labels are on past runs
   max_inflation: 2.0               # how many times more cases a judge may cost (statistics §3.3)
   people:
     floors: {catch: null, clean: null}   # the eval against people; null: from max_inflation, as for a judge
@@ -206,9 +209,12 @@ decision_rule:
     use_cases: {}
 
 invoke:                            # component evals only; the system eval uses agent.yaml
-  command: ["python", "agent/refunds.py", "--handoff"]
+  command: [python3, agent/refunds.py, --handoff]
   cwd: .
-  timeout: 60
+  timeout: 20
+  seed: python3 evals/agents/store/env/seed.py     # the sandbox's hooks, as agent.yaml's
+  observe: python3 evals/agents/store/env/observe.py
+  env: {AGENT_VARIANT: good, STORE_WORLD: world.json, STORE_ENV: evals/agents/store/env}
 ```
 
 **Field rules.**
@@ -424,7 +430,7 @@ values are null with a reason, never 0, and nothing is pre-rounded.
 | `measurement` | `{failure_modes[{id, check, type, use_cases, observed_rate, catch, clean, j, labels{fail, pass}, inflation, inflation_at_lower_bounds, floor{status, reason, rate, max_inflation}, corrected_rate, feeds_estimate}], eval_vs_people{catch, clean, all, labels{fail, pass}, labels_needed, floor, failure_rate, stale}, person_anchored{ppi}, variance{icc, between, within, k_recommended}, people{pairs[{ac1, kappa, pass_agreement, fail_agreement}]}, trials, max_inflation, correction, gates[{id, detail}]}` | Measurement |
 | `decision` | `{test, quantity, bar, margin, alpha, power, looks, combine, multiplicity, subject, result: "pass" \| "fail" \| "insufficient" \| "unknown" \| "trade", reasons[], null_reason, interval, detectable_effect, cases_needed, headline{…}, gates[{gate, use_case, result, p, p_adjusted, …}], also_requires[{eval, result, reason, runs, gate}], constraints{status, breaches[]}, look{n, prior[], recorded}, refused}` | Decision rule |
 | `comparison` | as 1.x, with Δθ̂ design-weighted, the verdict read from the paired sign-flip test per cluster, `per_use_case` adjusted p-values, `bug_finding` flips apart, and `variance_band` removed; null without `--candidate` | Decision rule |
-| `coverage`, `redundancy`, `cases`, `conditions`, `next_actions` | as 1.x (`conditions.simulator` removed) | |
+| `coverage`, `redundancy`, `cases`, `conditions`, `next_actions` | not in v2 yet; `aot-evals coverage` prints the coverage grid (§7) | |
 | `checks` | as 1.x, with `catch` and `clean` in place of `tnr` and `tpr` | Measurement |
 
 **How the estimate is computed** (estimators §7). A trial scores 1 for `pass_rate` when every
@@ -528,7 +534,7 @@ whole-run failure rate. `labels_per_kind: auto` fixes each kind's count before l
 
 Unchanged in purpose: `start`, `doctor`, `init`, `status`, `validate`, `import`, `screen`, `run`,
 `label`, `agreement`, `serve`, `replay`, `calibrate`, `reliability`, `judge apply`, `ops`,
-`snapshot`, `compare`, `coverage`, `redundancy`, `log`, `activity`, `checkpoint`, `telemetry`,
+`snapshot`, `compare`, `coverage`, `log`, `activity`, `telemetry`,
 `benchmarks`, `report`.
 
 | 2.0 | Change |
@@ -587,35 +593,52 @@ hand. Only the tests need the full path to work unattended.
 
 ## 9. The online-store example
 
-`examples/store/` replaces `examples/calendar/` as the example, `aot-evals demo` and the test
-fixture. It is the agent from the [problems](problems.md):
+`examples/store/` is the example, `aot-evals demo` and the test fixture (`tests/conftest.py`
+`store_repo`); the calendar and every 1.x code path are gone. It is the agent from the
+[problems](problems.md):
 
-- **The agent.** An orchestrator that reads each request and answers order-status and return
-  questions with an order-reading tool and an address-changing tool, and routes refunds to a
-  **refund subagent** with its own prompt and model. Both are small Python programs speaking the
-  agent contract, with fakes in `env/` for the order system and payments.
-- **Two evals.** `end-to-end` (unit: the system; use cases order status 0.70, returns 0.20, address
-  0.08, refunds 0.02; costs $1, $5, $20, $50; weights: cost; decision: non-inferiority, margin 2
-  points) and `refunds` (unit: the subagent; frame: refund handoffs; the threshold test above).
-  agent.yaml's `components` places the refund subagent at an eval of its own (own context, its own
-  team) and the order tools at checks in `end-to-end` (they run in the orchestrator's context). The
-  trace export records each refund handoff, so `aot-evals --eval refunds handoffs` extracts the
-  refunds frame from it.
-- **Checks.** Code checks for end state, amount and side effects; one policy judge at catch 0.95
-  and clean 0.99 on a labeled set shipped with the example, and a weaker one (0.80, 0.90) that the
-  floor refuses. At those point rates the policy judge costs 1.43× at a 3% failure rate, but the
-  floor reads the lower bounds (§4), so the set needs about 100 failure labels and 500 pass labels
-  to clear `max_inflation: 2.0` (at 20 and 100 the bounds give 3.7×).
-- **Cases.** A quality set drawn from a shipped trace export with `draw`, and a bug-finding set
-  from templates with cluster keys, including the policy corners (a day outside the window, a
-  partial refund, a gift card).
-- **Variants.** `AGENT_VARIANT` switches the behaviors the self-tests need, as the calendar's
-  does, plus the problems' scenarios: `refund-bug` (refunds fail 15% instead of 5%, problem 1),
-  `declines-missing-order` (the subagent declines handoffs with no order number, problem 2), a
-  flaky variant (problem 8), a cheaper model (problem 11).
-
-The calendar stays until the last 1.x code path is gone (the tests in `tests/test_old_layout.py`
-and nine others use it).
+- **The agent.** An orchestrator (`agent/store.py`) that reads each request and answers
+  order-status, return and address questions with an order-reading, a return-starting and an
+  address-changing tool, and hands refunds to a **refund subagent** (`agent/refunds.py`) with its
+  own prompt and model. Both are small Python programs speaking the agent contract, with fakes in
+  `env/` for the order system and payments (one JSON world, seeded and observed by the hooks; every
+  call is logged, so a check can see a handoff).
+- **The traces.** `traces.jsonl`, 390 October traces sampled per use case (refunds more heavily, so
+  the subagent's frame has rows to draw from; the shares are the spec's, measured on all traffic).
+  Each refund trace records its handoff in stage 7's format, `handoffs: [{to, use_case,
+  order_template, trigger, inputs, start_state, expected_end_state}]`, and `aot-evals --eval
+  refund-subagent handoffs` extracts the subagent's frame (160 handoffs) from it.
+- **Two evals.** `end-to-end` (unit: the system; use cases order status 0.70, returns 0.20,
+  address 0.08, refunds 0.02; costs $1, $5, $20, $50; weights: cost; decision: non-inferiority,
+  margin 2 points, with a refund gate) and `refund-subagent` (unit: the subagent, named as `build`
+  names a component eval; frame: refund handoffs; the threshold test of §2, under 5% policy breaks,
+  with `also_requires` on end-to-end). agent.yaml's `components` places the refund subagent at an
+  eval of its own (own context, its own team) and the order tools at checks in `end-to-end` (they
+  run in the orchestrator's context).
+- **Checks.** End to end: the reply matches the order system (`reply-matches-order`), the end
+  state (`end-state-matches`), side effects (`no-side-effects`) and the route
+  (`routed-correctly`, read from the fakes' log). The subagent: `amount-matches`,
+  `no-side-effects`, `reply-matches-refund` (a reply is needed so a non-answer fails screening),
+  and the policy judge (`judges/policy_judge.py`, a command judge that makes a judge's mistakes on
+  purpose, at known rates). It is calibrated on 100 failure and 500 pass labels at catch 0.95 and
+  clean 0.99, which clears `max_inflation: 2.0` at a 3% failure rate (1.98× at its lower bounds; at
+  20 and 100 labels it would cost 3.7×), so it counts and the rate is corrected (Rogan–Gladen,
+  since the labels are on past runs, not drawn from the report's). `policy-judge-weak` (0.80, 0.90)
+  is a diagnostic the floor refuses at any number of labels (11.6× at 3%).
+- **Cases.** Each eval's quality set is drawn from its frame with `draw` (48 end to end, 60 for the
+  subagent, `draw.json` beside them), and its bug-finding set is written from templates with
+  cluster keys, including the policy corners (the 30th and 31st day, a partial refund, a gift card,
+  no order number, an order already refunded). The sets are deliberately small, so the decisions
+  come out `insufficient` with the cases that would decide them (problem 9).
+- **Variants.** `AGENT_VARIANT` switches the behaviors the self-tests need (`liar`, `flaky`,
+  `costly`, `slow`, `silent`, `peek`, and `AGENT_BREAK` for a known set of cases), plus the
+  problems' scenarios on the subagent: `refund-bug` (it also refunds days 31 to 35, problem 1),
+  `declines-missing-order` (the window is fixed, but a handoff with no order number is declined
+  instead of asked about, problem 2: the subagent's eval improves and refunds end to end get
+  worse), `cheap` (a cheaper model that fixes the 30th day and refunds the 31st, problem 11). The
+  good subagent counts the 30th day as outside the window, which is its known policy failure.
+- **Tests.** `tests/test_store.py` checks what this section claims; `tests/test_decision.py` gives
+  its refused-judge fixture an undersized judge of its own.
 
 ## 10. Decisions to confirm
 

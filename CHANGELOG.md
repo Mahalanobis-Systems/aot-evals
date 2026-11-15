@@ -6,6 +6,27 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+- **2.0: the online store is the example, the demo and the test fixture** (stage 8,
+  docs/v2-design.md §9). `examples/store/` holds the support agent and its refund subagent (both
+  speak the agent contract), fakes for the order system and payments in `env/`, a trace export
+  whose refund traces record their handoffs, both evals with drawn quality sets and bug-finding
+  sets from templates, and a policy judge calibrated on 100 failure and 500 pass labels that clears
+  `max_inflation: 2.0` at a 3% failure rate, beside a weaker judge the floor refuses. Its variants
+  play problems 1, 2, 8 and 11. The component eval is `refund-subagent/` (was `refunds/`), as
+  `build` names it; it gains a `wrong-reply` mode and corrects with Rogan–Gladen. `aot-evals demo`
+  runs the store: both baselines, then a refund-subagent change that improves its own eval and
+  breaks refunds end to end.
+- **1.x is removed.** The calendar example, the old layout (`evals/<agent>/` and `evals/agent.yaml`
+  directly), 1.x suites (categories.yaml, failure_modes.yaml, taxonomy.yaml, budgets.yaml,
+  allocation.yaml) and every command's 1.x path are gone: every command reads a 2.0 eval, and a
+  folder that still holds a 1.x suite is refused with a pointer to `migrate --to 2`. Removed with
+  them: `allocate` (use `plan`), `checkpoint` and `redundancy` (no 2.0 version yet), the C0–C19 and
+  G1–G14 gates (2.0's spec fields and evidence checks replace them), `status --gates`,
+  `report --html`, `run --category` and `--force`. `init` without `--eval` creates the end-to-end
+  eval. `coverage` reads an eval's `coverage.yaml`; `ops` reads its constraints per use case.
+- **Command judges in a 2.0 eval run from the repository root**, as agent.yaml's paths do; they
+  ran from the agent's folder.
+
 - **2.0: several evals per agent** (stage 7, docs/v2-design.md §1–§3, §6, §7; estimators §1).
   **agent.yaml lists the parts of the system** (`components`: each subagent, route and step, its
   context, owner and whether it ships on its own), and `validate` reads it: a component eval

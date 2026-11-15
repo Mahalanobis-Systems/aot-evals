@@ -1,5 +1,12 @@
 # The aot-evals method
 
+> **On the 2.0 branch this page describes 1.x, which the code no longer runs.** The 1.x suite
+> files, the old layout, the commands' 1.x paths, `allocate`, `checkpoint`, `redundancy` and the
+> C0–C19 and G1–G14 gates are removed; every command reads a 2.0 eval, and
+> `aot-evals migrate --to 2` converts a 1.x suite. Until this page is rewritten for 2.0, the
+> reference for behavior is [v2-design.md](v2-design.md), with [estimators.md](estimators.md),
+> [problems.md](problems.md) and [statistics.md](statistics.md).
+
 This is the reference for what aot-evals does and why: the principles, the measurement frame,
 the files it keeps in your repository, the commands C0–C19 and their exit gates, the
 measurements (M), experiments (E), report panels (P) and refusal gates (G) that the skills and

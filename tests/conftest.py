@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 import yaml
 
 from aot_evals import cli
-
 
 
 def git(repo: Path, *args: str) -> None:
