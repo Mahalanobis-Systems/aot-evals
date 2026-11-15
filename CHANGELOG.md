@@ -10,13 +10,12 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 Suites from earlier versions of aot-evals aren't read; `/aot-evals:start` offers to rebuild the evals from one.
 
-aot-evals 2.0.0 writes each eval down in one file, `eval.yaml`, as four parts: the **estimand**
-(what number, about what, drives which decision), the **sampling design** (which cases, drawn how),
-the **measurement model** (how wrong the grader is) and the **decision rule** (when to act). The
-rules for building an eval follow from them ([docs/estimators.md](docs/estimators.md)).
-[docs/method.md](docs/method.md) is the reference for every command, file, field and gate;
-[docs/problems.md](docs/problems.md) shows why each part matters, and
-[docs/statistics.md](docs/statistics.md) derives the numbers.
+aot-evals 2.0.0 answers the questions a team asks about its agent: is this change safe to ship,
+can I trust this number, how many cases do I need, is our AI judge good enough to grade with. The
+answers come back in the same terms, with the next step ("not yet: about 40 more cases would show
+it"). Claude does the statistics and says what they mean for your work. The [README](README.md)
+walks through the workflow, and [docs/problems.md](docs/problems.md) shows the twelve traps it keeps
+you out of, each with a worked example.
 
 - **Three roles, working at the same time.** `/aot-evals:start` asks the owner three questions on
   the first run (what decision the tests drive, which mistakes cost most, what a change must show)
@@ -25,6 +24,12 @@ rules for building an eval follow from them ([docs/estimators.md](docs/estimator
   `/aot-evals:judge` and the grader application (`aot-evals serve`) are for the people who know
   what good looks like: whole-run labels, rulings, rules for the labeling standard, AI judges. The
   skills report what the statistics mean for the next step, not how they were computed.
+- **Four parts underneath.** Each eval is written down in one file, `eval.yaml`, as an estimator:
+  the **estimand** (what number, for which decision), the **sampling design** (which cases, drawn
+  how), the **measurement model** (how wrong the grader is) and the **decision rule** (when to act)
+  ([docs/estimators.md](docs/estimators.md)). [docs/method.md](docs/method.md) is the reference for
+  every command, file, field and gate, and [docs/statistics.md](docs/statistics.md) derives the
+  numbers.
 - **The eval spec.** `aot-evals --eval ID init [--component NAME]` creates an eval in
   `evals/agents/<agent>/<eval>/`, beside the agent's shared sandbox, frames, labeling standard and
   journal. `aot-evals validate` lists every missing and invalid field with the numbers it blocks;
