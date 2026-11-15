@@ -1,0 +1,121 @@
+{
+  "id": "bf-return-not-delivered",
+  "use_case": "return",
+  "pool": "bug_finding",
+  "template": "bf-return-not-delivered",
+  "failure_modes": [
+    "wrong-answer",
+    "wrong-end-state",
+    "unrequested-change",
+    "wrong-route"
+  ],
+  "coverage_entries": [
+    "return",
+    "not-allowed"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-return-not-delivered",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "message",
+    "text": "Can I send back A7011?"
+  },
+  "inputs": {
+    "today": "2026-10-20",
+    "customer": "c-0006"
+  },
+  "start_state": {
+    "orders": {
+      "A7011": {
+        "status": "shipped",
+        "items": [
+          {
+            "sku": "SKU-103",
+            "name": "toaster",
+            "price": 29.99
+          },
+          {
+            "sku": "SKU-105",
+            "name": "mixing bowls",
+            "price": 18.75
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "3 Cedar Court",
+        "eta": "2026-10-21",
+        "delivered": null,
+        "customer": "c-0006"
+      },
+      "A7012": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-101",
+            "name": "blender",
+            "price": 49.99
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "26 Oak Avenue",
+        "eta": null,
+        "delivered": "2026-09-08",
+        "customer": "c-0006"
+      }
+    },
+    "refunds": [],
+    "returns": [],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A7011": {
+          "status": "shipped",
+          "items": [
+            {
+              "sku": "SKU-103",
+              "name": "toaster",
+              "price": 29.99
+            },
+            {
+              "sku": "SKU-105",
+              "name": "mixing bowls",
+              "price": 18.75
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "3 Cedar Court",
+          "eta": "2026-10-21",
+          "delivered": null,
+          "customer": "c-0006"
+        },
+        "A7012": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-101",
+              "name": "blender",
+              "price": 49.99
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "26 Oak Avenue",
+          "eta": null,
+          "delivered": "2026-09-08",
+          "customer": "c-0006"
+        }
+      },
+      "refunds": [],
+      "returns": [],
+      "log": []
+    },
+    "output": "Order A7011 hasn't been delivered yet; you can return it once it arrives."
+  }
+}

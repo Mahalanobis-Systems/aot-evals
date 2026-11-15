@@ -1,0 +1,159 @@
+{
+  "id": "tr_1370.h0",
+  "use_case": "partial-refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 11,
+    "inclusion_prob": 0.4444444444444444
+  },
+  "order_template": "ot-11",
+  "cluster": "ot-11",
+  "trigger": {
+    "text": "Refund request: Please refund the french press from order A1741.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": [
+      "SKU-108"
+    ],
+    "order_id": "A1741",
+    "to": "original",
+    "today": "2026-10-17"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1741": {
+        "address": "6 Cedar Court",
+        "customer": "c-0371",
+        "delivered": "2026-09-23",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          },
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1742": {
+        "address": "65 Bay Street",
+        "customer": "c-0371",
+        "delivered": "2026-08-24",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          },
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $27.99 for order A1741 to your original payment.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1741": {
+          "address": "6 Cedar Court",
+          "customer": "c-0371",
+          "delivered": "2026-09-23",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            },
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 27.99,
+          "status": "delivered"
+        },
+        "A1742": {
+          "address": "65 Bay Street",
+          "customer": "c-0371",
+          "delivered": "2026-08-24",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            },
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 27.99,
+          "order": "A1741",
+          "to": "original"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1370.h0",
+    "synthetic": false,
+    "source_trace": "tr_1370"
+  }
+}

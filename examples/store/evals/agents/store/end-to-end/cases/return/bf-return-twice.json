@@ -1,0 +1,131 @@
+{
+  "id": "bf-return-twice",
+  "use_case": "return",
+  "pool": "bug_finding",
+  "template": "bf-return-twice",
+  "failure_modes": [
+    "wrong-answer",
+    "wrong-end-state",
+    "unrequested-change",
+    "wrong-route"
+  ],
+  "coverage_entries": [
+    "return",
+    "not-allowed"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-return-twice",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "message",
+    "text": "Start a return for A7009 please."
+  },
+  "inputs": {
+    "today": "2026-10-20",
+    "customer": "c-0005"
+  },
+  "start_state": {
+    "orders": {
+      "A7009": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-103",
+            "name": "toaster",
+            "price": 29.99
+          },
+          {
+            "sku": "SKU-105",
+            "name": "mixing bowls",
+            "price": 18.75
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "85 Bay Street",
+        "eta": null,
+        "delivered": "2026-10-15",
+        "customer": "c-0005"
+      },
+      "A7010": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-106",
+            "name": "chef's knife",
+            "price": 42.0
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "22 Cedar Court",
+        "eta": null,
+        "delivered": "2026-07-31",
+        "customer": "c-0005"
+      }
+    },
+    "refunds": [],
+    "returns": [
+      {
+        "order": "A7009",
+        "opened": "2026-10-18"
+      }
+    ],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A7009": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-103",
+              "name": "toaster",
+              "price": 29.99
+            },
+            {
+              "sku": "SKU-105",
+              "name": "mixing bowls",
+              "price": 18.75
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "85 Bay Street",
+          "eta": null,
+          "delivered": "2026-10-15",
+          "customer": "c-0005"
+        },
+        "A7010": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-106",
+              "name": "chef's knife",
+              "price": 42.0
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "22 Cedar Court",
+          "eta": null,
+          "delivered": "2026-07-31",
+          "customer": "c-0005"
+        }
+      },
+      "refunds": [],
+      "returns": [
+        {
+          "order": "A7009",
+          "opened": "2026-10-18"
+        }
+      ],
+      "log": []
+    },
+    "output": "A return is already open for order A7009."
+  }
+}

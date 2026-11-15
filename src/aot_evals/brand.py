@@ -1,12 +1,13 @@
 """The branded HTML pages (docs/method.md §9, brand/README.md).
 
 `page()` is the one template behind every HTML file the plugin writes: the report shell, the
-checkpoint pages and the activity log (checkpoint.py, journal.py).
+discovery page, the grader application and the activity log (start.py, serve.py, journal.py).
 
-`aot-evals report --html` writes one self-contained file: embedded fonts and logo, the brand
-style sheet, a header and footer, and `report.json` inlined as `<script type="application/json"
-id="data">`. It makes no network requests and opens from the filesystem. Claude writes the panels
-into its `<main id="panels">`, shaped around the reader's question (report skill).
+The report shell (`shell`, `write_shell`; `aot-evals report --html`, not yet back in 2.0) is one
+self-contained file: embedded fonts and logo, the brand style sheet, a header and footer, and
+`report.json` inlined as `<script type="application/json" id="data">`. It makes no network
+requests and opens from the filesystem. Claude writes the panels into its `<main id="panels">`,
+shaped around the reader's question (report skill).
 """
 
 from __future__ import annotations
@@ -63,7 +64,7 @@ def _esc(s: str) -> str:
 def page(title: str, eyebrow: str, sub: str, body: str, data: dict | None = None,
          script: str = "", footer_note: str = "") -> str:
     """One branded, self-contained page: embedded fonts and logo, the brand style sheet, header
-    and footer. Every HTML file the plugin writes (report, checkpoint, activity) goes through it."""
+    and footer. Every HTML file the plugin writes (report, discovery, grader, activity) goes through it."""
     logo = _b64(BRAND / LOGO)
     logo_tag = (f'<img class="logo" src="data:image/png;base64,{logo}" '
                 f'alt="AOT, the Agent Optimization Toolkit">' if logo else "")

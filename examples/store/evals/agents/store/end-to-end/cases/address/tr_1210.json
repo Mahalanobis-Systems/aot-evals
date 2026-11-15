@@ -1,0 +1,118 @@
+{
+  "id": "tr_1210",
+  "use_case": "address",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 5,
+    "inclusion_prob": 0.26666666666666666
+  },
+  "template": "address-t2",
+  "cluster": "address-t2",
+  "trigger": {
+    "text": "Change the delivery address of A1421 to 791 Bay Street.",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0211",
+    "today": "2026-10-11"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1421": {
+        "address": "55 Cedar Court",
+        "customer": "c-0211",
+        "delivered": null,
+        "eta": "2026-10-14",
+        "items": [
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          },
+          {
+            "name": "cutting board",
+            "price": 22.4,
+            "sku": "SKU-107"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "shipped"
+      },
+      "A1422": {
+        "address": "33 Bay Street",
+        "customer": "c-0211",
+        "delivered": "2026-08-28",
+        "eta": null,
+        "items": [
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Order A1421 has already shipped, so I can't change its address.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1421": {
+          "address": "55 Cedar Court",
+          "customer": "c-0211",
+          "delivered": null,
+          "eta": "2026-10-14",
+          "items": [
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            },
+            {
+              "name": "cutting board",
+              "price": 22.4,
+              "sku": "SKU-107"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "shipped"
+        },
+        "A1422": {
+          "address": "33 Bay Street",
+          "customer": "c-0211",
+          "delivered": "2026-08-28",
+          "eta": null,
+          "items": [
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1210",
+    "synthetic": false
+  }
+}

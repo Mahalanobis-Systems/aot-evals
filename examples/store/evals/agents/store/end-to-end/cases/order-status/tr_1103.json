@@ -1,0 +1,118 @@
+{
+  "id": "tr_1103",
+  "use_case": "order-status",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 10,
+    "inclusion_prob": 0.08571428571428572
+  },
+  "template": "order-status-t5",
+  "cluster": "order-status-t5",
+  "trigger": {
+    "text": "Can you check on order A1207 for me?",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0104",
+    "today": "2026-10-04"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1207": {
+        "address": "53 Harbor Road",
+        "customer": "c-0104",
+        "delivered": "2026-10-03",
+        "eta": null,
+        "items": [
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          },
+          {
+            "name": "cutting board",
+            "price": 22.4,
+            "sku": "SKU-107"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1208": {
+        "address": "73 Harbor Road",
+        "customer": "c-0104",
+        "delivered": "2026-07-15",
+        "eta": null,
+        "items": [
+          {
+            "name": "blender",
+            "price": 49.99,
+            "sku": "SKU-101"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Order A1207 was delivered on 2026-10-03.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1207": {
+          "address": "53 Harbor Road",
+          "customer": "c-0104",
+          "delivered": "2026-10-03",
+          "eta": null,
+          "items": [
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            },
+            {
+              "name": "cutting board",
+              "price": 22.4,
+              "sku": "SKU-107"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        },
+        "A1208": {
+          "address": "73 Harbor Road",
+          "customer": "c-0104",
+          "delivered": "2026-07-15",
+          "eta": null,
+          "items": [
+            {
+              "name": "blender",
+              "price": 49.99,
+              "sku": "SKU-101"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1103",
+    "synthetic": false
+  }
+}

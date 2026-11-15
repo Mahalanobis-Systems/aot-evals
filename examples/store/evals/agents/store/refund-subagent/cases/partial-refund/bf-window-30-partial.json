@@ -1,0 +1,151 @@
+{
+  "id": "bf-window-30-partial",
+  "use_case": "partial-refund",
+  "pool": "bug_finding",
+  "order_template": "bf-window-30",
+  "failure_modes": [
+    "breaks-policy",
+    "wrong-amount",
+    "unrequested-change",
+    "wrong-reply"
+  ],
+  "coverage_entries": [
+    "partial-refund",
+    "window-edge"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-window-30",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "handoff",
+    "text": "Refund request: Refund just the french press on A8003."
+  },
+  "inputs": {
+    "order_id": "A8003",
+    "items": [
+      "SKU-108"
+    ],
+    "to": "original",
+    "today": "2026-10-22"
+  },
+  "start_state": {
+    "orders": {
+      "A8003": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-102",
+            "name": "kettle",
+            "price": 34.5
+          },
+          {
+            "sku": "SKU-106",
+            "name": "chef's knife",
+            "price": 42.0
+          },
+          {
+            "sku": "SKU-108",
+            "name": "french press",
+            "price": 27.99
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "95 Oak Avenue",
+        "eta": null,
+        "delivered": "2026-09-22",
+        "customer": "c-0002"
+      },
+      "A8004": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-103",
+            "name": "toaster",
+            "price": 29.99
+          },
+          {
+            "sku": "SKU-105",
+            "name": "mixing bowls",
+            "price": 18.75
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "70 Oak Avenue",
+        "eta": null,
+        "delivered": "2026-09-08",
+        "customer": "c-0002"
+      }
+    },
+    "refunds": [],
+    "returns": [],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A8003": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-102",
+              "name": "kettle",
+              "price": 34.5
+            },
+            {
+              "sku": "SKU-106",
+              "name": "chef's knife",
+              "price": 42.0
+            },
+            {
+              "sku": "SKU-108",
+              "name": "french press",
+              "price": 27.99
+            }
+          ],
+          "payment": "card",
+          "refunded": 27.99,
+          "address": "95 Oak Avenue",
+          "eta": null,
+          "delivered": "2026-09-22",
+          "customer": "c-0002"
+        },
+        "A8004": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-103",
+              "name": "toaster",
+              "price": 29.99
+            },
+            {
+              "sku": "SKU-105",
+              "name": "mixing bowls",
+              "price": 18.75
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "70 Oak Avenue",
+          "eta": null,
+          "delivered": "2026-09-08",
+          "customer": "c-0002"
+        }
+      },
+      "refunds": [
+        {
+          "order": "A8003",
+          "amount": 27.99,
+          "to": "original"
+        }
+      ],
+      "returns": [],
+      "log": []
+    },
+    "output": "Refunded $27.99 for order A8003 to your original payment."
+  }
+}

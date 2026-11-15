@@ -1,0 +1,18 @@
+# The coverage list the bug-finding set is checked against (design.bug_finding_set.coverage;
+# statistics §2.5). It must come from a document written for another purpose (product spec, API or
+# tool surface, help-center topics, job-task taxonomy, a regulator's duties), never from the cases.
+# Commit it before the first case (`aot-evals coverage`; report gate coverage_list).
+
+name:
+source:
+  document:             # title of the source document
+  kind:                 # product-spec | api-surface | help-center | job-taxonomy | regulation | other
+  url:                  # or path:
+read_on:                # date the source was read
+template:               # templates/taxonomies/<vertical>.yaml if one was used, else null
+entries: []
+  # - id: billing.refund
+  #   title: Issue a refund
+  #   description: ...
+  #   not_applicable:          # E8 triage: failure modes that cannot occur for this entry
+  #     invite-wrong-time: refunds never create invites

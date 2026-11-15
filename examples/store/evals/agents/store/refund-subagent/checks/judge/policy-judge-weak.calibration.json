@@ -1,0 +1,123 @@
+{
+  "judge": "policy-judge-weak",
+  "version": 1,
+  "judge_sha": "6d18441885429f8a",
+  "labels_sha": "0e95131b46aa3543",
+  "labels": 600,
+  "measured_at": "2026-11-14T19:58:42Z",
+  "primary": "local",
+  "status": "calibrated",
+  "status_reasons": [],
+  "backends": {
+    "local": {
+      "catch": 0.8,
+      "catch_ci": [
+        0.7111708344068411,
+        0.8666330666689674
+      ],
+      "catch_lower": 0.7266961911903833,
+      "catch_k": 80,
+      "clean": 0.9,
+      "clean_ci": [
+        0.87057809036806,
+        0.9233224372626984
+      ],
+      "clean_lower": 0.8757336141785858,
+      "clean_k": 450,
+      "labels_per_kind": {
+        "fail": 100,
+        "pass": 500
+      },
+      "j": 0.7000000000000002,
+      "lower_bound": {
+        "alpha": 0.05,
+        "sides": "one-sided Wilson"
+      },
+      "inflation_at_lower_bounds": {
+        "0.5": 2.6942117991458567,
+        "0.2": 3.1833424858307544,
+        "0.1": 4.606615707945256,
+        "0.03": 11.559376113490707
+      },
+      "backend": "local",
+      "type": "command",
+      "model": "toy-policy-judge-mini",
+      "family": "toy",
+      "labels": 600,
+      "errors": 0,
+      "probabilistic": false,
+      "error_messages": [],
+      "threshold": null,
+      "method": "fixed verdicts (no threshold to fit)",
+      "tpr": 0.9,
+      "tpr_ci": [
+        0.87057809036806,
+        0.9233224372626984
+      ],
+      "tnr": 0.8,
+      "tnr_ci": [
+        0.7111708344068411,
+        0.8666330666689674
+      ],
+      "kappa": 0.6249999999999999,
+      "n": 600,
+      "n_pass": 500,
+      "n_fail": 100,
+      "confusion": {
+        "tp": 450,
+        "fn": 50,
+        "fp": 20,
+        "tn": 80
+      },
+      "holdout": {
+        "tpr": null,
+        "tpr_ci": null,
+        "tnr": null,
+        "tnr_ci": null,
+        "kappa": null,
+        "n": 0,
+        "n_pass": 0,
+        "n_fail": 0,
+        "confusion": {
+          "tp": 0,
+          "fn": 0,
+          "fp": 0,
+          "tn": 0
+        }
+      },
+      "evidence": {
+        "tpr": {
+          "point": 0.9,
+          "lower": 0.87057809036806,
+          "n": 500,
+          "floor": 0.75,
+          "margin": 0.1,
+          "meets_point": true,
+          "meets_margin": true,
+          "n_needed": 500
+        },
+        "tnr": {
+          "point": 0.8,
+          "lower": 0.7111708344068411,
+          "n": 100,
+          "floor": 0.75,
+          "margin": 0.1,
+          "meets_point": true,
+          "meets_margin": true,
+          "n_needed": 100
+        }
+      },
+      "confidence_calibration": {
+        "ece": null,
+        "brier": null
+      },
+      "cost_per_judgement": null,
+      "latency_ms_mean": 27.037166666666664
+    }
+  },
+  "recommendation": {
+    "backend": "local",
+    "why": "costs the fewest cases at a 3% failure rate (11.56x a code check, from its lower bounds)"
+  },
+  "floor": "measurement.max_inflation at the eval's failure rate, from the lower bounds on catch and clean (docs/v2-design.md §4)"
+}

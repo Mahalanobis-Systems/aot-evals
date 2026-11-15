@@ -1,0 +1,121 @@
+{
+  "id": "tr_1341.h0",
+  "use_case": "full-refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 27,
+    "inclusion_prob": 0.3305785123966942
+  },
+  "order_template": "ot-03",
+  "cluster": "ot-03",
+  "trigger": {
+    "text": "Refund request: Can I get my money back for A1683?",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": null,
+    "order_id": "A1683",
+    "to": "original",
+    "today": "2026-10-03"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1683": {
+        "address": "74 Harbor Road",
+        "customer": "c-0342",
+        "delivered": "2026-08-29",
+        "eta": null,
+        "items": [
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          },
+          {
+            "name": "mixing bowls",
+            "price": 18.75,
+            "sku": "SKU-105"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1684": {
+        "address": "28 Harbor Road",
+        "customer": "c-0342",
+        "delivered": "2026-07-31",
+        "eta": null,
+        "items": [
+          {
+            "name": "coffee grinder",
+            "price": 59.0,
+            "sku": "SKU-104"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Order A1683 was delivered 35 days ago, past the 30-day refund window.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1683": {
+          "address": "74 Harbor Road",
+          "customer": "c-0342",
+          "delivered": "2026-08-29",
+          "eta": null,
+          "items": [
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            },
+            {
+              "name": "mixing bowls",
+              "price": 18.75,
+              "sku": "SKU-105"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        },
+        "A1684": {
+          "address": "28 Harbor Road",
+          "customer": "c-0342",
+          "delivered": "2026-07-31",
+          "eta": null,
+          "items": [
+            {
+              "name": "coffee grinder",
+              "price": 59.0,
+              "sku": "SKU-104"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1341.h0",
+    "synthetic": false,
+    "source_trace": "tr_1341"
+  }
+}

@@ -1,0 +1,139 @@
+{
+  "id": "tr_1256.h0",
+  "use_case": "partial-refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 9,
+    "inclusion_prob": 0.4444444444444444
+  },
+  "order_template": "ot-06",
+  "cluster": "ot-06",
+  "trigger": {
+    "text": "Refund request: Please refund the mixing bowls from order A1513.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": [
+      "SKU-105"
+    ],
+    "order_id": "A1513",
+    "to": "original",
+    "today": "2026-10-12"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1513": {
+        "address": "37 Harbor Road",
+        "customer": "c-0257",
+        "delivered": "2026-10-06",
+        "eta": null,
+        "items": [
+          {
+            "name": "blender",
+            "price": 49.99,
+            "sku": "SKU-101"
+          },
+          {
+            "name": "mixing bowls",
+            "price": 18.75,
+            "sku": "SKU-105"
+          },
+          {
+            "name": "cutting board",
+            "price": 22.4,
+            "sku": "SKU-107"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1514": {
+        "address": "23 Bay Street",
+        "customer": "c-0257",
+        "delivered": "2026-09-01",
+        "eta": null,
+        "items": [
+          {
+            "name": "coffee grinder",
+            "price": 59.0,
+            "sku": "SKU-104"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $18.75 for order A1513 to your original payment.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1513": {
+          "address": "37 Harbor Road",
+          "customer": "c-0257",
+          "delivered": "2026-10-06",
+          "eta": null,
+          "items": [
+            {
+              "name": "blender",
+              "price": 49.99,
+              "sku": "SKU-101"
+            },
+            {
+              "name": "mixing bowls",
+              "price": 18.75,
+              "sku": "SKU-105"
+            },
+            {
+              "name": "cutting board",
+              "price": 22.4,
+              "sku": "SKU-107"
+            }
+          ],
+          "payment": "card",
+          "refunded": 18.75,
+          "status": "delivered"
+        },
+        "A1514": {
+          "address": "23 Bay Street",
+          "customer": "c-0257",
+          "delivered": "2026-09-01",
+          "eta": null,
+          "items": [
+            {
+              "name": "coffee grinder",
+              "price": 59.0,
+              "sku": "SKU-104"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 18.75,
+          "order": "A1513",
+          "to": "original"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1256.h0",
+    "synthetic": false,
+    "source_trace": "tr_1256"
+  }
+}

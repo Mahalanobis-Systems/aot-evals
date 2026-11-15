@@ -1,0 +1,130 @@
+{
+  "id": "tr_1310",
+  "use_case": "refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 6,
+    "inclusion_prob": 0.125
+  },
+  "template": "refund-full-refund-t3",
+  "cluster": "refund-full-refund-t3",
+  "trigger": {
+    "text": "Can I get my money back for A1621?",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0311",
+    "today": "2026-10-17"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1621": {
+        "address": "8 Harbor Road",
+        "customer": "c-0311",
+        "delivered": "2026-09-26",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1622": {
+        "address": "85 Bay Street",
+        "customer": "c-0311",
+        "delivered": "2026-09-02",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $34.50 for order A1621 to your original payment.",
+    "world": {
+      "log": [
+        {
+          "order": "A1621",
+          "to": "refund-subagent",
+          "tool": "handoff"
+        }
+      ],
+      "orders": {
+        "A1621": {
+          "address": "8 Harbor Road",
+          "customer": "c-0311",
+          "delivered": "2026-09-26",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            }
+          ],
+          "payment": "card",
+          "refunded": 34.5,
+          "status": "delivered"
+        },
+        "A1622": {
+          "address": "85 Bay Street",
+          "customer": "c-0311",
+          "delivered": "2026-09-02",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 34.5,
+          "order": "A1621",
+          "to": "original"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1310",
+    "synthetic": false
+  }
+}

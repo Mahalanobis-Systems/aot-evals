@@ -6,6 +6,59 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+- **report.json v2 gains `gates`**, the 1.x evidence checks that survive, keyed by part and
+  computed on the reported and candidate runs: `manifest` (with isolation) and `trials_complete`
+  (agent contract), `screened`, `committed` and `coverage_list` (design), `independent_reference`
+  and `k` (measurement), each `{id, status, detail}` (docs/v2-design.md §6). The committed-cases
+  check now also catches an edited case file whose status line came first.
+- **2.0: the online store is the example, the demo and the test fixture** (stage 8,
+  docs/v2-design.md §9). `examples/store/` holds the support agent and its refund subagent (both
+  speak the agent contract), fakes for the order system and payments in `env/`, a trace export
+  whose refund traces record their handoffs, both evals with drawn quality sets and bug-finding
+  sets from templates, and a policy judge calibrated on 100 failure and 500 pass labels that clears
+  `max_inflation: 2.0` at a 3% failure rate, beside a weaker judge the floor refuses. Its variants
+  play problems 1, 2, 8 and 11. The component eval is `refund-subagent/` (was `refunds/`), as
+  `build` names it; it gains a `wrong-reply` mode and corrects with Rogan–Gladen. `aot-evals demo`
+  runs the store: both baselines, then a refund-subagent change that improves its own eval and
+  breaks refunds end to end.
+- **1.x is removed.** The calendar example, the old layout (`evals/<agent>/` and `evals/agent.yaml`
+  directly), 1.x suites (categories.yaml, failure_modes.yaml, taxonomy.yaml, budgets.yaml,
+  allocation.yaml) and every command's 1.x path are gone: every command reads a 2.0 eval, and a
+  folder that still holds a 1.x suite is refused with a pointer to `migrate --to 2`. Removed with
+  them: `allocate` (use `plan`), `checkpoint` and `redundancy` (no 2.0 version yet), the C0–C19 and
+  G1–G14 gates (2.0's spec fields and evidence checks replace them), `status --gates`,
+  `report --html`, `run --category` and `--force`. `init` without `--eval` creates the end-to-end
+  eval. `coverage` reads an eval's `coverage.yaml`; `ops` reads its constraints per use case.
+- **Judge labels and whole-run labels name the use case**: the label queue (`<judge>.queue.csv`),
+  the labels imported from it, the labelling page, `agreement label queue` and agreement.json's rows
+  carry `use_case` in place of `category`; agreement.json adds `use_cases` beside `categories`, and
+  `label status` counts labels per use case. `calibrate` no longer writes the 1.x floors' `evidence`.
+- **The grader application serves one 2.0 eval**: `aot-evals serve` takes `--eval` (optional when
+  the agent has one eval). Its overview shows the eval's spec (complete, or the fields it lacks),
+  its baseline and latest candidate, the eval against people (the spec's floors, labels per kind
+  against the count needed, what still stands in the way) and, per use case, cases, baseline
+  coverage, labelled runs and catch and clean pass rates; the 1.x phase, trust per category and
+  "since the baseline" panels are gone. Labels, rulings, triage, proposals and drafts are the eval's
+  own; an accepted rule joins the agent system's shared `labels/standard.md` with `use_cases`
+  (proposals and drafts say `use_case(s)` in place of `category`); its actions, like every eval's
+  commands, go to the agent system's shared activity log. `doctor` lists each eval with its cases,
+  checks a component eval's own `invoke.cwd`, and finds judges in every eval.
+- **Command judges in a 2.0 eval run from the repository root**, as agent.yaml's paths do; they
+  ran from the agent's folder.
+- **`aot-evals migrate --to 2`** (stage 8, docs/v2-design.md §8) turns a 1.x suite into a 2.0
+  agent folder with one eval, `end-to-end/`: `evals/` itself, the old `evals/<agent>/` layout, or
+  `evals/agents/<agent>/` with its 1.x files. It moves files (with `git mv` where git tracks them),
+  writes `eval.yaml` from categories, failure modes, budgets and floors by the mapping table
+  (traffic weights, costs left null, superiority at α 0.05 and 80% power, `max_inflation` 2.0,
+  correction none, seed 1, cluster key `id`), renames the case fields, carries allocation.yaml's
+  scheduled and out-of-scope marks into `plan.yaml`, keeps the 1.x files it read in
+  `migrated-from-1x/`, and writes `MIGRATION.md`: each default, the check it chose per failure
+  mode, each dropped field with its value, the files it left in place and the lines to check by
+  hand (a check that finds files from its own path, a team script that names a moved folder). The
+  decision, the margin and any check it could not choose are left missing for the owner. The
+  hand-picked quality cases carry no `draw` and the 1.x runs are not 2.0 runs, so a migrated eval
+  reports nothing until it is drawn and run again; MIGRATION.md says so. It replaces the old
+  `migrate` (from `evals/<agent>/` to `evals/agents/<agent>/`).
 - **2.0: several evals per agent** (stage 7, docs/v2-design.md §1–§3, §6, §7; estimators §1).
   **agent.yaml lists the parts of the system** (`components`: each subagent, route and step, its
   context, owner and whether it ships on its own), and `validate` reads it: a component eval

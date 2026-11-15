@@ -1,0 +1,131 @@
+{
+  "id": "bf-gift-partial-cents",
+  "use_case": "gift-card",
+  "pool": "bug_finding",
+  "order_template": "bf-gift-partial",
+  "failure_modes": [
+    "breaks-policy",
+    "wrong-amount",
+    "unrequested-change",
+    "wrong-reply"
+  ],
+  "coverage_entries": [
+    "gift-card",
+    "partial-refund"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-gift-partial",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "handoff",
+    "text": "Refund request: Refund the mixing bowls from A8013 to a gift card."
+  },
+  "inputs": {
+    "order_id": "A8013",
+    "items": [
+      "SKU-105"
+    ],
+    "to": "gift_card",
+    "today": "2026-10-22"
+  },
+  "start_state": {
+    "orders": {
+      "A8013": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-103",
+            "name": "toaster",
+            "price": 29.99
+          },
+          {
+            "sku": "SKU-105",
+            "name": "mixing bowls",
+            "price": 18.75
+          }
+        ],
+        "payment": "gift_card",
+        "refunded": 0.0,
+        "address": "58 Bay Street",
+        "eta": null,
+        "delivered": "2026-10-17",
+        "customer": "c-0007"
+      },
+      "A8014": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-103",
+            "name": "toaster",
+            "price": 29.99
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "70 Oak Avenue",
+        "eta": null,
+        "delivered": "2026-08-15",
+        "customer": "c-0007"
+      }
+    },
+    "refunds": [],
+    "returns": [],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A8013": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-103",
+              "name": "toaster",
+              "price": 29.99
+            },
+            {
+              "sku": "SKU-105",
+              "name": "mixing bowls",
+              "price": 18.75
+            }
+          ],
+          "payment": "gift_card",
+          "refunded": 18.75,
+          "address": "58 Bay Street",
+          "eta": null,
+          "delivered": "2026-10-17",
+          "customer": "c-0007"
+        },
+        "A8014": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-103",
+              "name": "toaster",
+              "price": 29.99
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "70 Oak Avenue",
+          "eta": null,
+          "delivered": "2026-08-15",
+          "customer": "c-0007"
+        }
+      },
+      "refunds": [
+        {
+          "order": "A8013",
+          "amount": 18.75,
+          "to": "gift_card"
+        }
+      ],
+      "returns": [],
+      "log": []
+    },
+    "output": "Refunded $18.75 for order A8013 to your gift card."
+  }
+}

@@ -1,5 +1,13 @@
 # The aot-evals method
 
+> **On the 2.0 branch this page describes 1.x, which the code no longer runs.** The 1.x suite
+> files, the old layout, the commands' 1.x paths, `allocate`, `checkpoint`, `redundancy` and the
+> C0–C19 and G1–G14 gates are removed (G1, G2, G5, G8, G10, G13 and half of G12 survive as
+> report.json's evidence `gates`, v2-design §6); every command reads a 2.0 eval, and
+> `aot-evals migrate --to 2` converts a 1.x suite. Until this page is rewritten for 2.0, the
+> reference for behavior is [v2-design.md](v2-design.md), with [estimators.md](estimators.md),
+> [problems.md](problems.md) and [statistics.md](statistics.md).
+
 This is the reference for what aot-evals does and why: the principles, the measurement frame,
 the files it keeps in your repository, the commands C0–C19 and their exit gates, the
 measurements (M), experiments (E), report panels (P) and refusal gates (G) that the skills and
@@ -134,8 +142,9 @@ prompt rewrite, so the discriminating set is re-derived after every prompt chang
 
 Each agent's suite lives in `evals/agents/<agent>/`, beside its discovery report. A repository
 with one agent may keep the suite in `evals/` itself. Pass `--agent NAME` to the CLI when there
-are several. Suites made before that layout live in `evals/<agent>/`; they are read as they are,
-and `aot-evals migrate` moves them.
+are several. `aot-evals migrate --to 2` turns a 1.x suite, wherever it lives (`evals/`,
+`evals/<agent>/` or `evals/agents/<agent>/`), into a 2.0 agent folder with one eval, `end-to-end/`,
+and writes `MIGRATION.md` beside it with every choice it made (docs/v2-design.md §8).
 
 **2.0 evals (preview).** An agent folder may instead hold 2.0 evals, one folder per eval with its
 `eval.yaml` ([v2-design.md §1](v2-design.md#1-layout)). `aot-evals --eval ID init [--component

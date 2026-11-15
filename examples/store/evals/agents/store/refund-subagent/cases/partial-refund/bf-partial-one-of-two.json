@@ -1,0 +1,150 @@
+{
+  "id": "bf-partial-one-of-two",
+  "use_case": "partial-refund",
+  "pool": "bug_finding",
+  "order_template": "bf-partial",
+  "failure_modes": [
+    "breaks-policy",
+    "wrong-amount",
+    "unrequested-change",
+    "wrong-reply"
+  ],
+  "coverage_entries": [
+    "partial-refund"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-partial",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "handoff",
+    "text": "Refund request: Please refund the french press from order A8011."
+  },
+  "inputs": {
+    "order_id": "A8011",
+    "items": [
+      "SKU-108"
+    ],
+    "to": "original",
+    "today": "2026-10-22"
+  },
+  "start_state": {
+    "orders": {
+      "A8011": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-104",
+            "name": "coffee grinder",
+            "price": 59.0
+          },
+          {
+            "sku": "SKU-108",
+            "name": "french press",
+            "price": 27.99
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "85 Elm Street",
+        "eta": null,
+        "delivered": "2026-10-13",
+        "customer": "c-0006"
+      },
+      "A8012": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-101",
+            "name": "blender",
+            "price": 49.99
+          },
+          {
+            "sku": "SKU-105",
+            "name": "mixing bowls",
+            "price": 18.75
+          },
+          {
+            "sku": "SKU-107",
+            "name": "cutting board",
+            "price": 22.4
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "83 Harbor Road",
+        "eta": null,
+        "delivered": "2026-08-05",
+        "customer": "c-0006"
+      }
+    },
+    "refunds": [],
+    "returns": [],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A8011": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-104",
+              "name": "coffee grinder",
+              "price": 59.0
+            },
+            {
+              "sku": "SKU-108",
+              "name": "french press",
+              "price": 27.99
+            }
+          ],
+          "payment": "card",
+          "refunded": 27.99,
+          "address": "85 Elm Street",
+          "eta": null,
+          "delivered": "2026-10-13",
+          "customer": "c-0006"
+        },
+        "A8012": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-101",
+              "name": "blender",
+              "price": 49.99
+            },
+            {
+              "sku": "SKU-105",
+              "name": "mixing bowls",
+              "price": 18.75
+            },
+            {
+              "sku": "SKU-107",
+              "name": "cutting board",
+              "price": 22.4
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "83 Harbor Road",
+          "eta": null,
+          "delivered": "2026-08-05",
+          "customer": "c-0006"
+        }
+      },
+      "refunds": [
+        {
+          "order": "A8011",
+          "amount": 27.99,
+          "to": "original"
+        }
+      ],
+      "returns": [],
+      "log": []
+    },
+    "output": "Refunded $27.99 for order A8011 to your original payment."
+  }
+}

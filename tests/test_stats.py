@@ -93,18 +93,6 @@ def test_rogan_gladen_matches_the_labels_per_kind_table():
         assert [round(100 * x, 1) for x in ci] == [lo, hi], (n_fail, n_pass)
 
 
-def test_corrected_trigger_rate_is_unchanged_by_the_catch_clean_signature():
-    from aot_evals.report import corrected_trigger_rate
-    # pass is the positive in the 1.x confusion matrix: tp both pass, tn both fail
-    judge = {"confusion": {"tp": 45, "fn": 5, "tn": 16, "fp": 4}, "status": "calibrated"}
-    r = corrected_trigger_rate(0.25, 40, judge)
-    # the 1.x arithmetic, pass as the positive, then complemented
-    q, tpr, tnr = 30 / 40, 45 / 50, 16 / 20
-    j = tpr + tnr - 1
-    assert abs(r["point"] - (1 - (q + tnr - 1) / j)) < 1e-12
-    assert r["ci"][0] < r["point"] < r["ci"][1] and r["calibrated"]
-
-
 def test_ppi_is_unbiased_and_tighter_than_labels_alone_when_the_suite_is_good():
     import random
     rng = random.Random(0)

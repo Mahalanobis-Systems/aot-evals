@@ -1,0 +1,133 @@
+{
+  "id": "tr_1178",
+  "use_case": "return",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 3,
+    "inclusion_prob": 0.13333333333333333
+  },
+  "template": "return-t2",
+  "cluster": "return-t2",
+  "trigger": {
+    "text": "Can I send back A1357?",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0179",
+    "today": "2026-10-27"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1357": {
+        "address": "38 Bay Street",
+        "customer": "c-0179",
+        "delivered": "2026-10-15",
+        "eta": null,
+        "items": [
+          {
+            "name": "blender",
+            "price": 49.99,
+            "sku": "SKU-101"
+          },
+          {
+            "name": "mixing bowls",
+            "price": 18.75,
+            "sku": "SKU-105"
+          },
+          {
+            "name": "cutting board",
+            "price": 22.4,
+            "sku": "SKU-107"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1358": {
+        "address": "3 Mill Lane",
+        "customer": "c-0179",
+        "delivered": "2026-09-12",
+        "eta": null,
+        "items": [
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "I've started a return for order A1357. You'll get a label by email.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1357": {
+          "address": "38 Bay Street",
+          "customer": "c-0179",
+          "delivered": "2026-10-15",
+          "eta": null,
+          "items": [
+            {
+              "name": "blender",
+              "price": 49.99,
+              "sku": "SKU-101"
+            },
+            {
+              "name": "mixing bowls",
+              "price": 18.75,
+              "sku": "SKU-105"
+            },
+            {
+              "name": "cutting board",
+              "price": 22.4,
+              "sku": "SKU-107"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        },
+        "A1358": {
+          "address": "3 Mill Lane",
+          "customer": "c-0179",
+          "delivered": "2026-09-12",
+          "eta": null,
+          "items": [
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": [
+        {
+          "opened": "2026-10-27",
+          "order": "A1357"
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1178",
+    "synthetic": false
+  }
+}

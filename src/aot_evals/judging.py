@@ -2,19 +2,20 @@
 
 A judge check line is a `kind: check` line with `type: judge`, plus the backend, model, judge
 version and hash, the score P(pass), the threshold used, and the judge's cost. The verdict is
-recorded whether or not the judge is calibrated; the report decides whether it counts (G3).
+recorded whether or not the judge is calibrated; the report decides whether it counts (its floor,
+docs/v2-design.md §4).
 """
 
 from __future__ import annotations
 
 from .calibrate import is_current, load_calibration, threshold_for
 from .judges import JudgeSpec, build_input, credentials_missing, judge, load_spec
-from .repo import Evals
+from .repo import Eval
 from .util import append_jsonl, load_json
 
 
 class JudgeRunner:
-    def __init__(self, ev: Evals, log=print, enabled: bool = True):
+    def __init__(self, ev: Eval, log=print, enabled: bool = True):
         self.ev = ev
         self.log = log
         self.enabled = enabled
@@ -68,7 +69,7 @@ class JudgeRunner:
                 "detail": j.error or (j.reasoning or "")[:2000]}
 
 
-def apply_to_run(ev: Evals, check_id: str, run_id: str, backend: str | None = None, log=print) -> dict:
+def apply_to_run(ev: Eval, check_id: str, run_id: str, backend: str | None = None, log=print) -> dict:
     """Judge every final ok attempt of a past run that the judge applies to. Skips attempts that
     already have a line from this judge version and backend."""
     jr = JudgeRunner(ev, log=log)

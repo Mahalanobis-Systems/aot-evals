@@ -1,0 +1,130 @@
+{
+  "id": "tr_1286",
+  "use_case": "refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 1,
+    "inclusion_prob": 0.125
+  },
+  "template": "refund-full-refund-t3",
+  "cluster": "refund-full-refund-t3",
+  "trigger": {
+    "text": "Can I get my money back for A1573?",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0287",
+    "today": "2026-10-28"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1573": {
+        "address": "84 Elm Street",
+        "customer": "c-0287",
+        "delivered": "2026-09-29",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1574": {
+        "address": "74 Mill Lane",
+        "customer": "c-0287",
+        "delivered": "2026-08-12",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $64.49 for order A1573 to your original payment.",
+    "world": {
+      "log": [
+        {
+          "order": "A1573",
+          "to": "refund-subagent",
+          "tool": "handoff"
+        }
+      ],
+      "orders": {
+        "A1573": {
+          "address": "84 Elm Street",
+          "customer": "c-0287",
+          "delivered": "2026-09-29",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            }
+          ],
+          "payment": "card",
+          "refunded": 64.49,
+          "status": "delivered"
+        },
+        "A1574": {
+          "address": "74 Mill Lane",
+          "customer": "c-0287",
+          "delivered": "2026-08-12",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 64.49,
+          "order": "A1573",
+          "to": "original"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1286",
+    "synthetic": false
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "id": "tr_1349",
+  "use_case": "refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 18,
+    "inclusion_prob": 0.125
+  },
+  "template": "refund-full-refund-t2",
+  "cluster": "refund-full-refund-t2",
+  "trigger": {
+    "text": "Please refund order A1699.",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0350",
+    "today": "2026-10-30"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1699": {
+        "address": "80 Cedar Court",
+        "customer": "c-0350",
+        "delivered": "2026-10-10",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1700": {
+        "address": "92 Elm Street",
+        "customer": "c-0350",
+        "delivered": "2026-09-16",
+        "eta": null,
+        "items": [
+          {
+            "name": "coffee grinder",
+            "price": 59.0,
+            "sku": "SKU-104"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $34.50 for order A1699 to your original payment.",
+    "world": {
+      "log": [
+        {
+          "order": "A1699",
+          "to": "refund-subagent",
+          "tool": "handoff"
+        }
+      ],
+      "orders": {
+        "A1699": {
+          "address": "80 Cedar Court",
+          "customer": "c-0350",
+          "delivered": "2026-10-10",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            }
+          ],
+          "payment": "card",
+          "refunded": 34.5,
+          "status": "delivered"
+        },
+        "A1700": {
+          "address": "92 Elm Street",
+          "customer": "c-0350",
+          "delivered": "2026-09-16",
+          "eta": null,
+          "items": [
+            {
+              "name": "coffee grinder",
+              "price": 59.0,
+              "sku": "SKU-104"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 34.5,
+          "order": "A1699",
+          "to": "original"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1349",
+    "synthetic": false
+  }
+}

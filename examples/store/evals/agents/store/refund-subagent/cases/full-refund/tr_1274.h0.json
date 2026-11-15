@@ -1,0 +1,117 @@
+{
+  "id": "tr_1274.h0",
+  "use_case": "full-refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 22,
+    "inclusion_prob": 0.3305785123966942
+  },
+  "order_template": "ot-01",
+  "cluster": "ot-01",
+  "trigger": {
+    "text": "Refund request: Can I get my money back for A1549?",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": null,
+    "order_id": "A1549",
+    "to": "original",
+    "today": "2026-10-17"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1549": {
+        "address": "85 Mill Lane",
+        "customer": "c-0275",
+        "delivered": "2026-10-15",
+        "eta": null,
+        "items": [
+          {
+            "name": "blender",
+            "price": 49.99,
+            "sku": "SKU-101"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1550": {
+        "address": "72 Harbor Road",
+        "customer": "c-0275",
+        "delivered": "2026-08-20",
+        "eta": null,
+        "items": [
+          {
+            "name": "coffee grinder",
+            "price": 59.0,
+            "sku": "SKU-104"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $49.99 for order A1549 to your original payment.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1549": {
+          "address": "85 Mill Lane",
+          "customer": "c-0275",
+          "delivered": "2026-10-15",
+          "eta": null,
+          "items": [
+            {
+              "name": "blender",
+              "price": 49.99,
+              "sku": "SKU-101"
+            }
+          ],
+          "payment": "card",
+          "refunded": 49.99,
+          "status": "delivered"
+        },
+        "A1550": {
+          "address": "72 Harbor Road",
+          "customer": "c-0275",
+          "delivered": "2026-08-20",
+          "eta": null,
+          "items": [
+            {
+              "name": "coffee grinder",
+              "price": 59.0,
+              "sku": "SKU-104"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 49.99,
+          "order": "A1549",
+          "to": "original"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1274.h0",
+    "synthetic": false,
+    "source_trace": "tr_1274"
+  }
+}

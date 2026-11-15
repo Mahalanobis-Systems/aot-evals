@@ -4,13 +4,12 @@ each serves (estimators §1–§6; docs/v2-design.md §7).
 An eval is an estimator with four parts: the estimand, the sampling design, the measurement model
 and the decision rule. Around them sits what lets the agent run at all: the agent contract and a
 sandbox. Every component of the loop serves one of those, so the list is grouped by them, each
-component with the command that builds it and a status read from the agent's evals (2.0) or its
-suite (1.x).
+component with the command that builds it and a status read from the agent's evals.
 
 The Assess report may set a component's state before any eval exists (`components:` in
 discovery.md's front matter, keyed by id); once the evals hold evidence, their own reading wins
-wherever it says more than the report did. `aot-evals components` prints the list; `status
---json`, the checkpoint pages and the grader application carry it.
+wherever it says more than the report did. `aot-evals components` prints the list; the grader
+application (`aot-evals serve`) shows it.
 """
 
 from __future__ import annotations
@@ -69,97 +68,6 @@ COMPONENTS = [
     (DECISION, "trace-monitoring", "Trace monitoring", "not automated yet"),
 ]
 STATES = ("done", "partial", "todo", "later", "n/a")
-
-
-def _from_suite(ev: Evals) -> dict[str, tuple[str, str]]:
-    """id -> (state, evidence), for what the suite itself shows."""
-    from . import agreement, gates
-    from .replay import records_dir
-
-    a = ev.agent()
-    inv = a.get("invoke") or {}
-    cases = ev.cases(include_dropped=False)
-    code = [c for c in cases if ev.checks_for_case(c, check_type="code")]
-    base_runs = ev.baseline_runs()
-    base = base_runs[-1] if base_runs else None
-    by = agreement.per_labeller(ev)
-    labellers = {k for people in by.values() for k in people}
-    overlapped = sum(len(p) >= 2 for p in by.values())
-    judges = gates._judge_checks(ev)
-    gs = {g.id: g for g in gates.evaluate(ev)}
-    cal = gs.get("C10")
-    compared = gs.get("C13") is not None and gs["C13"].status == "met"
-    comps = [m for m in ev.runs("candidate") if m.get("finished")]
-    out: dict[str, tuple[str, str]] = {}
-
-    def put(cid, state, why):
-        out[cid] = (state, why)
-
-    put("sandbox", "done" if inv.get("command") and (inv.get("isolate") or inv.get("seed")) else
-        "partial" if inv.get("command") else "todo",
-        "runs from its command" + (", isolated" if inv.get("isolate") else "") + (", seeded" if inv.get("seed") else "")
-        if inv.get("command") else "no invoke.command yet")
-    env_dir = ev.p("env")
-    env_files = [p for p in env_dir.rglob("*") if p.is_file() and p.name != ".gitkeep"] if env_dir.exists() else []
-    if env_files:
-        put("fakes", "done", f"{len(env_files)} fake or fixture file(s) in env/")
-    elif inv.get("seed"):
-        put("fakes", "n/a", "the seed hook sets up the world; no fakes in env/")
-    else:
-        put("fakes", "todo", "nothing in env/ and no seed hook")
-    put("replay", "done" if records_dir(inv) else "n/a", "replays " + records_dir(inv) if records_dir(inv)
-        else "the agent runs live")
-    put("seeded", "done" if inv.get("seed") and inv.get("observe") else "partial" if inv.get("observe") else "todo",
-        "seed and observe hooks" if inv.get("seed") else "no seed hook")
-    put("golden", "done" if len(cases) >= 10 else "partial" if cases else "todo",
-        f"{len(cases)} cases in {len({c.get('category') for c in cases})} categories")
-    put("deterministic", "done" if cases and len(code) == len(cases) else "partial" if code else "todo",
-        f"{len(code)} of {len(cases)} cases have a code check")
-    hold = sum((r.get("split") == "holdout") for r in agreement.load_labels(ev))
-    put("holdouts", "done" if hold >= 5 else "partial" if hold else "todo", f"{hold} held-out labelled runs")
-    put("grader-ui", "done" if by else "todo", f"{len(by)} runs labelled" if by else "aot-evals serve, not used yet")
-    warm = sum(1 for _ in agreement.load_rulings(ev)) + overlapped
-    put("calibration-set", "done" if warm >= 5 else "partial" if warm else "todo", f"{warm} settled runs")
-    put("two-blind", "done" if overlapped >= 15 else "partial" if overlapped else "todo",
-        f"{overlapped} runs labelled by two or more people")
-    put("pool", "done" if len(labellers) >= 2 else "partial" if labellers else "todo",
-        f"{len(labellers)} labeller(s)")
-    put("judges", "n/a" if not judges else "done" if cal and cal.status == "met" else "partial",
-        "no AI judges: every check is code" if not judges else (cal.info or cal.problems or [""])[0] if cal else "")
-    put("qualitative", "n/a" if not judges else "done", f"{len(judges)} judge(s)")
-    synth = sum(bool((c.get("provenance") or {}).get("synthetic")) for c in cases)
-    drafts = len(list(ev.p("labels", "drafts").glob("*.json"))) if ev.p("labels", "drafts").exists() else 0
-    put("synthetic", "partial" if synth or drafts else "todo", f"{synth} synthetic case(s), {drafts} draft(s)")
-    put("engine", "done" if base else "todo",
-        f"baseline {' + '.join(m['run_id'] for m in base_runs)}" if base else "no baseline yet")
-    put("change-scoping", "done" if compared else "partial" if base else "todo",
-        "a change was compared and its moved cases can be labelled alone" if compared else
-        "status names every change since the baseline; no change has been compared yet" if base else
-        "needs a baseline")
-    put("ab", "done" if compared else "partial" if comps else "todo",
-        f"{len(comps)} candidate run(s)" + ("" if compared or not comps else ", the latest not compared yet"))
-    put("trace-monitoring", "later", "not automated yet")
-    weighted = all(isinstance(c.get("observed_share"), (int, float)) and c.get("worth") for c in ev.categories())
-    put("weighting", "done" if ev.categories() and weighted else "partial" if ev.categories() else "todo",
-        "worth and share on every category" if weighted and ev.categories() else "some categories lack worth or share")
-    put("business", "done" if ev.discovery_path().exists() else "todo", "discovery.md")
-    put("distribution", "later", "not automated yet")
-    put("significance", "done" if compared else "todo",
-        "the latest comparison has its paired test" if compared else "no comparison yet")
-    ks = sorted({m.get("k") or 0 for m in base_runs})
-    put("noise-floor", "done" if base_runs and min(ks) >= 3 else "partial" if base_runs else "todo",
-        (f"k = {', '.join(map(str, ks))}: 3 to 5 trials per case shows how much results move by chance; "
-         "5 narrows the band" if base_runs else "no baseline yet"))
-    res = load_json(agreement.result_path(ev)) or {}
-    put("misclassification", "done" if res and not agreement.gate_problems(ev, res) else "partial" if res else "todo",
-        f"{len(res.get('disagreements') or [])} disagreement(s) measured" if res else "not measured yet")
-    isolated = bool(inv.get("isolate") or records_dir(inv))
-    put("runner", "done" if base and isolated else "partial" if inv.get("command") else "todo",
-        "isolated from the eval files" if isolated else "runs in the repository, beside the eval files "
-        "(set invoke.isolate: true)")
-    put(*_boundaries(ev, {}))
-    put("handoff-frames", "n/a", "a 1.x suite is one eval; `migrate --to 2`, then a component eval per boundary")
-    return out
 
 
 def _boundaries(agent_dir: Evals, units: dict[str, str]) -> tuple[str, str, str]:
@@ -346,21 +254,17 @@ def _from_evals(ev: Evals) -> dict[str, tuple[str, str]]:
 
 
 def checklist(ev: Evals) -> list[dict]:
+    """The components of the agent system `ev` (its folder, not one eval), each with its state."""
     report = {}
     path = ev.discovery_path()
     if path.exists():
         fm, _ = split_front_matter(path.read_text())
         report = fm.get("components") or {}
-    if not ev.exists():
-        suite = {}
-    elif ev.has_evals and not ev.has_v1_suite:
-        suite = _from_evals(ev)
-    else:
-        suite = _from_suite(ev)
+    found = _from_evals(ev) if ev.exists() else {}
     rank = {"done": 3, "partial": 2, "later": 1, "todo": 0, "n/a": 0}
     out = []
     for part, cid, name, how in COMPONENTS:
-        st, why = suite.get(cid, ("todo", ""))
+        st, why = found.get(cid, ("todo", ""))
         r = report.get(cid)
         if isinstance(r, dict) and r.get("state") in STATES and rank[r["state"]] > rank.get(st, 0):
             st, why = r["state"], r.get("note") or why

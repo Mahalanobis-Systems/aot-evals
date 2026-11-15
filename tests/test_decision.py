@@ -448,28 +448,36 @@ REFUND_FRAME = {"full-refund": 16, "partial-refund": 8, "gift-card": 8}
 
 
 def _refunds(s: Store, tmp_path, *, judge: bool, frame: dict | None = None) -> None:
-    """The store's refunds eval (examples/store), on a toy subagent. With `judge`, breaks-policy is
-    graded by the policy judge, calibrated on 20 failure and 100 pass labels at catch 0.95 and
-    clean 0.99: the floor refuses it (v2-design §9: it needs about 100 and 500). Without, the
-    quantity is the code-checked wrong-amount rate."""
+    """The store's refund-subagent eval (examples/store), on a toy subagent. With `judge`,
+    breaks-policy is graded by a deliberately undersized judge of the fixture's own: catch 0.95 and
+    clean 0.99, the store's policy judge's rates, on only 20 failure and 100 pass labels, so the
+    floor refuses it (v2-design §9: those rates need about 100 and 500; the store ships them, and
+    test_store.py shows its judge counts). Without, the quantity is the code-checked wrong-amount
+    rate."""
     from test_estimand import END_STATE, PASS, STORE
 
-    d = s.agent / "refunds"
+    d = s.agent / "refund-subagent"
     (d / "checks" / "code").mkdir(parents=True)
     # a real check on the amount, so a do-nothing run fails screening (rule 17)
     (d / "checks" / "code" / "amount-matches.py").write_text(END_STATE)
     (d / "checks" / "code" / "no-side-effects.py").write_text(PASS)
+    (d / "checks" / "code" / "reply-matches-refund.py").write_text(PASS)
     (s.root / "agent" / "refunds.py").write_text(REFUNDS_AGENT)
-    data = yaml.safe_load((STORE / "refunds" / "eval.yaml").read_text())
+    data = yaml.safe_load((STORE / "refund-subagent" / "eval.yaml").read_text())
+    data.pop("invoke")  # the toy subagent needs no sandbox: no hooks
+    for fm in data["measurement"]["failure_modes"]:
+        fm.pop("diagnostics", None)  # the store's weaker judge is not part of this fixture
     data["invoke"] = {"command": [sys.executable, "agent/refunds.py"], "cwd": ".", "timeout": 20}
     if judge:
         (s.root / "judge.py").write_text(JUDGE_PY)
-        spec = {"id": "policy-judge", "version": 1, "question_type": "noul", "detects": "failure",
+        data["measurement"]["failure_modes"][0]["check"] = "undersized-judge"
+        spec = {"id": "undersized-judge", "version": 1, "question_type": "noul", "detects": "failure",
                 "question": "The refund breaks the policy.", "inputs": ["end.output"], "primary": "local",
                 "backends": {"local": {"type": "command", "command": [sys.executable, str(s.root / "judge.py")],
                                        "family": "toy", "model": "toy-judge"}}}
         (d / "checks" / "judge").mkdir(parents=True)
-        (d / "checks" / "judge" / "policy-judge.md").write_text("---\n" + yaml.safe_dump(spec) + "---\nPass or fail.\n")
+        (d / "checks" / "judge" / "undersized-judge.md").write_text(
+            "---\n" + yaml.safe_dump(spec) + "---\nPass or fail.\n")
     else:
         data["estimand"]["quantity"] = data["decision_rule"]["quantity"] = "failure_rate:wrong-amount"
         data["measurement"]["failure_modes"] = [fm for fm in data["measurement"]["failure_modes"]
@@ -481,7 +489,7 @@ def _refunds(s: Store, tmp_path, *, judge: bool, frame: dict | None = None) -> N
         data["design"].pop("oversample", None)
         data["decision_rule"]["bar"] = 0.05
     frame = frame or REFUND_FRAME
-    _write_spec(s, data, "refunds")
+    _write_spec(s, data, "refund-subagent")
     rows = [{"id": f"tr_{uc}_{i:02d}", "use_case": uc, "order_template": f"{uc}-t{i}",
              "trigger": {"type": "handoff", "text": f"refund {uc} {i}"},
              "expected_end_state": {"world": None, "output": "ok"}}
@@ -489,10 +497,10 @@ def _refunds(s: Store, tmp_path, *, judge: bool, frame: dict | None = None) -> N
     (tmp_path / "handoffs.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
     assert s.cli("import", str(tmp_path / "handoffs.jsonl"), "--id", "refund-handoffs-2026-10", "--source",
                  "fixture", "--query", "all", "--window", "2026-10-01..2026-10-31",
-                 "--handoffs-of", "refund-subagent", eval_id="refunds") == 0
+                 "--handoffs-of", "refund-subagent", eval_id="refund-subagent") == 0
     assert s.cli("draw", *[a for uc, n in frame.items() for a in ("--n", f"{uc}={n}")],
-                 eval_id="refunds") == 0
-    assert s.cli("screen", "--read-by", "tester", "--all", eval_id="refunds") == 0
+                 eval_id="refund-subagent") == 0
+    assert s.cli("screen", "--read-by", "tester", "--all", eval_id="refund-subagent") == 0
     if judge:
         rows_ = []
         for k in range(20):
@@ -503,18 +511,18 @@ def _refunds(s: Store, tmp_path, *, judge: bool, frame: dict | None = None) -> N
             rows_.append({"item_id": f"lab-p{k}-{'ok' if k < 99 else 'wrong'}", "case_id": f"lab-p{k}",
                           "label": True, "labeller": "pat", "split": "dev",
                           "input": {"end.output": "ok" if k < 99 else "wrong"}})
-        (d / "checks" / "judge" / "policy-judge.labels.jsonl").write_text(
+        (d / "checks" / "judge" / "undersized-judge.labels.jsonl").write_text(
             "".join(json.dumps(r) + "\n" for r in rows_))
-        assert s.cli("calibrate", "--judge", "policy-judge", eval_id="refunds") == 0
+        assert s.cli("calibrate", "--judge", "undersized-judge", eval_id="refund-subagent") == 0
     s.commit("refunds eval")
-    assert s.cli("run", "--purpose", "baseline", eval_id="refunds") == 0
+    assert s.cli("run", "--purpose", "baseline", eval_id="refund-subagent") == 0
 
 
-def test_the_store_refunds_judge_is_refused_and_the_decision_unknown(store, tmp_path):
-    """v2-design §9: at 20 and 100 labels the policy judge's lower bounds cost more than
-    max_inflation 2.0, so θ̂ is null and the decision unknown (rule 13), never a pass."""
+def test_an_undersized_judge_is_refused_and_the_decision_unknown(store, tmp_path):
+    """v2-design §9: at 20 and 100 labels a judge at the policy judge's rates costs more than
+    max_inflation 2.0 at its lower bounds, so θ̂ is null and the decision unknown (rule 13)."""
     _refunds(store, tmp_path, judge=True)
-    r = _report(store, eval_id="refunds")
+    r = _report(store, eval_id="refund-subagent")
     fm = next(m for m in r["measurement"]["failure_modes"] if m["id"] == "breaks-policy")
     assert fm["floor"]["status"] == "refused" and fm["labels"] == {"fail": 20, "pass": 100}
     assert r["estimate"]["theta"] is None and "rule 13" in r["estimate"]["null_reason"]
@@ -526,14 +534,14 @@ def test_the_store_refunds_judge_is_refused_and_the_decision_unknown(store, tmp_
 def test_also_requires_reads_the_end_to_end_eval_for_the_same_change(store, tmp_path):
     _setup(store, "refund-bug")
     _refunds(store, tmp_path, judge=False)
-    assert store.cli("run", "--purpose", "candidate", "--variable", "prompt=refunds-v2", eval_id="refunds") == 0
-    rc = Evals_of(store).eval("refunds").runs("candidate")[-1]["run_id"]
+    assert store.cli("run", "--purpose", "candidate", "--variable", "prompt=refunds-v2", eval_id="refund-subagent") == 0
+    rc = Evals_of(store).eval("refund-subagent").runs("candidate")[-1]["run_id"]
     # no end-to-end candidate of this change yet: unknown, with the command that makes one
-    d = _report(store, rc, eval_id="refunds")["decision"]
+    d = _report(store, rc, eval_id="refund-subagent")["decision"]
     assert _results(d) == {"headline": "pass", "also_requires:end-to-end": "unknown"}
     assert d["result"] == "unknown" and "--eval end-to-end run --purpose candidate" in d["also_requires"][0]["reason"]
     assert store.cli("run", "--purpose", "candidate", "--variable", "prompt=refunds-v2") == 0
-    d = _report(store, rc, eval_id="refunds")["decision"]
+    d = _report(store, rc, eval_id="refund-subagent")["decision"]
     assert _results(d) == {"headline": "pass", "also_requires:end-to-end": "pass"} and d["result"] == "pass"
     assert d["also_requires"][0]["gate"]["test"] == "non_inferiority"
 
@@ -546,7 +554,7 @@ def test_zero_failures_against_a_5_percent_bar_needs_59_cases(store, tmp_path, f
     """The zero-failure rule (statistics §4.1): no wrong amount in 32 cases leaves the bound at
     8.9%, above a 5% bar; in 59 it is 4.95%. The normal bound passed both."""
     _refunds(store, tmp_path, judge=False, frame=frame)
-    d = _report(store, eval_id="refunds")["decision"]
+    d = _report(store, eval_id="refund-subagent")["decision"]
     head = d["headline"]
     n = sum(frame.values())
     assert head["estimate"] == 0 and head["n_effective"] == pytest.approx(n)

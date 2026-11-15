@@ -1,0 +1,128 @@
+{
+  "id": "tr_1036",
+  "use_case": "order-status",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 5,
+    "inclusion_prob": 0.08571428571428572
+  },
+  "template": "order-status-t5",
+  "cluster": "order-status-t5",
+  "trigger": {
+    "text": "Can you check on order A1073 for me?",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0037",
+    "today": "2026-10-18"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1073": {
+        "address": "15 Bay Street",
+        "customer": "c-0037",
+        "delivered": null,
+        "eta": "2026-10-24",
+        "items": [
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "processing"
+      },
+      "A1074": {
+        "address": "71 Mill Lane",
+        "customer": "c-0037",
+        "delivered": "2026-08-08",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          },
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Order A1073 is processing; it should arrive on 2026-10-24.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1073": {
+          "address": "15 Bay Street",
+          "customer": "c-0037",
+          "delivered": null,
+          "eta": "2026-10-24",
+          "items": [
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "processing"
+        },
+        "A1074": {
+          "address": "71 Mill Lane",
+          "customer": "c-0037",
+          "delivered": "2026-08-08",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            },
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1036",
+    "synthetic": false
+  }
+}

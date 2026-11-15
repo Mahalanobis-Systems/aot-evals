@@ -1,7 +1,8 @@
-"""E14 operational sweep: plane B only. No labels, judges or cases needed.
+"""`ops`: the operational sweep (cost, latency, outcomes) against the spec's constraints. No labels,
+judges or cases needed.
 
 Two sources:
-- runs: budgets vs actuals per category for one or more runs (the same numbers as report P4);
+- runs: budgets vs actuals per use case for one or more runs (the same numbers as report P4);
 - an export (C0): per-row cost, latency, tokens and outcome read from an imported trace dump
   through a field mapping, so a team can see plane B in week one, before any eval exists.
 """
@@ -15,7 +16,7 @@ from .repo import Evals
 from .report import Context, operational
 from .util import get_path
 
-EXPORT_FIELDS = ("category", "cost_usd", "latency_ms", "tokens_input", "tokens_output",
+EXPORT_FIELDS = ("use_case", "cost_usd", "latency_ms", "tokens_input", "tokens_output",
                  "tokens_cached", "tool_calls", "outcome", "killed")
 
 
@@ -23,9 +24,9 @@ def from_runs(ev: Evals, run_ids: list[str]) -> dict:
     ctx = Context(ev, run_ids)
     by_cat: dict[str, list[dict]] = defaultdict(list)
     for a in ctx.attempts:
-        by_cat[a.get("category") or "(none)"].append(a)
+        by_cat[a.get("use_case") or "(none)"].append(a)
     return {"source": {"runs": run_ids},
-            "categories": {c: operational(atts, ev.budget_for(c)) for c, atts in sorted(by_cat.items())}}
+            "use_cases": {c: operational(atts, ev.budget_for(c)) for c, atts in sorted(by_cat.items())}}
 
 
 def from_export(ev: Evals, export_id: str, mapping: dict[str, str], ok_values: list[str]) -> dict:
@@ -53,10 +54,10 @@ def from_export(ev: Evals, export_id: str, mapping: dict[str, str], ok_values: l
             rec[field] = v
         if "outcome" not in mapping:
             rec["outcome"] = "ok"
-        by_cat[str(rec.get("category") or "(uncategorised)")].append(rec)
+        by_cat[str(rec.get("use_case") or "(no use case)")].append(rec)
     return {"source": {"export": export_id, "mapping": mapping},
             "note": "cost per success needs correctness, which an export does not have",
-            "categories": {c: operational(r, ev.budget_for(c)) for c, r in sorted(by_cat.items())}}
+            "use_cases": {c: operational(r, ev.budget_for(c)) for c, r in sorted(by_cat.items())}}
 
 
 def _num(v, kind):
@@ -67,13 +68,13 @@ def _num(v, kind):
 
 
 def render(result: dict) -> str:
-    lines = [f"E14 operational sweep  {result['source']}"]
+    lines = [f"operational sweep  {result['source']}"]
     if result.get("note"):
         lines.append(f"  note: {result['note']}")
-    hdr = (f"  {'category':<26} {'trials':>6} {'$/run':>9} {'$/success':>10} {'p50 ms':>8} "
+    hdr = (f"  {'use case':<26} {'trials':>6} {'$/run':>9} {'$/success':>10} {'p50 ms':>8} "
            f"{'p90 ms':>8} {'cache':>6} {'err rate':>9} {'retries':>7} {'killed':>6}  budget")
     lines.append(hdr)
-    for cat, op in result["categories"].items():
+    for cat, op in result["use_cases"].items():
         er = op.get("error_rate") or {}
         status = op.get("budget_status") or "no budget"
         if op.get("budget_breaches"):

@@ -1,0 +1,148 @@
+{
+  "id": "bf-gift-whole",
+  "use_case": "gift-card",
+  "pool": "bug_finding",
+  "order_template": "bf-gift-whole",
+  "failure_modes": [
+    "breaks-policy",
+    "wrong-amount",
+    "unrequested-change",
+    "wrong-reply"
+  ],
+  "coverage_entries": [
+    "gift-card"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-gift-whole",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "handoff",
+    "text": "Refund request: Please refund order A8015 to a gift card."
+  },
+  "inputs": {
+    "order_id": "A8015",
+    "items": null,
+    "to": "gift_card",
+    "today": "2026-10-22"
+  },
+  "start_state": {
+    "orders": {
+      "A8015": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-102",
+            "name": "kettle",
+            "price": 34.5
+          },
+          {
+            "sku": "SKU-103",
+            "name": "toaster",
+            "price": 29.99
+          }
+        ],
+        "payment": "gift_card",
+        "refunded": 0.0,
+        "address": "24 Cedar Court",
+        "eta": null,
+        "delivered": "2026-10-10",
+        "customer": "c-0008"
+      },
+      "A8016": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-101",
+            "name": "blender",
+            "price": 49.99
+          },
+          {
+            "sku": "SKU-105",
+            "name": "mixing bowls",
+            "price": 18.75
+          },
+          {
+            "sku": "SKU-107",
+            "name": "cutting board",
+            "price": 22.4
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "49 Mill Lane",
+        "eta": null,
+        "delivered": "2026-08-27",
+        "customer": "c-0008"
+      }
+    },
+    "refunds": [],
+    "returns": [],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A8015": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-102",
+              "name": "kettle",
+              "price": 34.5
+            },
+            {
+              "sku": "SKU-103",
+              "name": "toaster",
+              "price": 29.99
+            }
+          ],
+          "payment": "gift_card",
+          "refunded": 64.49,
+          "address": "24 Cedar Court",
+          "eta": null,
+          "delivered": "2026-10-10",
+          "customer": "c-0008"
+        },
+        "A8016": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-101",
+              "name": "blender",
+              "price": 49.99
+            },
+            {
+              "sku": "SKU-105",
+              "name": "mixing bowls",
+              "price": 18.75
+            },
+            {
+              "sku": "SKU-107",
+              "name": "cutting board",
+              "price": 22.4
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "49 Mill Lane",
+          "eta": null,
+          "delivered": "2026-08-27",
+          "customer": "c-0008"
+        }
+      },
+      "refunds": [
+        {
+          "order": "A8015",
+          "amount": 64.49,
+          "to": "gift_card"
+        }
+      ],
+      "returns": [],
+      "log": []
+    },
+    "output": "Refunded $64.49 for order A8015 to your gift card."
+  }
+}

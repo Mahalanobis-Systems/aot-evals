@@ -119,7 +119,7 @@ An eval is complete when `missing` and `invalid` are both empty.
 The values below are the store's refund eval ([§9](#9-the-online-store-example)).
 
 ```yaml
-eval: refunds
+eval: refund-subagent
 version: 1.0                       # major.minor; see estimators §9 for which changes are major
 
 estimand:
@@ -170,7 +170,7 @@ measurement:
       description: Refunds an order the policy does not allow, or refuses one it does.
       use_cases: "*"
       check: policy-judge          # the one check that counts (rule 12)
-      diagnostics: []              # other checks on this mode, reported, never counted
+      diagnostics: [policy-judge-weak]   # other checks on this mode, reported, never counted
     - id: wrong-amount
       use_cases: "*"
       check: amount-matches
@@ -178,8 +178,11 @@ measurement:
       use_cases: "*"
       check: no-side-effects
       side_effect: true            # at least one counted side-effect check is required
+    - id: wrong-reply
+      use_cases: "*"
+      check: reply-matches-refund
   trials: 3                        # or: auto (from the measured variance split, rule 16)
-  correction: ppi                  # none | rogan_gladen | ppi
+  correction: rogan_gladen         # none | rogan_gladen | ppi; the judge's labels are on past runs
   max_inflation: 2.0               # how many times more cases a judge may cost (statistics §3.3)
   people:
     floors: {catch: null, clean: null}   # the eval against people; null: from max_inflation, as for a judge
@@ -206,9 +209,12 @@ decision_rule:
     use_cases: {}
 
 invoke:                            # component evals only; the system eval uses agent.yaml
-  command: ["python", "agent/refunds.py", "--handoff"]
+  command: [python3, agent/refunds.py, --handoff]
   cwd: .
-  timeout: 60
+  timeout: 20
+  seed: python3 evals/agents/store/env/seed.py     # the sandbox's hooks, as agent.yaml's
+  observe: python3 evals/agents/store/env/observe.py
+  env: {AGENT_VARIANT: good, STORE_WORLD: world.json, STORE_ENV: evals/agents/store/env}
 ```
 
 **Field rules.**
@@ -424,8 +430,9 @@ values are null with a reason, never 0, and nothing is pre-rounded.
 | `measurement` | `{failure_modes[{id, check, type, use_cases, observed_rate, catch, clean, j, labels{fail, pass}, inflation, inflation_at_lower_bounds, floor{status, reason, rate, max_inflation}, corrected_rate, feeds_estimate}], eval_vs_people{catch, clean, all, labels{fail, pass}, labels_needed, floor, failure_rate, stale}, person_anchored{ppi}, variance{icc, between, within, k_recommended}, people{pairs[{ac1, kappa, pass_agreement, fail_agreement}]}, trials, max_inflation, correction, gates[{id, detail}]}` | Measurement |
 | `decision` | `{test, quantity, bar, margin, alpha, power, looks, combine, multiplicity, subject, result: "pass" \| "fail" \| "insufficient" \| "unknown" \| "trade", reasons[], null_reason, interval, detectable_effect, cases_needed, headline{…}, gates[{gate, use_case, result, p, p_adjusted, …}], also_requires[{eval, result, reason, runs, gate}], constraints{status, breaches[]}, look{n, prior[], recorded}, refused}` | Decision rule |
 | `comparison` | as 1.x, with Δθ̂ design-weighted, the verdict read from the paired sign-flip test per cluster, `per_use_case` adjusted p-values, `bug_finding` flips apart, and `variance_band` removed; null without `--candidate` | Decision rule |
-| `coverage`, `redundancy`, `cases`, `conditions`, `next_actions` | as 1.x (`conditions.simulator` removed) | |
+| `coverage`, `redundancy`, `cases`, `conditions`, `next_actions` | not in v2 yet; `aot-evals coverage` prints the coverage grid (§7) | |
 | `checks` | as 1.x, with `catch` and `clean` in place of `tnr` and `tpr` | Measurement |
+| `gates` | the evidence checks on the runs, keyed by part: `{agent_contract[…], design[…], measurement[…]}`, each entry `{id, status: "pass" \| "fail" \| null, detail}` (below) | Agent contract, design, measurement |
 
 **How the estimate is computed** (estimators §7). A trial scores 1 for `pass_rate` when every
 counted check of the modes that apply to its case passed, and for `failure_rate:<mode>` when that
@@ -512,9 +519,28 @@ reported runs, so a paired rule with no candidate is `unknown`.
 
 **Removed from v1:** `validity` (compounded validity), `online` (always null), `regime`,
 `sets` (now `estimate`, `design` and `use_cases`), `categories` (now `use_cases`), the `simple`
-flag, `conditions.simulator`, and gates G9 and C16/C17. `gates` becomes `spec.missing` plus the
-evidence checks that remain (manifest integrity, screening, trial completeness, isolation), keyed
-by part.
+flag, `conditions.simulator`, and the C0–C19 command gates. The 1.x `gates` list (G1–G14)
+becomes `spec.missing` (what the spec lacks) plus the evidence gates below, keyed by part; G3
+and G14 are now `measurement.gates`, G6 is the quality pool's design (rule 5), G7 and G11 are
+the comparison's refusals and its `trade`/`worse` verdicts, and G9 is gone with simulators.
+
+**The evidence gates** (`gates`, evidence.py) are the 1.x report gates that survive, each with a
+stable id so a fixture can trigger exactly one (tests/test_fixtures.py). They are computed on
+every run the report reads: the reported runs and, with `--candidate`, the candidate's. `status`
+is null when there is nothing to judge (no run, or no bug-finding set for `coverage_list`).
+
+| Part | id | 1.x | Fails when |
+|---|---|---|---|
+| `agent_contract` | `manifest` | G1 | a run's manifest lacks `agent_commit`, `evals_commit`, `harness`, `k` or a model id per call site; or eval files (cases, checks) changed during the run, or the agent's output names them (isolation: re-run with `invoke.isolate: true`). A check's bytecode cache is not an eval file |
+| `agent_contract` | `trials_complete` | G13 | a (case, trial) the run planned has no final attempt (a stopped run), or a trial's attempt numbers skip one |
+| `design` | `screened` | G8 | a case of the runs has not passed its screen; such cases stay out of θ̂ and the rows (`excluded`), and dropped cases are listed in the detail |
+| `design` | `committed` | G12, committed-cases half | a case file of the runs is untracked or has uncommitted edits (kept out of θ̂, rule 17), or the runs hold attempts for a case the eval doesn't have |
+| `design` | `coverage_list` | G5 | the coverage list (`design.bug_finding_set.coverage`) names no source, is made from the cases, lacks `read_on` or entries, or was not committed before the first case (the same commit counts); `coverage.list_problems` |
+| `measurement` | `independent_reference` | G10 | a counted code check declares `USES_AGENT_REPORT = True`, or a case's screen found it claim-sensitive (passing on a bare success claim) |
+| `measurement` | `k` | G2 | a run other than a smoke run has k < 3 |
+
+No evidence gate nulls θ̂ by itself: the cases `screened` and `committed` name are already left
+out of it, and the others are read beside the number.
 
 `report/agreement.json` keeps its file and its role (gates read it), renames `catch`/`clean`
 consistently, and adds `labels_per_kind`, `labels_needed`, the margin-based evidence and `gates`.
@@ -528,7 +554,7 @@ whole-run failure rate. `labels_per_kind: auto` fixes each kind's count before l
 
 Unchanged in purpose: `start`, `doctor`, `init`, `status`, `validate`, `import`, `screen`, `run`,
 `label`, `agreement`, `serve`, `replay`, `calibrate`, `reliability`, `judge apply`, `ops`,
-`snapshot`, `compare`, `coverage`, `redundancy`, `log`, `activity`, `checkpoint`, `telemetry`,
+`snapshot`, `compare`, `coverage`, `log`, `activity`, `telemetry`,
 `benchmarks`, `report`.
 
 | 2.0 | Change |
@@ -552,70 +578,103 @@ Unchanged in purpose: `start`, `doctor`, `init`, `status`, `validate`, `import`,
 
 ## 8. Migration from 1.x
 
-`aot-evals migrate --to 2` turns a 1.x suite into a 2.0 agent folder with one eval,
-`end-to-end`. It moves files with `git mv`, rewrites their contents, writes a `MIGRATION.md`
-listing every decision it made, and leaves the spec incomplete wherever 1.x never recorded what 2.0
-needs, so the report says so instead of inventing a value. A migrated suite reports the same pass
-rates as before; what changes is that it says what it is missing.
+`aot-evals migrate --to 2 [--dry-run]` (`migrate.py`) turns a 1.x suite into a 2.0 agent folder
+with one eval, `end-to-end`. It reads a 1.x suite in any of the places one can be: `evals/` itself
+(a one-agent repository), the old layout `evals/<agent>/`, or `evals/agents/<agent>/` with 1.x
+files beside it; the result is always `evals/agents/<agent>/`. It moves files with `git mv` where
+git tracks them, rewrites the case fields and judge front matter in place, writes `eval.yaml`, and
+writes `MIGRATION.md` in the agent folder listing every decision it made, and leaves the spec
+incomplete wherever 1.x never recorded what 2.0 needs, so `validate` and the report say so instead
+of inventing a value.
+
+**What a migrated eval reports.** Nothing, at first, and it says why. Its quality cases were picked
+by hand, so they carry no `draw` and do not count toward θ̂ (rule 6; `validate` lists each one), and
+its 1.x runs keep their `run-manifest@1` manifests, which `report` refuses (§6). The next steps,
+in MIGRATION.md: fill what only the owner knows, `draw` the quality set, screen, commit and run a
+baseline. Counting hand-picked cases with π assumed equal was considered and left out: it would
+put a number on a sample rule 6 says cannot stand for the population.
 
 **Scope.** Very few 1.x suites exist, so `migrate` covers the mechanical part (the moves, the
 renames and the table below) and does not try to handle every variation of a 1.x suite. Anything
-it can't map it lists in MIGRATION.md and leaves in place. Each migrated suite is then checked by
-hand. Only the tests need the full path to work unattended.
+it can't map it lists in MIGRATION.md and leaves in place: files in a one-agent `evals/` that are
+not suite files (a team's scripts, notes, results) stay where they are, and MIGRATION.md names
+those that mention a folder that moved, and each check line that finds files from its own path
+(`Path(__file__).parents[k]`), since checks now sit one folder deeper. Each migrated suite is then
+checked by hand. Only the tests need the full path to work unattended.
 
 | 1.x | 2.0 | Notes |
 |---|---|---|
-| `evals/agents/<a>/agent.yaml` | stays; `validity` and `simulator` dropped | logged in MIGRATION.md |
-| `categories.yaml` | `eval.yaml` `estimand.use_cases` | `observed_share` → `share`; `share_source` → `estimand.share_source` |
+| `agent.yaml`, `discovery.md`, `env/`, `data/`, `journal/`, `labels/standard.md` | the agent folder, shared | agent.yaml loses `validity` and `simulator` (its comments kept); `data/agreement/` goes to the eval |
+| `categories.yaml` | `eval.yaml` `estimand.use_cases` | `observed_share` → `share`; the most common `share_source` → `estimand.share_source` |
 | category `worth`, `cost` row | `use_cases[].cost: null`, `weights: traffic` | 1.x never put a number on cost; the owner states one (problem 1) |
 | category `simple`, `heuristic`, `other`, `draft` | dropped | heuristic text kept as a note in MIGRATION.md |
-| `failure_modes.yaml` | `measurement.failure_modes` | first code check → `check`, the rest → `diagnostics`; a mode with only judges keeps its first judge; every choice logged |
-| `failure_modes[].cost_cell`, `feature`, `scenario` | dropped | |
-| `check_type: monitor` | `check: null`, `monitor: true` | |
-| `budgets.yaml` | `decision_rule.constraints` | same keys |
-| `labels/floors.yaml` | `measurement.people` | `min_catch`/`min_clean` → `floors.catch`/`floors.clean`; `margin: 0.10` added |
-| `allocation.yaml` | `plan.yaml` | regenerated by `plan`; `status`/`reason` marks carried over |
-| `taxonomy.yaml` | `coverage.yaml` | contents unchanged |
+| `failure_modes.yaml` | `measurement.failure_modes` | `categories` → `use_cases` (`["*"]` → `"*"`); first code check → `check`, the rest → `diagnostics`; a mode with only judges keeps its first judge; a check already counted by an earlier mode is not counted twice (rule 11): with no other check the mode's `check` is left missing; every choice logged |
+| `failure_modes[].cost_cell`, `feature`, `scenario`, other keys | dropped | each with its value in MIGRATION.md; `side_effect` kept |
+| `check_type: monitor` | `check: null`, `monitor: true` | its checks become diagnostics |
+| `budgets.yaml` | `decision_rule.constraints` | `default` → `default`, `categories` → `use_cases`; same keys |
+| `labels/floors.yaml` | `measurement.people` | `min_catch`/`min_clean` → `floors.catch`/`floors.clean`; `margin: 0.10` added; no file → null floors (1.x's built-in 85%/85% are not carried) |
+| `allocation.yaml` | `plan.yaml` | only its `scheduled` / `out_of_scope` marks, which `plan --write` keeps; the targets are regenerated |
+| `taxonomy.yaml` | `end-to-end/coverage.yaml` | contents unchanged |
 | case `category` | `use_case` | folders unchanged |
 | case `set` | `pool` | `error_finding` → `bug_finding`; `quality_estimate` → `quality` |
-| quality cases (hand-picked) | `pool: quality`, no `draw` | counted with π assumed equal within a use case, and flagged; `draw` replaces them |
-| case `cluster` | `cluster` | missing → the case id |
-| judge `min_tpr`, `min_tnr` | dropped | `measurement.max_inflation: 2.0` default, logged |
-| runs, labels, calibration, journal | moved unchanged | 1.x manifests stay readable; v1 runs are not comparable with v2 runs of a revised eval |
-| — | `estimand.quantity: pass_rate`, `decision_rule.test: superiority`, `alpha 0.05`, `power 0.80`, `looks: fixed` | defaults, stated in MIGRATION.md |
+| case `taxonomy_entries` | `coverage_entries` | |
+| quality cases (hand-picked) | `pool: quality`, no `draw` | not counted, and listed by `validate`; `draw` replaces them |
+| case `cluster` | `cluster` | left as it is; missing means the case id (`cluster_key: id`) |
+| judge `min_tpr`, `min_tnr` | dropped | `measurement.max_inflation: 2.0`; the judge's hash leaves them out, so its calibration stays current |
+| cases, checks (with labels and calibrations), whole-run labels, rulings, triage, runs, report | `end-to-end/`, moved unchanged | 1.x manifests stay readable, and `report` refuses them as runs of another spec |
+| categories, failure modes, budgets, allocation, floors files | `migrated-from-1x/` | kept to check eval.yaml against, then deleted by hand |
+| the latest import in `data/export.manifest.json` | `estimand.population.frame`, `window` | `start..end` → `start/end`; no import → frame missing |
+| — | `estimand.quantity: pass_rate`, `decision_rule.test: superiority`, `alpha 0.05`, `power 0.80`, `looks: fixed`, `combine: all`, `trials: 3`, `correction: none`, `design.quality_set.seed: 1`, `cluster_key: id` | defaults, stated in MIGRATION.md |
 | — | `estimand.decision`, `decision_rule.margin` | left missing: only the owner knows them |
 
 ## 9. The online-store example
 
-`examples/store/` replaces `examples/calendar/` as the example, `aot-evals demo` and the test
-fixture. It is the agent from the [problems](problems.md):
+`examples/store/` is the example, `aot-evals demo` and the test fixture (`tests/conftest.py`
+`store_repo`); the calendar and every 1.x code path are gone. It is the agent from the
+[problems](problems.md):
 
-- **The agent.** An orchestrator that reads each request and answers order-status and return
-  questions with an order-reading tool and an address-changing tool, and routes refunds to a
-  **refund subagent** with its own prompt and model. Both are small Python programs speaking the
-  agent contract, with fakes in `env/` for the order system and payments.
-- **Two evals.** `end-to-end` (unit: the system; use cases order status 0.70, returns 0.20, address
-  0.08, refunds 0.02; costs $1, $5, $20, $50; weights: cost; decision: non-inferiority, margin 2
-  points) and `refunds` (unit: the subagent; frame: refund handoffs; the threshold test above).
-  agent.yaml's `components` places the refund subagent at an eval of its own (own context, its own
-  team) and the order tools at checks in `end-to-end` (they run in the orchestrator's context). The
-  trace export records each refund handoff, so `aot-evals --eval refunds handoffs` extracts the
-  refunds frame from it.
-- **Checks.** Code checks for end state, amount and side effects; one policy judge at catch 0.95
-  and clean 0.99 on a labeled set shipped with the example, and a weaker one (0.80, 0.90) that the
-  floor refuses. At those point rates the policy judge costs 1.43× at a 3% failure rate, but the
-  floor reads the lower bounds (§4), so the set needs about 100 failure labels and 500 pass labels
-  to clear `max_inflation: 2.0` (at 20 and 100 the bounds give 3.7×).
-- **Cases.** A quality set drawn from a shipped trace export with `draw`, and a bug-finding set
-  from templates with cluster keys, including the policy corners (a day outside the window, a
-  partial refund, a gift card).
-- **Variants.** `AGENT_VARIANT` switches the behaviors the self-tests need, as the calendar's
-  does, plus the problems' scenarios: `refund-bug` (refunds fail 15% instead of 5%, problem 1),
-  `declines-missing-order` (the subagent declines handoffs with no order number, problem 2), a
-  flaky variant (problem 8), a cheaper model (problem 11).
-
-The calendar stays until the last 1.x code path is gone (the tests in `tests/test_old_layout.py`
-and nine others use it).
+- **The agent.** An orchestrator (`agent/store.py`) that reads each request and answers
+  order-status, return and address questions with an order-reading, a return-starting and an
+  address-changing tool, and hands refunds to a **refund subagent** (`agent/refunds.py`) with its
+  own prompt and model. Both are small Python programs speaking the agent contract, with fakes in
+  `env/` for the order system and payments (one JSON world, seeded and observed by the hooks; every
+  call is logged, so a check can see a handoff).
+- **The traces.** `traces.jsonl`, 390 October traces sampled per use case (refunds more heavily, so
+  the subagent's frame has rows to draw from; the shares are the spec's, measured on all traffic).
+  Each refund trace records its handoff in stage 7's format, `handoffs: [{to, use_case,
+  order_template, trigger, inputs, start_state, expected_end_state}]`, and `aot-evals --eval
+  refund-subagent handoffs` extracts the subagent's frame (160 handoffs) from it.
+- **Two evals.** `end-to-end` (unit: the system; use cases order status 0.70, returns 0.20,
+  address 0.08, refunds 0.02; costs $1, $5, $20, $50; weights: cost; decision: non-inferiority,
+  margin 2 points, with a refund gate) and `refund-subagent` (unit: the subagent, named as `build`
+  names a component eval; frame: refund handoffs; the threshold test of §2, under 5% policy breaks,
+  with `also_requires` on end-to-end). agent.yaml's `components` places the refund subagent at an
+  eval of its own (own context, its own team) and the order tools at checks in `end-to-end` (they
+  run in the orchestrator's context).
+- **Checks.** End to end: the reply matches the order system (`reply-matches-order`), the end
+  state (`end-state-matches`), side effects (`no-side-effects`) and the route
+  (`routed-correctly`, read from the fakes' log). The subagent: `amount-matches`,
+  `no-side-effects`, `reply-matches-refund` (a reply is needed so a non-answer fails screening),
+  and the policy judge (`judges/policy_judge.py`, a command judge that makes a judge's mistakes on
+  purpose, at known rates). It is calibrated on 100 failure and 500 pass labels at catch 0.95 and
+  clean 0.99, which clears `max_inflation: 2.0` at a 3% failure rate (1.98× at its lower bounds; at
+  20 and 100 labels it would cost 3.7×), so it counts and the rate is corrected (Rogan–Gladen,
+  since the labels are on past runs, not drawn from the report's). `policy-judge-weak` (0.80, 0.90)
+  is a diagnostic the floor refuses at any number of labels (11.6× at 3%).
+- **Cases.** Each eval's quality set is drawn from its frame with `draw` (48 end to end, 60 for the
+  subagent, `draw.json` beside them), and its bug-finding set is written from templates with
+  cluster keys, including the policy corners (the 30th and 31st day, a partial refund, a gift card,
+  no order number, an order already refunded). The sets are deliberately small, so the decisions
+  come out `insufficient` with the cases that would decide them (problem 9).
+- **Variants.** `AGENT_VARIANT` switches the behaviors the self-tests need (`liar`, `flaky`,
+  `costly`, `slow`, `silent`, `peek`, and `AGENT_BREAK` for a known set of cases), plus the
+  problems' scenarios on the subagent: `refund-bug` (it also refunds days 31 to 35, problem 1),
+  `declines-missing-order` (the window is fixed, but a handoff with no order number is declined
+  instead of asked about, problem 2: the subagent's eval improves and refunds end to end get
+  worse), `cheap` (a cheaper model that fixes the 30th day and refunds the 31st, problem 11). The
+  good subagent counts the 30th day as outside the window, which is its known policy failure.
+- **Tests.** `tests/test_store.py` checks what this section claims; `tests/test_decision.py` gives
+  its refused-judge fixture an undersized judge of its own.
 
 ## 10. Decisions to confirm
 
@@ -634,4 +693,5 @@ Each is cheap to change now and expensive after the code lands.
    (`max_inflation`) and calibration files hold the measurements, so the spec doesn't change every
    time a judge is recalibrated.
 5. **Migration defaults** (decided): traffic weights with costs left null, superiority at α 0.05 and 80%
-   power, `decision` and `margin` left missing.
+   power, `decision` and `margin` left missing; hand-picked quality cases and 1.x runs do not count
+   until the quality set is drawn and run again (§8).

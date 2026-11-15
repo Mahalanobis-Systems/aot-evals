@@ -1,5 +1,5 @@
-"""`init`: create the `evals/` directory (docs/method.md §3) with commented templates, or, with
-`--eval`, one 2.0 eval folder and the agent system's shared files (docs/v2-design.md §1)."""
+"""`init`: one eval folder with its commented eval.yaml, and the agent system's shared files when
+they are missing (docs/v2-design.md §1)."""
 
 from __future__ import annotations
 
@@ -12,40 +12,6 @@ from .util import ContractError
 
 TEMPLATES = Path(__file__).parent / "templates" / "evals"
 
-FILES = {
-    "agent.yaml": "agent.yaml",
-    "taxonomy.yaml": "taxonomy.yaml",
-    "categories.yaml": "categories.yaml",
-    "failure_modes.yaml": "failure_modes.yaml",
-    "budgets.yaml": "budgets.yaml",
-    "labels/standard.md": "standard.md",
-    ".gitignore": "gitignore",
-    "data/export.manifest.json": "export.manifest.json",
-}
-DIRS = ("cases", "checks/code", "checks/judge", "env", "data", "runs", "report")
-
-
-def init(ev: Evals) -> list[str]:
-    """Create whatever is missing. Never overwrites an existing file."""
-    created = []
-    for d in DIRS:
-        p = ev.p(d)
-        if not p.exists():
-            p.mkdir(parents=True)
-            keep = p / ".gitkeep"
-            keep.touch()
-            created.append(str(Path(d) / ""))
-    for dest, src in FILES.items():
-        p = ev.p(dest)
-        if not p.exists():
-            p.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(TEMPLATES / src, p)
-            created.append(dest)
-    return created
-
-
-# ---- 2.0: one folder per eval (docs/v2-design.md §1) -------------------------------------------
-
 # Shared by every eval of the agent system.
 AGENT_FILES = {
     "agent.yaml": "agent.yaml",
@@ -55,8 +21,8 @@ AGENT_FILES = {
 AGENT_DIRS = ("env", "data")
 # Each eval's own.
 EVAL_DIRS = ("cases", "checks/code", "checks/judge", "labels", "runs", "report")
-# The eval folders sit one level down, so the 1.x patterns need a leading */ to reach them.
-GITIGNORE_V2 = "*/runs/*/raw/\n*/checks/judge/*.queue.csv\n"
+# The eval folders sit one level down, so the agent-level patterns need a leading */ to reach them.
+GITIGNORE_V2 = "*/runs/*/raw/\n*/checks/judge/*.queue.csv\n*/data/\n"
 
 _UNIT_SYSTEM = "    kind: system                   # the whole agent, through agent.yaml's invoke"
 _UNIT_COMPONENT = """    kind: component
@@ -130,6 +96,6 @@ def init_eval(ev: Evals, eval_id: str, component: str | None = None) -> list[str
         created.append(f"{eval_id}/eval.yaml")
     cov = e.p("coverage.yaml")
     if not cov.exists():
-        shutil.copyfile(TEMPLATES / "taxonomy.yaml", cov)
+        shutil.copyfile(TEMPLATES / "coverage.yaml", cov)
         created.append(f"{eval_id}/coverage.yaml")
     return created

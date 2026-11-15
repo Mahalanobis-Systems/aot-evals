@@ -1,0 +1,150 @@
+{
+  "id": "tr_1375",
+  "use_case": "refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 3,
+    "inclusion_prob": 0.125
+  },
+  "template": "refund-partial-refund-t2",
+  "cluster": "refund-partial-refund-t2",
+  "trigger": {
+    "text": "Refund just the mixing bowls on A1751.",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0376",
+    "today": "2026-10-08"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1751": {
+        "address": "51 Oak Avenue",
+        "customer": "c-0376",
+        "delivered": "2026-09-15",
+        "eta": null,
+        "items": [
+          {
+            "name": "blender",
+            "price": 49.99,
+            "sku": "SKU-101"
+          },
+          {
+            "name": "mixing bowls",
+            "price": 18.75,
+            "sku": "SKU-105"
+          },
+          {
+            "name": "cutting board",
+            "price": 22.4,
+            "sku": "SKU-107"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1752": {
+        "address": "73 Elm Street",
+        "customer": "c-0376",
+        "delivered": "2026-08-14",
+        "eta": null,
+        "items": [
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          },
+          {
+            "name": "cutting board",
+            "price": 22.4,
+            "sku": "SKU-107"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $18.75 for order A1751 to your original payment.",
+    "world": {
+      "log": [
+        {
+          "order": "A1751",
+          "to": "refund-subagent",
+          "tool": "handoff"
+        }
+      ],
+      "orders": {
+        "A1751": {
+          "address": "51 Oak Avenue",
+          "customer": "c-0376",
+          "delivered": "2026-09-15",
+          "eta": null,
+          "items": [
+            {
+              "name": "blender",
+              "price": 49.99,
+              "sku": "SKU-101"
+            },
+            {
+              "name": "mixing bowls",
+              "price": 18.75,
+              "sku": "SKU-105"
+            },
+            {
+              "name": "cutting board",
+              "price": 22.4,
+              "sku": "SKU-107"
+            }
+          ],
+          "payment": "card",
+          "refunded": 18.75,
+          "status": "delivered"
+        },
+        "A1752": {
+          "address": "73 Elm Street",
+          "customer": "c-0376",
+          "delivered": "2026-08-14",
+          "eta": null,
+          "items": [
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            },
+            {
+              "name": "cutting board",
+              "price": 22.4,
+              "sku": "SKU-107"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 18.75,
+          "order": "A1751",
+          "to": "original"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1375",
+    "synthetic": false
+  }
+}

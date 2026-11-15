@@ -1,0 +1,35 @@
+{
+  "schema": "aot-evals/draw@1",
+  "frame": "refund-handoffs-2026-10",
+  "seed": 1234,
+  "frame_sha256": "a416f7705ac678f884d83c093374b5c7653138b31bba3f2f7027f108cca35dd6",
+  "drawn_at": "2026-11-14T19:55:57Z",
+  "strata": {
+    "full-refund": {
+      "frame_size": 121,
+      "n": 40,
+      "inclusion_prob": 0.3305785123966942,
+      "replaced": []
+    },
+    "partial-refund": {
+      "frame_size": 27,
+      "n": 12,
+      "inclusion_prob": 0.4444444444444444,
+      "replaced": []
+    },
+    "gift-card": {
+      "frame_size": 12,
+      "n": 8,
+      "inclusion_prob": 0.6666666666666666,
+      "replaced": []
+    }
+  },
+  "frame_rows": {
+    "total": 160,
+    "unassigned": 0,
+    "outside_use_cases": {},
+    "duplicates": 0,
+    "no_id": 0
+  },
+  "skips": []
+}

@@ -1,75 +1,52 @@
-"""The lightest Build (build.py): from a discovery report to a baseline with one generic check."""
+"""The lightest Build (build.py): a baseline with one generic check, and the component checklist,
+on the store (examples/store). Drafting a new agent from its discovery report is test_components'."""
 
 from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 
-from conftest import FIXTURE
+import yaml
 
-from aot_evals import build, cli, gates, trust
+from aot_evals import build, cli, components
 from aot_evals.repo import Evals
 
-
-def test_build_drafts_categories_and_a_check_from_the_discovery_report(tmp_path, capsys):
-    """A 1.x suite (its files written by `init`) builds the 1.x way until `migrate --to 2`; a new
-    agent builds as 2.0 (test_components)."""
-    suite = tmp_path / "repo" / "evals" / "agents" / "cal"
-    suite.mkdir(parents=True)
-    shutil.copyfile(FIXTURE / "evals" / "discovery.md", suite / "discovery.md")
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path / "repo", check=True)
-    assert cli.main(["--evals", str(suite), "init"]) == 0
-    assert not build.is_v2(Evals(suite))
-    assert cli.main(["--evals", str(suite), "build"]) == 0
-    out = capsys.readouterr().out
-    ev = Evals(suite)
-    assert [c["id"] for c in ev.categories()] == ["schedule-a-meeting", "leave-the-calendar-alone"]
-    assert [c["observed_share"] for c in ev.categories()] == [0.6, 0.4]
-    assert all(c["draft"] for c in ev.categories())
-    assert (suite / "cases" / "schedule-a-meeting").is_dir()
-    (fm,) = ev.failure_modes()
-    assert fm["checks"] == [build.DEFAULT_CHECK] and fm["categories"] == ["*"]
-    assert ev.code_check_path(build.DEFAULT_CHECK).exists()
-    assert "[ ] The agent runs as a command" in out and "[x] Categories" in out
-    tax = ev.taxonomy()
-    assert [e["id"] for e in tax["entries"]] == ["situation.unanswerable", "situation.ambiguous",
-                                                 "situation.forbidden", "situation.multi-turn",
-                                                 "situation.tool-error"]
-    assert "commit taxonomy.yaml before the first case" in out
-    assert not gates.taxonomy_problems(ev) or all("commit" in p or "git" in p for p in gates.taxonomy_problems(ev))
-    assert trust.phase(ev)["id"] == "build"
-    # running it again changes nothing
-    before = (suite / "categories.yaml").read_text()
-    assert cli.main(["--evals", str(suite), "build"]) == 0
-    assert (suite / "categories.yaml").read_text() == before
-    assert "drafted" not in capsys.readouterr().out
+LIGHTEST_MODES = [{"id": build.DEFAULT_MODE, "description": "The world doesn't end as the case expects.",
+                   "use_cases": "*", "check": build.DEFAULT_CHECK, "side_effect": True}]
 
 
-def test_build_run_reaches_a_baseline_with_only_the_generic_check(make_repo, capsys):
-    repo = make_repo()
-    ev = Evals(repo.evals)
-    # strip the suite to the lightest Build: cases with expected end states, no checks of its own
-    shutil.rmtree(repo.evals / "checks" / "code")
-    (repo.evals / "failure_modes.yaml").write_text("failure_modes: []\n")
-    for p in (repo.evals / "cases").rglob("*.json"):
-        c = json.loads(p.read_text())
-        c["failure_modes"] = []
-        p.write_text(json.dumps(c, indent=2))
-    repo.commit("the lightest suite")
-    assert repo.cli("build") == 0
+def test_build_run_reaches_a_baseline_with_only_the_generic_check(store_repo, capsys):
+    s = store_repo
+    # strip the store to the lightest Build: one eval, cases with expected end states, and only the
+    # generic check `build` writes
+    shutil.rmtree(s.agent / "refund-subagent")
+    agent = yaml.safe_load((s.agent / "agent.yaml").read_text())
+    agent["components"] = [c for c in agent["components"] if c["id"] != "refund-subagent"]
+    (s.agent / "agent.yaml").write_text(yaml.safe_dump(agent, sort_keys=False))
+    spec = yaml.safe_load((s.agent / "end-to-end" / "eval.yaml").read_text())
+    spec["measurement"]["failure_modes"] = LIGHTEST_MODES
+    (s.agent / "end-to-end" / "eval.yaml").write_text(yaml.safe_dump(spec, sort_keys=False))
+    code = s.agent / "end-to-end" / "checks" / "code"
+    shutil.rmtree(code)
+    code.mkdir()
+    shutil.copyfile(build.TEMPLATES / "checks" / f"{build.DEFAULT_CHECK}.py", code / f"{build.DEFAULT_CHECK}.py")
+    s.commit("the lightest eval")
     capsys.readouterr()
-    repo.commit("build drafts")
-    assert repo.cli("build", "--run") == 0
+    assert cli.main(["--evals", str(s.agent), "build", "--run"]) == 0
     out = capsys.readouterr().out
     assert "aot-evals serve" in out
+    ev = s.ev()
     base = ev.latest_run("baseline")
     assert base and base["k"] == 3
     lines = [r for r in ev.run_records(base["run_id"]) if r.get("kind") == "check"]
     assert lines and all(r["check_id"] == build.DEFAULT_CHECK for r in lines)
-    assert all(r["passed"] for r in lines)  # the good toy agent ends every case as expected
-    assert trust.phase(ev)["id"] == "judge"
-    assert "C12" not in {g.id for g in gates.evaluate(ev) if g.status == "unmet"}
+    # it is strict: the store's world keeps a log of calls the cases' expected worlds don't
+    # reproduce, which is why the template says to replace it with checks on what matters
+    assert any(r["passed"] for r in lines)
+    assert all("log" in r["detail"] for r in lines if not r["passed"])
+    assert (ev.p("report", "report.json")).exists()
+    items = {it["item"]: it for it in build.eval_checklist(ev)}
+    assert items["A baseline, every case k times"]["done"]
 
 
 def test_the_generic_check_fails_a_wrong_end_state_and_ignores_the_reply():
@@ -85,27 +62,41 @@ def test_the_generic_check_fails_a_wrong_end_state_and_ignores_the_reply():
     assert mod.check({}, {"world": None}, {"expected_end_state": {"world": None}})[0] is True
 
 
-def test_the_component_checklist_reads_the_suite_and_the_assessment(make_repo):
-    from aot_evals import components
+ASSESSMENT = """---
+minutes: 4
+components:
+  engine: {state: partial, note: a CI job runs the agent nightly}
+  golden: {state: todo, note: none}
+---
+# The online store (store)
+"""
 
-    repo = make_repo()
-    ev = Evals(repo.evals)
+
+def test_the_component_checklist_reads_the_evals_and_the_assessment(store_repo):
+    s = store_repo
+    ev = Evals(s.agent)
     by = {c["id"]: c for c in components.checklist(ev)}
     assert len(by) == len(components.COMPONENTS)
-    assert by["golden"]["state"] == "done" and by["deterministic"]["state"] == "done"
+    assert by["golden"]["state"] == "done" and "end-to-end: " in by["golden"]["why"]
+    assert by["handoff-frames"]["state"] == "done" and by["boundaries"]["state"] == "done"
+    assert by["deterministic"]["state"] == "partial"  # the refund subagent's policy judge counts
+    assert by["judges"]["state"] == "done"  # and it is calibrated
     assert by["engine"]["state"] == "todo" and by["grader-ui"]["state"] == "todo"
-    assert by["judges"]["state"] == "n/a"  # every check is code
-    assert by["fakes"]["state"] == "n/a"  # the seed hook sets up the world
+    assert by["fakes"]["state"] == "done"  # the order system and payments are fakes in env/
     assert by["trace-monitoring"]["state"] == "later"
-    # the assessment may say more than the suite does yet, never less
-    d = ev.p("discovery.md")
-    text = d.read_text().replace("minutes: 2\n", "minutes: 2\ncomponents:\n  engine: {state: partial, note: a CI "
-                                 "job runs the agent nightly}\n  golden: {state: todo, note: none}\n", 1)
-    d.write_text(text)
+    # the assessment may say more than the evals do yet, never less
+    (s.agent / "discovery.md").write_text(ASSESSMENT)
     by = {c["id"]: c for c in components.checklist(ev)}
     assert by["engine"]["state"] == "partial" and "nightly" in by["engine"]["why"]
     assert by["golden"]["state"] == "done"
     from aot_evals.start import components_html, split_front_matter
 
-    html = components_html(split_front_matter(text)[0]["components"])
+    html = components_html(split_front_matter(ASSESSMENT)[0]["components"])
     assert "The components to build" in html and "nightly" in html and "Partly" in html
+
+
+def test_components_json_matches_the_checklist(store_repo, capsys):
+    s = store_repo
+    capsys.readouterr()
+    assert cli.main(["--evals", str(s.agent), "components", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == components.checklist(Evals(s.agent))

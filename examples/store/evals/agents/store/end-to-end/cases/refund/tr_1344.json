@@ -1,0 +1,150 @@
+{
+  "id": "tr_1344",
+  "use_case": "refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 14,
+    "inclusion_prob": 0.125
+  },
+  "template": "refund-full-refund-t3",
+  "cluster": "refund-full-refund-t3",
+  "trigger": {
+    "text": "Can I get my money back for A1689?",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0345",
+    "today": "2026-10-25"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1689": {
+        "address": "14 Cedar Court",
+        "customer": "c-0345",
+        "delivered": "2026-10-21",
+        "eta": null,
+        "items": [
+          {
+            "name": "blender",
+            "price": 49.99,
+            "sku": "SKU-101"
+          },
+          {
+            "name": "mixing bowls",
+            "price": 18.75,
+            "sku": "SKU-105"
+          },
+          {
+            "name": "cutting board",
+            "price": 22.4,
+            "sku": "SKU-107"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1690": {
+        "address": "58 Mill Lane",
+        "customer": "c-0345",
+        "delivered": "2026-09-03",
+        "eta": null,
+        "items": [
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          },
+          {
+            "name": "mixing bowls",
+            "price": 18.75,
+            "sku": "SKU-105"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $91.14 for order A1689 to your original payment.",
+    "world": {
+      "log": [
+        {
+          "order": "A1689",
+          "to": "refund-subagent",
+          "tool": "handoff"
+        }
+      ],
+      "orders": {
+        "A1689": {
+          "address": "14 Cedar Court",
+          "customer": "c-0345",
+          "delivered": "2026-10-21",
+          "eta": null,
+          "items": [
+            {
+              "name": "blender",
+              "price": 49.99,
+              "sku": "SKU-101"
+            },
+            {
+              "name": "mixing bowls",
+              "price": 18.75,
+              "sku": "SKU-105"
+            },
+            {
+              "name": "cutting board",
+              "price": 22.4,
+              "sku": "SKU-107"
+            }
+          ],
+          "payment": "card",
+          "refunded": 91.14,
+          "status": "delivered"
+        },
+        "A1690": {
+          "address": "58 Mill Lane",
+          "customer": "c-0345",
+          "delivered": "2026-09-03",
+          "eta": null,
+          "items": [
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            },
+            {
+              "name": "mixing bowls",
+              "price": 18.75,
+              "sku": "SKU-105"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 91.14,
+          "order": "A1689",
+          "to": "original"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1344",
+    "synthetic": false
+  }
+}

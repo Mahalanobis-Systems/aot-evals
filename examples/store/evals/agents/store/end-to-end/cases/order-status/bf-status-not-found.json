@@ -1,0 +1,111 @@
+{
+  "id": "bf-status-not-found",
+  "use_case": "order-status",
+  "pool": "bug_finding",
+  "template": "bf-not-found",
+  "failure_modes": [
+    "wrong-answer",
+    "wrong-end-state",
+    "unrequested-change",
+    "wrong-route"
+  ],
+  "coverage_entries": [
+    "order-status",
+    "not-found"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-not-found",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "message",
+    "text": "Where is my order A9999?"
+  },
+  "inputs": {
+    "today": "2026-10-20",
+    "customer": "c-9999"
+  },
+  "start_state": {
+    "orders": {
+      "A7001": {
+        "status": "shipped",
+        "items": [
+          {
+            "sku": "SKU-101",
+            "name": "blender",
+            "price": 49.99
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "59 Cedar Court",
+        "eta": "2026-10-24",
+        "delivered": null,
+        "customer": "c-0001"
+      },
+      "A7002": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-108",
+            "name": "french press",
+            "price": 27.99
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "77 Oak Avenue",
+        "eta": null,
+        "delivered": "2026-08-09",
+        "customer": "c-0001"
+      }
+    },
+    "refunds": [],
+    "returns": [],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A7001": {
+          "status": "shipped",
+          "items": [
+            {
+              "sku": "SKU-101",
+              "name": "blender",
+              "price": 49.99
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "59 Cedar Court",
+          "eta": "2026-10-24",
+          "delivered": null,
+          "customer": "c-0001"
+        },
+        "A7002": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-108",
+              "name": "french press",
+              "price": 27.99
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "77 Oak Avenue",
+          "eta": null,
+          "delivered": "2026-08-09",
+          "customer": "c-0001"
+        }
+      },
+      "refunds": [],
+      "returns": [],
+      "log": []
+    },
+    "output": "I couldn't find order A9999. Could you check the number?"
+  }
+}

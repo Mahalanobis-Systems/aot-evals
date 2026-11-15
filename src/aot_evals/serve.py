@@ -1,16 +1,19 @@
-"""`aot-evals serve`: the grader application (docs/method.md §4.2).
+"""`aot-evals serve`: the grader application (docs/method.md §4.2), for one eval.
 
-A local web application for the Judge phase: people label whole runs (several people, blind to
+A local web application for the Judge phase, on one eval of an agent system (`--eval`, or the
+agent's only eval; docs/v2-design.md §1): people label whole runs (several people, blind to
 each other, with a warm-up and overlaps), settle disagreements between labellers with rulings,
 see where the suite and people disagree and give each a cause, accept another correct answer,
 propose rules from rulings for the owner to accept, label and recalibrate judges, draft new cases,
-and see what is waiting on engineering. Every action writes the suite's own files (bench.py), so
-the result is reviewed and committed like any other change.
+and see what is waiting on engineering. Every action writes the eval's own files, or the agent
+system's shared labelling standard (bench.py), so the result is reviewed and committed like any
+other change. The overview reads the eval's spec (complete, or the fields it lacks), its baseline,
+how far the eval agrees with people per use case, and the agent system's components.
 
 It is the standard library's `http.server` and one page of plain JavaScript (serve_app.js): no
 service, no account, no build step. It binds to 127.0.0.1 by default. Every API call must carry
 the session token the page was served with, so another site open in the same browser can't
-write to the suite. `--host 0.0.0.0` lets graders on the same network use it: anyone who can reach
+write to the eval. `--host 0.0.0.0` lets graders on the same network use it: anyone who can reach
 the port and holds the link can label, so only do that on a network you trust.
 """
 
@@ -20,29 +23,30 @@ import json
 import secrets
 import threading
 import webbrowser
+from collections import Counter
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import agreement, bench, components, journal, trust
-from . import gates as gates_mod
+from . import agreement, bench, components, journal
 from .brand import page
-from .repo import Evals
+from .repo import Eval
 from .util import ContractError
 
 APP_JS = Path(__file__).with_name("serve_app.js")
-LOCK = threading.Lock()  # one writer at a time: every action appends to or rewrites suite files
+LOCK = threading.Lock()  # one writer at a time: every action appends to or rewrites the eval's files
 
 
-def _judges(ev: Evals) -> list[dict]:
+def _judges(ev: Eval) -> list[dict]:
     from .calibrate import is_current, load_calibration, pending_calls
     from .judges import load_spec
     from .labels import queue_path
     from .labels import status as label_status
+    from .spec import check_ids
 
     out = []
-    for cid in gates_mod._judge_checks(ev):
+    for cid in sorted(c for c in check_ids(ev.spec()) if ev.check_type(c) == "judge"):
         try:
             spec = load_spec(ev.judge_check_path(cid))
         except ContractError as e:
@@ -55,7 +59,7 @@ def _judges(ev: Evals) -> list[dict]:
         out.append({"id": spec.id, "version": spec.version, "question": spec.meta.get("question"),
                     "guidance": spec.body, "primary": spec.primary, "labels": st["labels"],
                     "pass": st["pass"], "fail": st["fail"], "labellers": st["labellers"],
-                    "missing_categories": st["missing_categories"],
+                    "missing_use_cases": st.get("missing_use_cases", st.get("missing_categories")) or [],
                     "calibration": (cal or {}).get("status") if is_current(ev, spec, cal) else
                     ("stale" if cal else None),
                     "tpr": prim.get("tpr"), "tnr": prim.get("tnr"),
@@ -64,7 +68,7 @@ def _judges(ev: Evals) -> list[dict]:
     return out
 
 
-def _judge_queue(ev: Evals, jid: str, labeller: str) -> list[dict]:
+def _judge_queue(ev: Eval, jid: str, labeller: str) -> list[dict]:
     import csv
 
     from .judges import load_spec
@@ -83,25 +87,69 @@ def _judge_queue(ev: Evals, jid: str, labeller: str) -> list[dict]:
     return [{**r, "input": json.loads(r["input"] or "{}")} for r in rows[:20]]
 
 
-def state(ev: Evals) -> dict:
+def _use_cases(ev: Eval, res: dict) -> list[dict]:
+    """Per use case of the spec: its cases, how many a baseline covers, its labelled runs, and
+    the eval's catch and clean pass rates against people on them (the latest measurement, dev)."""
+    spec_ucs = [u.get("id") for u in ev.spec().part("estimand").get("use_cases") or []
+                if isinstance(u, dict) and u.get("id")]
+    cases = ev.cases(include_dropped=False)
+    of = {c.get("id"): c.get("use_case") for c in cases}
+    covered = {c for m in ev.baseline_runs() for c in (m.get("case_set") or {}).get("ids") or []}
+    labelled = Counter(of.get(r.get("case_id")) for r in agreement.load_labels(ev))
+    measured = res.get("use_cases") or {}
+    ids = list(dict.fromkeys([*spec_ucs, *sorted({u for u in of.values() if u})]))
+    out = []
+    for uc in ids:
+        dev = (measured.get(uc) or {}).get("dev") or {}
+        out.append({"id": uc, "in_spec": uc in spec_ucs,
+                    "cases": sum(u == uc for u in of.values()),
+                    "in_baseline": sum(u == uc and c in covered for c, u in of.items()),
+                    "labelled_runs": labelled.get(uc, 0),
+                    "catch": (dev.get("catch") or {}).get("rate"), "clean": (dev.get("clean") or {}).get("rate")})
+    return out
+
+
+def _people(ev: Eval) -> dict:
+    """The eval held to people (rule 15): its floors and labels per kind from the spec, and what
+    still stands between it and them (agreement.gates)."""
+    from .measurement import labels_needed, people_settings
+
+    spec = ev.spec()
+    result = agreement.load_result(ev)
+    labels = agreement.load_labels(ev)
+    n_fail = sum(not r["label"] for r in labels)
+    ps = people_settings(spec)
+    return {"floors": ps["floors"], "margin": ps["margin"],
+            "labels": {"fail": n_fail, "pass": len(labels) - n_fail},
+            "labels_needed": {k: (v or {}).get("n") for k, v in labels_needed(spec).items()},
+            "status": ((result or {}).get("evidence") or {}).get("status") if result else None,
+            "problems": agreement.gate_problems(ev, result, labels)}
+
+
+def state(ev: Eval) -> dict:
     from .requirements import load_standard
 
-    gs = gates_mod.evaluate(ev)
+    spec = ev.spec()
     std = load_standard(ev) or {"rules": [], "body": ""}
     res = bench.suite_disagreements(ev)
-    return {"agent": ev.agent_name, "suite_dir": str(ev.root), **trust.summary(ev, gs),
-            "gates": [{"id": g.id, "command": g.command, "status": g.status,
-                       "first": (g.problems or g.info or [""])[0]} for g in gs],
-            "labellers": sorted({r.get("labeller") for by in agreement.per_labeller(ev).values()
-                                 for r in by.values()} - {None, ""}),
-            "labelled": len(agreement.per_labeller(ev)),
+    cand = bench.candidate_run(ev)
+    by = agreement.per_labeller(ev)
+    return {"agent": ev.agent_name, "eval": ev.id, "evals": [e.id for e in ev.agent_system.evals()],
+            "suite_dir": str(ev.root), "decision": spec.part("estimand").get("decision"),
+            "spec": {"complete": spec.complete, "missing": [i.field for i in spec.missing],
+                     "invalid": [i.field for i in spec.invalid]},
+            "baseline": ev.baseline_ids(), "candidate": cand,
+            "labellers": sorted({r.get("labeller") for people in by.values()
+                                 for r in people.values()} - {None, ""}),
+            "labelled": len(by),
             "between_people": agreement.labeller_agreement(ev),
             "disputes": agreement.disputes(ev),
-            "suite": res, "causes": agreement.CAUSES, "floors": agreement.floors(ev),
+            "suite": res, "causes": agreement.CAUSES, "use_cases": _use_cases(ev, res),
+            "people": _people(ev),
             "standard": {"rules": std["rules"], "body": std["body"]},
             "proposals": bench.proposals(ev), "drafts": bench.drafts(ev), "inbox": bench.inbox(ev),
-            "components": components.checklist(ev),
-            "judges": _judges(ev), "cases": [{"id": c["id"], "category": c.get("category")}
+            "components": components.checklist(ev.agent_system),
+            "judges": _judges(ev), "cases": [{"id": c["id"], "use_case": c.get("use_case")}
                                              for c in ev.cases(include_dropped=False)]}
 
 
@@ -114,7 +162,7 @@ def _need(body: dict, *keys: str) -> list:
     return [body[k] for k in keys]
 
 
-def act(ev: Evals, action: str, body: dict) -> dict:
+def act(ev: Eval, action: str, body: dict) -> dict:
     """One action from the application. Each is logged to the activity log by name."""
     who = (body.get("by") or body.get("labeller") or "").strip()
     if action == "label":
@@ -148,7 +196,7 @@ def act(ev: Evals, action: str, body: dict) -> dict:
         (says,) = _need(body, "says")
         if not who:
             raise ValueError("enter your name first")
-        out = bench.propose_rule(ev, says, body.get("categories") or ["*"], who, body.get("items") or [])
+        out = bench.propose_rule(ev, says, body.get("use_cases") or ["*"], who, body.get("items") or [])
         text = f"{who} proposed a rule: {says}"
     elif action == "decide":
         (rid,) = _need(body, "id")
@@ -200,15 +248,15 @@ def act(ev: Evals, action: str, body: dict) -> dict:
 
 # ---- the server ---------------------------------------------------------------------------------
 
-def app_page(ev: Evals, token: str) -> str:
+def app_page(ev: Eval, token: str) -> str:
     script = APP_JS.read_text().replace("__TOKEN__", json.dumps(token))
     body = '<div id="app"><p class="muted">Loading…</p></div>'
-    return page(f"Grade {ev.agent_name}", "AOT evals · grader application",
+    return page(f"Grade {ev.agent_name} · {ev.id}", "AOT evals · grader application",
                 "Label runs, settle disagreements, and hold the suite to what people decide.",
                 body, script=script)
 
 
-def make_handler(ev: Evals, token: str):
+def make_handler(ev: Eval, token: str):
     class Handler(BaseHTTPRequestHandler):
         server_version = "aot-evals"
 
@@ -272,19 +320,19 @@ def make_handler(ev: Evals, token: str):
     return Handler
 
 
-def serve(ev: Evals, host: str = "127.0.0.1", port: int = 8765, open_browser: bool = False,
+def serve(ev: Eval, host: str = "127.0.0.1", port: int = 8765, open_browser: bool = False,
           log=print) -> None:
     token = secrets.token_urlsafe(16)
     httpd = ThreadingHTTPServer((host, port), make_handler(ev, token))
     shown = "127.0.0.1" if host in ("127.0.0.1", "localhost") else host
     url = f"http://{shown}:{httpd.server_address[1]}/?t={token}"
-    log(f"The grader application for {ev.agent_name} is at:\n\n  {url}\n")
+    log(f"The grader application for {ev.agent_name}, eval {ev.id}, is at:\n\n  {url}\n")
     if host not in ("127.0.0.1", "localhost"):
         log("It is reachable from other machines: anyone with this link can label. Use it only on a "
             "network you trust.")
     log("Send each grader their own link by adding &labeller=NAME to it.")
-    log("Everything it writes goes into the suite's files; review and commit them as usual. Ctrl-C stops it.")
-    journal.append(ev, "step", "the grader application started", gate="C19")
+    log("Everything it writes goes into the eval's files; review and commit them as usual. Ctrl-C stops it.")
+    journal.append(ev, "step", f"the grader application started on {ev.id}", gate="C19")
     if open_browser:
         webbrowser.open(url)
     try:

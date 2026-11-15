@@ -1,4 +1,4 @@
-# The whole support agent (estimators §1, Eval 0). Spec only: see docs/v2-design.md §9.
+# The whole support agent (estimators §1, Eval 0; docs/v2-design.md §9).
 eval: end-to-end
 version: 1.0
 
@@ -50,8 +50,8 @@ design:
 measurement:
   failure_modes:
     - id: wrong-answer
-      description: The reply states something about the order that the order system contradicts.
-      use_cases: ["order-status", "return"]
+      description: The reply states something the order system contradicts, or doesn't ask for an order number it needs.
+      use_cases: "*"
       check: reply-matches-order
     - id: wrong-end-state
       description: The order system ends in a different state than the request called for.

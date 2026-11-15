@@ -1,0 +1,137 @@
+{
+  "id": "tr_1317.h0",
+  "use_case": "full-refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 31,
+    "inclusion_prob": 0.3305785123966942
+  },
+  "order_template": "ot-07",
+  "cluster": "ot-07",
+  "trigger": {
+    "text": "Refund request: I'd like a refund for order A1635.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": null,
+    "order_id": "A1635",
+    "to": "original",
+    "today": "2026-10-08"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1635": {
+        "address": "66 Cedar Court",
+        "customer": "c-0318",
+        "delivered": "2026-09-27",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1636": {
+        "address": "52 Cedar Court",
+        "customer": "c-0318",
+        "delivered": "2026-08-19",
+        "eta": null,
+        "items": [
+          {
+            "name": "coffee grinder",
+            "price": 59.0,
+            "sku": "SKU-104"
+          },
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $64.49 for order A1635 to your original payment.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1635": {
+          "address": "66 Cedar Court",
+          "customer": "c-0318",
+          "delivered": "2026-09-27",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            }
+          ],
+          "payment": "card",
+          "refunded": 64.49,
+          "status": "delivered"
+        },
+        "A1636": {
+          "address": "52 Cedar Court",
+          "customer": "c-0318",
+          "delivered": "2026-08-19",
+          "eta": null,
+          "items": [
+            {
+              "name": "coffee grinder",
+              "price": 59.0,
+              "sku": "SKU-104"
+            },
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 64.49,
+          "order": "A1635",
+          "to": "original"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1317.h0",
+    "synthetic": false,
+    "source_trace": "tr_1317"
+  }
+}

@@ -1,0 +1,139 @@
+{
+  "id": "tr_1312.h0",
+  "use_case": "partial-refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 3,
+    "inclusion_prob": 0.4444444444444444
+  },
+  "order_template": "ot-07",
+  "cluster": "ot-07",
+  "trigger": {
+    "text": "Refund request: Refund just the kettle on A1625.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": [
+      "SKU-102"
+    ],
+    "order_id": "A1625",
+    "to": "original",
+    "today": "2026-10-13"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1625": {
+        "address": "16 Elm Street",
+        "customer": "c-0313",
+        "delivered": "2026-09-22",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1626": {
+        "address": "31 Oak Avenue",
+        "customer": "c-0313",
+        "delivered": "2026-07-17",
+        "eta": null,
+        "items": [
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          },
+          {
+            "name": "cutting board",
+            "price": 22.4,
+            "sku": "SKU-107"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $34.50 for order A1625 to your original payment.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1625": {
+          "address": "16 Elm Street",
+          "customer": "c-0313",
+          "delivered": "2026-09-22",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            }
+          ],
+          "payment": "card",
+          "refunded": 34.5,
+          "status": "delivered"
+        },
+        "A1626": {
+          "address": "31 Oak Avenue",
+          "customer": "c-0313",
+          "delivered": "2026-07-17",
+          "eta": null,
+          "items": [
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            },
+            {
+              "name": "cutting board",
+              "price": 22.4,
+              "sku": "SKU-107"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 34.5,
+          "order": "A1625",
+          "to": "original"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1312.h0",
+    "synthetic": false,
+    "source_trace": "tr_1312"
+  }
+}
