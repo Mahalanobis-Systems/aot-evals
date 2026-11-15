@@ -1,7 +1,7 @@
 # Example: the online store's support agent
 
 The agent from [the twelve problems](../../docs/problems.md), small enough to run in a minute and
-complete enough to show every part of an eval ([v2-design §9](../../docs/v2-design.md#9-the-online-store-example)).
+complete enough to show every part of an eval ([docs/method.md](../../docs/method.md) is the reference for each file).
 `aot-evals demo` copies this folder into a new repository and runs it; the test suite builds its
 fixtures from it.
 
@@ -18,9 +18,12 @@ fixtures from it.
   cost weights, a non-inferiority rule with a refund gate, code checks only.
 - `evals/agents/store/refund-subagent/`: the subagent on its own, drawn from its handoffs. Its
   policy breaks are graded by `policy-judge` (catch 0.95, clean pass 0.99 on 100 failure and 500
-  pass labels, enough to clear `max_inflation: 2.0` at a 3% failure rate); `policy-judge-weak`
-  (0.80, 0.90) is kept as a diagnostic to show the floor refusing it. A threshold rule (under 5%),
-  and the end-to-end eval must show no regression too (rule 27).
+  pass labels, enough to clear `max_inflation: 2.0` at a 3% failure rate: 1.98× at its lower
+  bounds, where 20 failure and 100 pass labels would cost 3.7×). The rate is corrected with
+  Rogan–Gladen, since the labels are on past runs, not drawn from the report's.
+  `policy-judge-weak` (0.80, 0.90) is kept as a diagnostic to show the floor refusing it at any
+  number of labels. A threshold rule (under 5%), and the end-to-end eval must show no regression
+  too (rule 27).
 - Each eval's `cases/`: a quality set drawn from the export with `aot-evals draw` (`draw.json` is
   the log) and a bug-finding set (`bf-*`) written from templates, with the policy corners: the 30th
   and 31st day, partial refunds, gift cards, no order number.
@@ -29,9 +32,14 @@ fixtures from it.
   rates, so the example runs offline.
 - `generate.py`: rewrites the export, the bug-finding cases and the judges' labels (seeded).
 
-`AGENT_VARIANT` switches the behaviors the problems and the self-tests need: `refund-bug` (problem
-1), `declines-missing-order` (problem 2), `flaky` (problem 8) and `cheap` (problem 11), plus `liar`,
-`costly`, `slow`, `silent` and `peek`; see the docstrings in `agent/store.py` and `agent/refunds.py`.
+`AGENT_VARIANT` switches the behaviors the problems and the self-tests need: `refund-bug` (it also
+refunds days 31 to 35, problem 1), `declines-missing-order` (the window is fixed, but a handoff with
+no order number is declined instead of asked about: the subagent's eval improves and refunds end
+to end get worse, problem 2), `flaky` (problem 8) and `cheap` (a cheaper model that fixes the 30th
+day and refunds the 31st, problem 11), plus `liar`, `costly`, `slow`, `silent` and `peek`, and
+`AGENT_BREAK` for a known set of cases; see the docstrings in `agent/store.py` and
+`agent/refunds.py`. The good subagent counts the 30th day as outside the window, which is its known
+policy failure.
 
 The quality sets are deliberately small, so the decisions come out `insufficient` with the number
 of cases that would decide them: that is the honest answer at this size (problem 9).

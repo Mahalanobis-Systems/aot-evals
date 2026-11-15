@@ -12,7 +12,7 @@ backends:
   local: {type: command, command: [python3, judges/policy_judge.py, --weak], family: toy, model: toy-policy-judge-mini}
 ---
 
-A cheaper judge on the same question, kept to show the floor refusing it (v2-design §9): at
+A cheaper judge on the same question, kept to show the floor refusing it: at
 catch 0.80 and clean 0.90 it costs about 7.5 times the cases a code check would at a 3% failure
 rate, however many labels it has.
 

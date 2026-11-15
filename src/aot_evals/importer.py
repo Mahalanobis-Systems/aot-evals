@@ -1,7 +1,7 @@
-"""C0 `import`: bring a data export into `evals/data/` and record where it came from.
+"""`import`: bring a data export into `evals/data/` and record where it came from.
 
 The export itself is git-ignored; the manifest entry is committed. Every downstream number has
-to trace back to an entry here or to a committed case (G12). Nothing in this plugin calls a live
+to trace back to an entry here or to a committed case (`committed`). Nothing in this plugin calls a live
 vendor API: the team exports from its observability stack and imports the file.
 """
 

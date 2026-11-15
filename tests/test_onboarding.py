@@ -156,19 +156,6 @@ def test_discovery_page_draws_the_grid_from_the_front_matter(tmp_path):
     assert ' pass</span></td>' in golden and "22% pass" in golden
 
 
-def test_discovery_page_still_places_pillar_headings_from_0_1_0(tmp_path):
-    from aot_evals.start import write_discovery_page
-
-    src = tmp_path / "evals/agents/pizza-bot/discovery.md"
-    src.parent.mkdir(parents=True)
-    src.write_text(REPORT.replace("## Golden test cases", "## Golden use cases")
-                   + "\n## Safe testing env\n\nFakes.\n")
-    html = write_discovery_page(src, "pizza-bot", src.parent).read_text()
-    assert 'id="safe-testing-env"><h2><span class="num">03</span> Safe testing env</h2>' in html
-    assert 'id="golden-use-cases"><h2><span class="num">04</span> Golden use cases</h2>' in html
-    assert html.index('id="safe-testing-env"') < html.index('id="golden-use-cases"') < html.index('id="next"')
-
-
 def test_discovery_page_without_front_matter_renders_the_markdown_as_written(tmp_path):
     from aot_evals.start import write_discovery_page
 

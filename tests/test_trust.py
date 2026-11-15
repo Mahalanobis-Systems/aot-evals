@@ -1,4 +1,5 @@
-"""The phases, trust per eval and the changes since a baseline (trust.py, docs/method.md §12)."""
+"""Where each eval stands, its trust, the changes since a baseline and the next step per role
+(trust.py, docs/method.md)."""
 
 from __future__ import annotations
 
@@ -16,36 +17,40 @@ def _status(capsys, *argv: str) -> dict:
     return json.loads(capsys.readouterr().out)
 
 
-def test_no_eval_and_no_discovery_report_is_assess(tmp_path, capsys):
+def _roles(t: dict) -> dict:
+    return {st["role"]: st["step"] for st in t["next"]}
+
+
+def test_no_eval_and_no_discovery_report_is_the_owners_discovery(tmp_path, capsys):
     s = _status(capsys, "--evals", str(tmp_path / "evals" / "agents" / "bot"))
-    assert s["phase"]["id"] == "assess"
-    assert s["phase"]["settles"] == ["estimand"]
+    assert s["stands"] == "no discovery report yet"
+    assert "/aot-evals:start" in _roles(s)["owner"]
     assert s["evals"] == []
 
 
-def test_a_discovery_report_without_an_eval_is_build(tmp_path, capsys):
+def test_a_discovery_report_without_an_eval_is_engineerings_build(tmp_path, capsys):
     agent = tmp_path / "evals" / "agents" / "bot"
     agent.mkdir(parents=True)
     (agent / "discovery.md").write_text("# Bot\n")
     s = _status(capsys, "--evals", str(agent))
-    assert s["phase"]["id"] == "build"
-    assert s["phase"]["done"] == ["Assess"]
-    assert "aot-evals build" in s["phase"]["next"]
+    assert "no eval yet" in s["stands"]
+    assert list(_roles(s)) == ["engineering"] and "aot-evals build" in _roles(s)["engineering"]
 
 
-def test_an_eval_without_a_baseline_is_build_and_untested(store_repo: StoreRepo):
+def test_an_eval_without_a_baseline_is_untested_and_engineering_runs_it(store_repo: StoreRepo):
     t = trust.eval_trust(store_repo.ev("end-to-end"))
-    assert t["phase"]["id"] == "build"
+    assert t["stands"] == "no baseline has run"
     assert t["level"] == "untested"
-    assert "run --purpose baseline" in t["phase"]["next"]
+    assert "run --purpose baseline" in _roles(t)["engineering"]
 
 
-def test_a_baseline_moves_the_eval_to_judge_provisional_with_its_reasons(store_repo: StoreRepo, capsys):
+def test_a_baseline_makes_the_eval_provisional_and_hands_labelling_to_people(store_repo: StoreRepo, capsys):
     s = store_repo
     assert s.cli("run", "--purpose", "baseline") == 0
     t = trust.eval_trust(s.ev("end-to-end"))
-    assert t["phase"]["id"] == "judge"
+    assert t["stands"] == "a number under the current spec, not yet held to people"
     assert t["level"] == "provisional"
+    assert "aot-evals --eval end-to-end serve" in _roles(t)["graders"]
     assert t["theta"] is not None
     assert t["conditions"] == {"spec": True, "estimate": True, "judges": True, "people": False,
                                "sized": None}
@@ -64,12 +69,13 @@ def test_a_baseline_moves_the_eval_to_judge_provisional_with_its_reasons(store_r
     capsys.readouterr()
     out = _status(capsys, "--evals", str(s.agent), "--eval", "end-to-end")
     assert [e["eval"] for e in out["evals"]] == ["end-to-end"]
-    assert out["evals"][0]["complete"] is True  # the spec's fields ride along, as before
-    assert out["phase"]["id"] == "build"  # the agent's phase is its earliest eval's: refund-subagent has no baseline
+    assert out["evals"][0]["complete"] is True  # the spec's fields ride along
     assert cli.main(["--evals", str(s.agent), "status"]) == 0
     text = capsys.readouterr().out
-    assert "end-to-end: Judge, provisional" in text
-    assert "refund-subagent: Build, untested" in text
+    assert "2 eval(s): 1 untested, 1 provisional" in text
+    assert "end-to-end: provisional" in text and "refund-subagent: untested" in text
+    assert "next for the people who know what good looks like: label whole runs" in text
+    assert "next for engineering:" in text
 
 
 def test_a_changed_estimand_is_a_revision_since_the_baseline(store_repo: StoreRepo):
@@ -84,7 +90,9 @@ def test_a_changed_estimand_is_a_revision_since_the_baseline(store_repo: StoreRe
     assert [c["kind"] for c in ch] == ["revision"]
     assert ch[0]["parts"] == ["estimand"]
     t = trust.eval_trust(ev)
-    assert t["level"] == "untested" and t["phase"]["id"] == "build"
+    assert t["level"] == "untested"
+    assert t["stands"] in ("no baseline has run", "no number under the current spec yet")
+    assert trust.summary(Evals(s.agent))["evals"][0]["next"][0]["role"] == "engineering"  # the re-run first
 
 
 def test_a_changed_agent_since_the_baseline_points_at_a_candidate(store_repo: StoreRepo):
@@ -100,12 +108,12 @@ def test_a_changed_agent_since_the_baseline_points_at_a_candidate(store_repo: St
     assert "--purpose candidate" in ch[0]["next"]
 
 
-def test_components_rows_carry_their_phase(store_repo: StoreRepo):
+def test_components_rows_carry_their_role(store_repo: StoreRepo):
     rows = components.checklist(Evals(store_repo.agent))
     by = {r["id"]: r for r in rows}
-    assert {r["phase"] for r in rows} == {"assess", "build", "judge"}
-    assert by["weighting"]["phase"] == "assess"   # the estimand
-    assert by["golden"]["phase"] == "build"       # the sampling design
-    assert by["deterministic"]["phase"] == "build"  # the checks
-    assert by["misclassification"]["phase"] == "judge"  # the error rates
+    assert {r["role"] for r in rows} == {"owner", "engineering", "graders"}
+    assert by["weighting"]["role"] == "owner"   # the estimand
+    assert by["golden"]["role"] == "engineering"       # the sampling design
+    assert by["deterministic"]["role"] == "engineering"  # the checks
+    assert by["misclassification"]["role"] == "graders"  # the error rates
     assert all(r["group"] == r["part"] for r in rows)  # the grader application reads group

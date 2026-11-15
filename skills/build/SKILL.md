@@ -1,22 +1,30 @@
 ---
 name: build
-description: Build, the second of aot-evals' three phases, for engineering. Settles three of an eval's four parts around the agent contract - the sampling design (a frame of real traffic, a quality set drawn at random with each case's inclusion probability, a bug-finding set against a coverage list, cluster keys), the measurement model's checks (one counted check per failure mode, code first, trials) and the decision rule (the test, margin or bar, α, power, gates, constraints) - and finishes the estimand Assess drafted (use cases, shares, costs, the decision, one eval end to end plus one per separately shipped subagent). Ends with a baseline under the current spec and the grader application handed to the people who will label. Also decides on a change to the agent (a candidate run, the paired comparison, the decision). Use when start says the phase is Build, when someone asks to wire an agent up for evals, write eval cases or checks, run a baseline, or compare a change to the agent.
+description: Build, engineering's role in aot-evals, working alongside the owner and the people who know what good looks like. Settles three of an eval's four parts around the agent contract - the sampling design (a frame of real traffic, a quality set drawn at random with each case's inclusion probability, a bug-finding set against a coverage list, cluster keys), the measurement model's checks (one counted check per failure mode, code first, trials) and the decision rule (the test, margin or bar, α, power, gates, constraints) - and finishes the estimand the first assessment drafted (use cases, shares, costs, the decision, one eval end to end plus one per separately shipped subagent). Gets a baseline under the current spec and hands the grader application to the people who will label, who can start as soon as runs exist. Also decides on a change to the agent (a candidate run, the paired comparison, the decision). Use when start says engineering has the next step, when someone asks to wire an agent up for evals, write eval cases or checks, run a baseline, or compare a change to the agent.
 ---
 
 # build: the agent contract, the design, the checks and the decision rule
 
-Build is engineering's phase. It ends with each eval of the agent running under a complete spec:
+Build is engineering's role. Its goal is each eval of the agent running under a complete spec:
 the agent runs from a command, the quality set is drawn from real traffic, every failure mode has
 one counted check, the decision rule is written down, and a baseline has run under the current
-spec. Then the grader application goes to the people who will label (`judge`).
+spec. It runs alongside the other two roles: the owner answers what only they know (the decision,
+a cost, the margin) as it comes up, and the people who know what good looks like can label in the
+grader application as soon as there are runs (`judge`). Don't wait for one to finish before
+starting the other.
 
 Nothing refuses to run because a field is missing: an incomplete spec still runs, and the report
 nulls the numbers that depend on the missing fields, with the reason. `aot-evals validate` lists
 every missing and invalid field; `aot-evals status` says what to do next.
 
+**Speak in consequences.** You do the statistics; say what they mean for the next step: "the plan
+needs about 60 refund cases to show the rate is under 5%", "five clusters can't show a change at
+all: write cases from more templates", "the judge would cost twice the cases of a code check".
+Explain power, intervals or allocation only when asked, and then point to
+`${CLAUDE_PLUGIN_ROOT}/docs/statistics.md`.
+
 Reference: `${CLAUDE_PLUGIN_ROOT}/docs/method.md` (§3 where evals go, §4 files, §5 the spec, §6
-cases, §7 checks, §8 runs). The statistics behind each number:
-`${CLAUDE_PLUGIN_ROOT}/docs/statistics.md`. Terms: `${CLAUDE_PLUGIN_ROOT}/docs/estimators.md#terms`.
+cases, §7 checks, §8 runs). Terms: `${CLAUDE_PLUGIN_ROOT}/docs/estimators.md#terms`.
 Pacing, words and the rules you hold the team to: `${CLAUDE_PLUGIN_ROOT}/references/working-in-checkpoints.md`.
 `aot-evals` is `"${CLAUDE_PLUGIN_ROOT}/bin/aot-evals"`; pass `--agent <agent>` with several agents
 and `--eval <id>` with several evals. Paths start at `<agent>/`, `evals/agents/<agent>/`.
@@ -52,7 +60,7 @@ component eval's own `invoke` lives in its eval.yaml and calls the component wit
 - The inventory in agent.yaml: the model actually used per call site, from the traces; every tool,
   with credential names only.
 
-## 3. The estimand: finish what Assess drafted
+## 3. The estimand: finish what the first assessment drafted
 
 In each eval's `eval.yaml` (`estimand:`), with the owner:
 
@@ -141,8 +149,8 @@ counted check** (rule 12); other checks on the same mode go in `diagnostics`.
 - **A side-effect mode on every eval** (`side_effect: true`): something changed that nobody asked
   for.
 - **A judge only where code can't decide**, from `${CLAUDE_PLUGIN_ROOT}/templates/check_judge.md`:
-  one typed question about one failure mode, from a different model family than the agent. Until the
-  Judge phase measures its catch and clean pass rates it does not count, and a judge that feeds the
+  one typed question about one failure mode, from a different model family than the agent. Until
+  graders' labels measure its catch and clean pass rates (`judge`) it does not count, and a judge that feeds the
   quantity leaves θ̂ null. Set `measurement.correction` (`rogan_gladen` when its labels are on past
   runs, `ppi` when people label the report's own runs) and `max_inflation` (default 2.0).
 - **The labeling standard** (`<agent>/labels/standard.md`): the rules a person applies when failing
@@ -171,7 +179,7 @@ With the owner, before any candidate runs, in `decision_rule:`:
 
 Commit eval.yaml. A decision rule changed after the results is refused unless it was on record first.
 
-## 7. The baseline, then hand over to Judge
+## 7. The baseline, and the graders' link
 
 ```bash
 aot-evals validate         # nothing missing or invalid
@@ -179,18 +187,21 @@ aot-evals build --run      # each eval that can run: smoke if needed, a baseline
 ```
 
 Or per eval: `aot-evals --eval <id> run --purpose baseline`, then `aot-evals --eval <id> report`.
-Then `aot-evals status`: each eval should be in Judge, provisional. Re-run `plan --write` now that
-the baseline has measured the rates and spreads, and draw more if the quality set is short.
+Then `aot-evals status`: each eval should be provisional, with its open reasons. Re-run `plan
+--write` with the rates and spreads the baseline measured, and draw more if the quality set is
+short.
 
-Start the grader application and give each grader their own link:
+Start the grader application as soon as there are runs to label (a smoke run is enough to begin),
+and give each grader their own link:
 
 ```bash
 aot-evals serve --open     # then add &labeller=NAME to the link for each grader
 ```
 
-Checkpoint "The loop is running" (`references/working-in-checkpoints.md`): θ̂ with its interval and
-weights, the per-use-case table, what the decision rule says and how many cases would decide it,
-how much results move between trials, and the link. Then load `judge`.
+Checkpoint "The loop is running" (`references/working-in-checkpoints.md`), in consequences: the
+headline number with its range and what it is weighted by, which use cases stand out, what the
+decision rule says and how many more cases would decide it, how much results move between runs,
+and the graders' link. Load `judge` when the person facilitating the graders is the one asking.
 
 ## 8. Decide on a change
 

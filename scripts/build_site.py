@@ -6,14 +6,14 @@
 Writes two files, which the release workflow attaches to each GitHub release and the website
 (mahalsystems.ai) imports:
 
-- `evals.json`: the method as data. The four parts, the three phases, the commands, the spec's
+- `evals.json`: the method as data. The four parts, the three roles, the commands, the spec's
   fields, report.json's keys and the gates are parsed from the tables in docs/method.md (they stay
   the record), alongside the method's sections, the three guiding documents (estimators, problems,
   statistics) with the terms and the rules, the online-store example, the practice findings, the
   benchmark catalog, the situations, the templates and the plugin's skills:
 
       {"schema": "aot-evals/site@2", "version": "2.0.0", "commit": "abc1234", "generated": "YYYY-MM-DD",
-       "method": {...}, "principles": [...], "parts": [...], "phases": [...], "commands": [...],
+       "method": {...}, "principles": [...], "parts": [...], "roles": [...], "commands": [...],
        "spec_fields": [...], "report_keys": [...], "gates": [...], "judge_backends": [...],
        "docs": {"estimators": {...}, "problems": {...}, "statistics": {...}}, "terms": [...],
        "rules": [...], "example": {...}, "practices": {...}, "benchmarks": {...}, "situations": [...],
@@ -21,9 +21,7 @@ Writes two files, which the release workflow attaches to each GitHub release and
 
   Relative links in the Markdown become absolute links to the release tag on GitHub, so text read
   on the site still points somewhere real. Keys may be added within a schema version, never
-  removed or renamed. site@2 replaced site@1's `planes`, `measurements`, `experiments`, `panels`
-  and `process` (1.x) with `parts`, `phases`, `spec_fields`, `report_keys`, `docs`, `terms`,
-  `rules` and `example`.
+  removed or renamed.
 - `aot-evals-method-<version>.zip`: the method, the guiding documents, the store example,
   references and templates as plain files, to read or hand to any coding agent without installing
   the plugin. The same version always builds the same bytes.
@@ -176,7 +174,7 @@ def table(md: str, where: str, nth: int = 0) -> list[dict]:
 
 
 def principles(md: str) -> list[dict]:
-    """The numbered list in §1: each item's bold lead as its title, and its full text."""
+    """The numbered list under Principles: each item's bold lead as its title, and its full text."""
     items = re.findall(r"^(\d+)\. (.*?)(?=^\d+\. |^\S|\Z)", md, flags=re.M | re.S)
     out = []
     for n, body in items:
@@ -186,14 +184,15 @@ def principles(md: str) -> list[dict]:
     return out
 
 
-# The sections of docs/method.md the site parses, by anchor; the build fails if one goes missing.
+# The sections of docs/method.md the site parses, by anchor without the section number; the
+# build fails if one goes missing.
 METHOD_SECTIONS = {
-    "principles": "1-principles",
-    "parts": "2-the-four-parts-and-the-three-phases",
-    "spec": "5-the-eval-spec",
-    "commands": "9-commands",
-    "report": "10-reportjson",
-    "gates": "11-gates",
+    "principles": "principles",
+    "parts": "the-four-parts-and-the-three-roles",
+    "spec": "the-eval-spec",
+    "commands": "commands",
+    "report": "reportjson",
+    "gates": "gates",
 }
 
 
@@ -211,11 +210,12 @@ def method(tag: str) -> dict:
     if numbers != list(range(1, len(secs) + 1)):
         raise ValueError(f"docs/method.md: sections must be numbered 1..N in order, found {numbers}")
     by_id = {s["id"]: s for s in secs}
-    missing = [a for a in METHOD_SECTIONS.values() if a not in by_id]
+    by_name = {s["id"].split("-", 1)[-1]: s for s in secs}
+    missing = [a for a in METHOD_SECTIONS.values() if a not in by_name]
     if missing:
         raise ValueError(f"docs/method.md: no section {', '.join(missing)}")
     return {"title": title, "lead": " ".join(lead.split()), "preface": preface.strip(), "sections": secs,
-            "by_id": by_id}
+            "by_id": by_id, "by_name": by_name}
 
 
 def guide(name: str, path: Path, tag: str) -> dict:
@@ -320,7 +320,7 @@ and the templates. Read them, or point any coding agent at them. Apache License 
 | docs/estimators.md | The structure: what an eval is, where evals go, the eval spec, the terms, the rules |
 | docs/problems.md | Twelve problems every agent eval has to solve, each with a worked example |
 | docs/statistics.md | The derivations: how many cases, trials and labels; when to trust a judge or a difference |
-| docs/method.md | The reference: the phases, the files, the eval spec, every command, report.json and the gates |
+| docs/method.md | The reference: the roles, the files, the eval spec, every command, report.json and the gates |
 | examples/store/ | The online store's support agent and refund subagent, with both evals |
 | references/eval-best-practices.md | What the 2025-2026 literature says about evaluating agents, with sources |
 | references/benchmarks.md, benchmarks.yaml | The public benchmark catalog, and how an agent is matched against it |
@@ -356,8 +356,9 @@ def build(today: str) -> dict:
     v = version()
     tag = tag_for(v)
     m = method(tag)
-    sec = {k: m["by_id"][a]["markdown"] for k, a in METHOD_SECTIONS.items()}
+    sec = {k: m["by_name"][a]["markdown"] for k, a in METHOD_SECTIONS.items()}
     m.pop("by_id")
+    m.pop("by_name")
 
     practices_text = absolute_links(PRACTICES.read_text(), PRACTICES, tag)
     p_intro, p_secs = sections(practices_text.split("\n", 1)[1])
@@ -368,7 +369,7 @@ def build(today: str) -> dict:
     if problems:
         raise ValueError("references/benchmarks.yaml: " + "; ".join(problems[:5]))
 
-    commands = table(sec["commands"], "method §9 Commands")
+    commands = table(sec["commands"], "method, Commands")
     for c in commands:
         c["name"] = c["command"].strip("`").split(" ")[0]
         c["command"] = c["command"].strip("`")
@@ -381,12 +382,12 @@ def build(today: str) -> dict:
         "generated": today,
         "method": m,
         "principles": principles(sec["principles"]),
-        "parts": table(sec["parts"], "method §2 the four parts"),
-        "phases": table(sec["parts"], "method §2 the three phases", nth=1),
+        "parts": table(sec["parts"], "method, the four parts"),
+        "roles": table(sec["parts"], "method, the three roles", nth=1),
         "commands": commands,
-        "spec_fields": table(sec["spec"], "method §5 the spec's fields"),
-        "report_keys": table(sec["report"], "method §10 report.json"),
-        "gates": [{**g, "id": g["id"].strip("`")} for g in table(sec["gates"], "method §11 Gates")],
+        "spec_fields": table(sec["spec"], "method, the spec's fields"),
+        "report_keys": table(sec["report"], "method, report.json"),
+        "gates": [{**g, "id": g["id"].strip("`")} for g in table(sec["gates"], "method, Gates")],
         "judge_backends": table(BACKENDS.read_text(), "references/judge-backends.md"),
         "docs": docs,
         "terms": terms(docs["estimators"]),

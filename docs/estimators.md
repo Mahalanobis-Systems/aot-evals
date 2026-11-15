@@ -1,6 +1,6 @@
 # Evals as estimators
 
-*The structure of aot-evals 2.0. [method.md](method.md) is the reference for what each command,
+*The structure of aot-evals. [method.md](method.md) is the reference for what each command,
 gate and file does.*
 
 An eval exists to make a decision: ship this prompt change, swap this model, keep this subagent. To
@@ -22,7 +22,7 @@ and decision rules in hypothesis testing (Neyman & Pearson 1933; Wald 1947). Non
 aot-evals writes all four down for each eval of an agent, and lets the rules for building a suite
 follow from them instead of from rules of thumb.
 
-Everything in aot-evals 2.0 is organized by these four parts. The [problems](problems.md) show where
+Everything in aot-evals is organized by these four parts. The [problems](problems.md) show where
 each part bites in practice, with worked examples. The [statistics](statistics.md) derive the
 numbers. This page is the structure both of them hang on.
 
@@ -222,7 +222,7 @@ where μ_s is the true pass rate in use case s and the weights w_s sum to 1. The
 me"). It carries weight, because it is part of the population the decision is about. A failure mode
 is a way the agent can go wrong ("refunded an order outside the policy window"). It is a check, part
 of the measurement model (section 5). A single use case can fail in several modes, and one mode can
-occur in several use cases. aot-evals 1.x mixed the two into "categories"; 2.0 keeps them apart.
+occur in several use cases, so aot-evals keeps the two apart.
 
 **Example.** Suppose the store's eval uses traffic weights and the system passes 91.0% of requests.
 A bug makes refunds fail 15% of the time instead of 5%. That is 2 more bad refunds a day, and θ moves
@@ -449,7 +449,7 @@ decision_rule:
   constraints: {cost_per_success_usd: 0.05, latency_p90_ms: 8000}
 ```
 
-The field names are a sketch; [v2-design.md](v2-design.md) settles them. The judges' measured error rates
+Every field, with what it requires, is in [method §5](method.md#5-the-eval-spec). The judges' measured error rates
 are not in the spec. They are measurements, kept with each judge's calibration, so recalibrating a
 judge doesn't change the spec.
 
@@ -512,7 +512,7 @@ has to serve one of them or go.
 the store's order system, for example), and the sandbox is part of what is measured: both versions
 in a comparison run in the same one, and the sandbox is versioned with every result. Whether a pass
 in the sandbox means a pass in production is a measurement-model question that nobody has error
-rates for. aot-evals 2.0 does not claim to answer it.
+rates for. aot-evals does not claim to answer it.
 
 **Open problems.** These are the places where agents differ from the settings the four parts come
 from:
@@ -548,7 +548,7 @@ otherwise (November 2026):
 | Schultzberg (2026) | – | – | ~ | ✓ ship, test or stop | – | – |
 | Kotawala (2026) | – | ~ clusters | – | ✓ paired, multiplicity, anytime-valid | – | – |
 | Reuel et al. (2024); Zhu et al. (2025) | – | – | – | – | – | ~ checklists, not derived |
-| **aot-evals 2.0** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ derived from the four parts |
+| **aot-evals** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ derived from the four parts |
 
 What the table describes:
 

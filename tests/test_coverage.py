@@ -1,4 +1,4 @@
-"""`aot-evals coverage` on the store (docs/v2-design.md §1, §3; estimators rule 10): the
+"""`aot-evals coverage` on the store (docs/method.md; estimators rule 10): the
 bug-finding set against its external coverage list, entry x failure mode, the empty cells
 first. A list committed after the cases is a problem, since a list written from the cases always
 covers them; the report's `coverage_list` gate reads the same problems (test_fixtures.py)."""

@@ -1,4 +1,4 @@
-"""The activity log (docs/method.md §4), shared by an agent system's evals, and the markdown its
+"""The activity log (docs/method.md), shared by an agent system's evals, and the markdown its
 pages render."""
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ def test_every_command_logs_itself_and_reads_do_not(store_repo):
         ["--eval", "end-to-end", "import"], ["--eval", "refund-subagent", "handoffs"],
         ["--eval", "end-to-end", "screen"], ["--eval", "refund-subagent", "screen"]]
     assert all("--evals" not in e["text"] for e in logged)
-    assert logged[0]["gate"] == "C0" and logged[-1]["gate"] == "C7" and logged[-1]["exit"] == 0
+    assert logged[0]["gate"] == "design" and logged[-1]["gate"] == "design" and logged[-1]["exit"] == 0
     # one log for the agent system, whichever eval a command worked on
     assert journal.log_path(s.ev("refund-subagent")) == journal.log_path(s.ev()) == \
         s.agent / "journal" / "activity.jsonl"
@@ -36,7 +36,7 @@ def test_every_command_logs_itself_and_reads_do_not(store_repo):
 
 
 def test_an_incomplete_spec_is_noted_not_refused(store_repo, capsys):
-    """Nothing blocks a run on a spec field it lacks (docs/v2-design.md §5): the run goes ahead,
+    """Nothing blocks a run on a spec field it lacks (docs/method.md): the run goes ahead,
     the note names the field, the manifest records it, and the command logs itself with exit 0."""
     s = store_repo
     spec = s.agent / "end-to-end" / "eval.yaml"
@@ -46,7 +46,7 @@ def test_an_incomplete_spec_is_noted_not_refused(store_repo, capsys):
     assert "note: eval: says 'e2e'" in capsys.readouterr().err
     assert s.ev().latest_run("baseline")["spec_issues"] == ["eval"]
     last = journal.entries(s.ev())[-1]
-    assert last["kind"] == "command" and last["exit"] == 0 and last["gate"] == "C12"
+    assert last["kind"] == "command" and last["exit"] == 0 and last["gate"] == "decision_rule"
 
 
 def test_a_run_streams_progress_and_collapses_it(store_repo):

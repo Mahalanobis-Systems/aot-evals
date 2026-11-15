@@ -35,9 +35,13 @@ activity page tells the story, and stop wherever the person should steer.
 
 ## Words for the person
 
-- Say the phase (Assess, Build, Judge) and what the step does in plain words. The four parts
-  (estimand, sampling design, measurement model, decision rule) can be named once explained; rule
-  numbers, gate ids and field paths live in `docs/method.md` for whoever wants them.
+- Say who the step is for (the owner, engineering, or the people who know what good looks like)
+  and what it does in plain words. The four parts (estimand, sampling design, measurement model,
+  decision rule) can be named once explained; rule numbers, gate ids and field paths live in
+  `docs/method.md` for whoever wants them.
+- **Speak in consequences.** Do the statistics yourself and say what they mean for the next step:
+  "about 40 more cases would show it", "this judge needs about 80 more labeled failures before its
+  scores count". Point to `docs/estimators.md` or `docs/statistics.md` only when someone asks how.
 - Use the terms as `docs/estimators.md#terms` defines them: a **use case** is a kind of request, a
   **pool** is the quality set or the bug-finding set, **coverage** is the list the bug-finding set
   must reach, the **plan** is how many cases each use case needs, and a grader's errors are its

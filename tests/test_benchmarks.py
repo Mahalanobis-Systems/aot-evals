@@ -83,8 +83,8 @@ def test_situations_for_the_grid_are_the_universal_ones_plus_what_the_matches_te
           "why": {"workloads": [], "words": []}} for m in matches[2:]], vocab)
 
 
-def test_a_user_simulator_is_no_longer_something_to_borrow():
-    """Simulated users are out of scope in 2.0: the catalog may say a benchmark drives its agent
+def test_a_user_simulator_is_never_something_to_borrow():
+    """Simulated users are out of scope: the catalog may say a benchmark drives its agent
     with one (`interaction`), but never offers one to borrow (`good_for`)."""
     assert "user-simulator" not in benchmarks.GOOD_FOR
     assert "multi-turn-simulated-user" in benchmarks.INTERACTIONS

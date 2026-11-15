@@ -115,8 +115,8 @@ can only be monitored, not scored: when two experts can't agree pass/fail
 after seeing each other's critiques, track pairwise trends and edit distance
 instead [Hamel judge, Validators].
 
-**How these thresholds hold up.** aot-evals 2.0 replaces the rules of thumb above (10 cases per
-category, 100–200 labels, the 60-label minimum, point-estimate floors) with counts derived from
+**How these thresholds hold up.** aot-evals doesn't use the rules of thumb above (10 cases per
+category, 100–200 labels, the 60-label minimum, point-estimate floors). It derives the counts from
 each eval's decision rule and measurement model: case counts from power, labels counted per kind
 from a stated margin, and floors shown with a non-inferiority margin
 ([docs/statistics.md](../docs/statistics.md) §3.4, §4.1, §4.2).
@@ -284,7 +284,7 @@ several are cited in more than one.
 - **[Hamel judge]** Hamel Husain, "Creating a LLM-as-a-Judge That Drives
   Business Results", 2024-10-29. https://hamel.dev/blog/posts/llm-judge/.
   Critique shadowing; ~100 labels per failure mode; below 60 the intervals
-  are too wide; report TPR and TNR; Honeycomb converged in three iterations.
+  are too wide; report true positive and true negative rates; Honeycomb converged in three iterations.
 - **[Validators]** Shankar et al., "Who Validates the Validators?", UIST
   2024. https://arxiv.org/abs/2404.12272. Criteria drift: grading outputs
   changes the criteria.

@@ -1,22 +1,23 @@
 ---
 name: start
-description: The one command to remember for aot-evals. Says which of the three phases each of an agent's evals is in (Assess, Build, Judge), how far each eval's number can be trusted, what changed since its baseline, and carries on with the next step. With no discovery report yet (evals/agents/<agent>/discovery.md) it runs Assess itself, about 5 minutes - the AOT EVALS banner, a scan for every agent, three questions to the owner, discovery in parallel, and a plain-English report that settles the estimand (what the agent is for, where its evals go, its use cases and what a failure in each costs) - otherwise it hands over to build or judge. Use for "start aot-evals", "set up evals", "build evals for my agent", "assess my agent", "where are we with our evals", "what's next", "is this suite any good", or after any change to the agent, its prompt, tools or model.
+description: The one command to remember for aot-evals. On the first run (no discovery report at evals/agents/<agent>/discovery.md yet) it runs the first assessment with the owner, about 5 minutes - the AOT EVALS banner, a scan for every agent, three questions (what decision the tests drive, which mistakes cost most, what a change must show), discovery in parallel, and a plain-English discovery report. After that it says where each of an agent's evals stands - how far its number can be trusted, what changed since its baseline, and the next step for each role (the owner, engineering, the people who know what good looks like) - and carries on. Also offers to rebuild from an evals/ folder it doesn't recognize. Use for "start aot-evals", "set up evals", "build evals for my agent", "assess my agent", "where are we with our evals", "what's next", "is this suite any good", or after any change to the agent, its prompt, tools or model.
 ---
 
 # start
 
 The single entry point. Work out where the evals stand, say so in plain words, and carry on with
-the next step. An eval is an estimator with four parts: the **estimand** (what number, for which
-decision), the **sampling design** (which cases, drawn how), the **measurement model** (how wrong
-the grader is) and the **decision rule** (when to act). The person meets them as three phases:
+the next step. Three groups of people take part, usually at the same time:
 
-| Phase | Settles | Skill |
-|---|---|---|
-| Assess | the estimand: what the agent is for, where its evals go, its use cases, what a failure in each costs, the decision each eval drives | this one (§2) |
-| Build | the agent contract, the sampling design, the checks, the decision rule, a baseline | `build` |
-| Judge | the measurement model's error rates: people label runs, judges are measured, the eval is held to people | `judge` |
+| Role | Who | What they settle | Skill |
+|---|---|---|---|
+| The owner | a product owner or team lead | what the agent is for, which mistakes cost most, what a change must show before it ships | this one: three questions, about five minutes (§3) |
+| Engineering | developers | the agent wired up to run safely, cases from real traffic, a check for each way it can fail, baselines and changes | `build` |
+| Graders | the people who know what good looks like (experts, support staff, end users) | whole runs labeled pass or fail, disagreements settled, rules that AI judges learn | `judge` |
 
-Reference: `${CLAUDE_PLUGIN_ROOT}/docs/method.md` (§2 the parts and phases, §12 status). Words
+None waits for another to finish: graders can label the first runs while engineering is still
+writing checks, and the owner states a cost or a margin whenever it comes up.
+
+Reference: `${CLAUDE_PLUGIN_ROOT}/docs/method.md` (§2 the parts and roles, §12 status). Words
 mean what `${CLAUDE_PLUGIN_ROOT}/docs/estimators.md#terms` says: use case, pool, coverage, plan,
 catch rate, clean pass rate. Pacing and wording: `${CLAUDE_PLUGIN_ROOT}/references/working-in-checkpoints.md`.
 
@@ -25,36 +26,76 @@ PATH can be an older install. It needs `uv`, or Python ≥ 3.11 with PyYAML, and
 into the team's project. With several agents, pass `--agent <agent>`; with several evals, `--eval
 <id>`. Below, `aot-evals` means that full path.
 
-## 1. Which phase
+## Speak in consequences
 
-1. Look for agents with evals: `evals/agents/*/agent.yaml`. A folder that still holds a 1.x suite
-   (`categories.yaml`, `failure_modes.yaml`, or a suite directly in `evals/` or `evals/<agent>/`)
-   must be converted first: show `aot-evals migrate --to 2 --dry-run`, then run `aot-evals migrate
-   --to 2` and walk the owner through the MIGRATION.md it writes in the agent folder (the decision
-   and the margin are theirs to fill). **No agent folder and no `evals/agents/*/discovery.md`:**
-   run Assess (§2). Stop there.
-2. Otherwise run `aot-evals status`. It prints the agent's phase, then per eval its phase, its trust
-   (untested, provisional or trusted, with each open reason and its command), what changed since its
-   baseline with the way back, and the next step.
+You do the statistics; the person gets what they mean for the next step. Say "about 40 more refund
+cases would show it", "this judge needs about 80 more labeled failures before its scores count",
+"don't quote the 92% yet: nobody has checked the eval against your reviewers". Don't explain
+estimators, intervals, power or inflation factors unless someone asks; then point them to
+`docs/estimators.md` (the model) and `docs/statistics.md` (the derivations), and answer the
+question they asked.
 
-## 2. Assess: settle the estimand (about 5 minutes)
+## 1. Where things stand
 
-Assess runs for **one** agent and is read only: never contact live services, run the agent, or
-copy raw traces into `evals/`.
+1. Look for agents with evals: `evals/agents/*/agent.yaml`. If `evals/` holds files that
+   `aot-evals validate` doesn't recognize, or `status` can't read the folder, go to §2. **No agent
+   folder and no `evals/agents/*/discovery.md`:** run the first assessment (§3). Stop there.
+2. Otherwise run `aot-evals status`. Per eval it says how far its number can be trusted (untested,
+   provisional or trusted, with each open reason and its command), what changed since its baseline
+   with the way back, and the next step and who takes it.
 
-**Rules for everything you write to the owner.** Plain English a ninth grader can follow; the
-phases are Assess, Build and Judge, and nothing else is named by a code. Say what a thing is, not
-its label ("three booking bugs found on Mar 3", not "BK-101 to BK-103"). Lead with the point;
-numbers with units; mark anything inferred as a best guess. Never ask for something you can look
-up. Never print private content (names, addresses, message text, secrets): counts and kinds only.
+## 2. An evals/ folder aot-evals doesn't recognize
 
-### 2.1 The banner, on its own, first
+When `evals/` holds files that `aot-evals validate` doesn't recognize (a suite from an earlier
+version of aot-evals, or from another tool), say what you found in counts and kinds (cases, code
+checks, judge prompts with labeled examples, a labeling standard, fakes) and offer to rebuild the
+evals from it. It is raw material, not an eval: nothing in it is converted in place. Copy what
+carries across into the layout `aot-evals build` creates, and leave the old files for the owner to
+remove once the new evals run. With a yes, run the first assessment (§3) as
+usual, letting discovery read the old suite, then `aot-evals build`, and carry across:
+
+- **Code checks** that keep the signature `check(start, end, case) -> (bool, detail)` copy into
+  `<eval>/checks/code/` as they are. Check any that find files from their own path
+  (`Path(__file__)`): they sit in a different folder after the copy. A check that grades the
+  agent's own report of success instead of the world is refused; say so and rewrite it against
+  what `observe` prints.
+- **Judge prompts** copy into `<eval>/checks/judge/<id>.md` with the front matter of
+  `${CLAUDE_PLUGIN_ROOT}/templates/check_judge.md`, one failure mode each. Their **labeled
+  examples become calibration labels** in `<id>.labels.jsonl`, in the shape `label import` writes;
+  then `aot-evals calibrate --judge <id>`. Hand-picked examples tend to be the clear ones, so add
+  labels from the queue too (`judge`).
+- **The labeling standard** carries across as it is to `evals/agents/<agent>/labels/standard.md`;
+  **agent.yaml** to `evals/agents/<agent>/agent.yaml`; **the fakes and hooks** to
+  `evals/agents/<agent>/env/`.
+- **The old cases become the bug-finding set** (`pool: bug_finding`, with a `use_case`, in
+  `cases/<use_case>/`). They were not drawn at random with recorded inclusion probabilities, so
+  they can find failures but can't stand for the traffic: they never become the quality set.
+- **The quality set is drawn fresh from traces**: `aot-evals import FILE --source … --query …
+  --window …`, then `aot-evals plan --write` and `aot-evals draw`.
+- **Old results don't carry over**: a new baseline runs once the cases are screened and committed.
+
+Then run `aot-evals validate`. It lists every field the specs still lack; fill them in with the
+owner (what the eval decides and who owns it, the cost of a failure per use case, the margin or
+bar), in plain words, one question at a time.
+
+## 3. The first assessment: the owner's three questions (about 5 minutes)
+
+The first assessment runs for **one** agent and is read only: never contact live services, run
+the agent, or copy raw traces into `evals/`.
+
+**Rules for everything you write to the owner.** Plain English a ninth grader can follow; nothing
+is named by a code. Say what a thing is, not its label ("three booking bugs found on Mar 3", not
+"BK-101 to BK-103"). Lead with the point; numbers with units; mark anything inferred as a best
+guess. Never ask for something you can look up. Never print private content (names, addresses,
+message text, secrets): counts and kinds only.
+
+### 3.1 The banner, on its own, first
 
 Before any other command or question, run `aot-evals start` **by itself**, with no other command
 in the same message. The plugin draws its output in full; don't paste it. Say one short line
 ("Starting the scan now."), then go on.
 
-### 2.2 Quick scan: find the agents (under a minute, no subagents)
+### 3.2 Quick scan: find the agents (under a minute, no subagents)
 
 Look for every agent in the repository and anything it points to: skill packs
 (`skills/*/SKILL.md`, `.claude/skills/`, plugin folders; **each skill of a multi-skill system is
@@ -70,7 +111,7 @@ days. Suggest one, with the reason (what it can do that can't be undone, what te
 Ask **"Which agent are we building evals for?"** (AskUserQuestion when you have it, the four
 likeliest as options). **Stop and wait.** From here on, everything is about that one agent.
 
-### 2.3 Discovery in parallel, then three questions
+### 3.3 Discovery in parallel, then three questions
 
 Launch four read-only discovery subagents in the background (Agent tool, `general-purpose`,
 `run_in_background: true`), all in one message. Each has a hard limit of 6 minutes and returns
@@ -122,10 +163,10 @@ wait for the answers before writing the report.
 3. **What should a change have to show before it ships?** (the decision rule) List in this order
    and mark one "(suggested)": no worse than today by more than a small margin (a non-inferiority
    test); better than today (a superiority test); a failure rate under a fixed bar (a threshold
-   test). Say that the number of cases follows from this answer, and that Build works it out
+   test). Say that the number of cases follows from this answer, and that engineering works it out
    (`aot-evals plan`).
 
-### 2.4 Write the report
+### 3.4 Write the report
 
 When the four subagents are back, write `evals/agents/<agent-slug>/discovery.md` (nothing else goes
 in that folder yet): YAML front matter that fills the page's overview and next steps, then the
@@ -134,7 +175,7 @@ numbers from discovery.
 
 ```yaml
 ---
-minutes: 8                       # how long Assess took
+minutes: 8                       # how long the first run took
 bottom_line: >-                  # 2 or 3 sentences: is it understood, and what stands in the way
   ...
 stats:                           # exactly 3 numbers that matter most for this agent
@@ -186,7 +227,7 @@ next:
   with a gate of its own when its model ships on its own; a step is graded by checks end to end. The
   page shows them under "Where the evals go", and `aot-evals build` creates the evals they call for.
 - **The grid is the bug-finding set's coverage**, not the quality set: the quality set is drawn at
-  random in Build and sized by the decision rule. Set each cell's `want` to the few hard cases that
+  random by engineering and sized by the decision rule. Set each cell's `want` to the few hard cases that
   reach it, more where the traffic showed failures, and leave cells that can't arise null. The
   empty cells are the finding: say in `golden_use_cases.found` how many columns have no cases, and
   where a cell is empty because nobody wrote cases there rather than because the agent fails there.
@@ -214,16 +255,17 @@ exact headings:
 6. **How this run went.** Time per step, what should change, then sources.
 
 Render and open it: `aot-evals discovery-page evals/agents/<agent-slug>/discovery.md --agent "<agent
-name>" --open`. Then reply in a few lines: where the report is, which questions are open, and the
-next step. Build starts once the three questions are answered and the privacy plan has a yes; then
-load `build`.
+name>" --open`. Then reply in a few lines: where the report is, which questions are open, and who
+does what next: engineering can start (`build`) once the three questions are answered and the
+privacy plan has a yes, and the graders can start labeling as soon as the first runs exist.
 
-## 3. Say where things stand
+## 4. Say where things stand
 
-Outside Assess, tell the person in three or four plain sentences, from `status`: the phase of each
-eval, how far its number can be trusted and why (the first open reason, in plain words), anything
-that changed since its baseline, and the next step. Then open the activity page and log that you
-are waiting (`references/working-in-checkpoints.md`):
+Outside the first assessment, tell the person in three or four plain sentences, from `status`: for
+each eval, how far its number can be trusted and why (the first open reason, as a consequence:
+"the refund numbers can't be quoted yet: about 40 more refund cases would settle them"), anything
+that changed since its baseline, and the next step for each role that has one. Then open the
+activity page and log that you are waiting (`references/working-in-checkpoints.md`):
 
 ```bash
 aot-evals activity --open
@@ -232,21 +274,26 @@ aot-evals log "Where <agent>'s evals stand: <one line>" --kind question
 
 Stop and wait for the person, unless they already asked you to carry on.
 
-## 4. Hand over
+## 5. Hand over
 
-| `status` says | Load |
+Load the skill for the role the person in front of you holds, or the one the next step needs:
+
+| The next step | Load |
 |---|---|
-| Phase: Build (no eval yet, or no number under the current spec) | `build` |
-| An eval in Judge and provisional because it isn't held to people, or a judge doesn't count | `judge` |
-| An eval in Judge and provisional because the quality set is short | `build` (plan, draw, rerun) |
+| No eval yet, or no number under the current spec; wiring, cases, checks, a baseline; a short quality set (plan, draw, rerun) | `build` |
+| Runs to label, a disagreement to settle, the eval not held to people yet, a judge that doesn't count | `judge` |
+| A spec field only the owner can fill (the decision, a cost, the margin or bar) | ask the owner here, one question at a time |
 | A change since the baseline | the change's path below |
 | Someone asks for a report, dashboard or scorecard | `report` |
 
+When engineering and the graders both have a step, say both: they can go at the same time.
+
 **After a change** (status names each, with its command):
 
-- **The agent changed** (prompt, skill, tool, model, harness): the baseline no longer describes
-  it. Commit it, run a candidate with one declared variable and compare (`build`, "Decide on a
-  change"), then have people label only what moved (`aot-evals agreement label queue --changed`).
+- **The agent changed** (prompt, skill, tool, model, harness): the baseline describes the agent as
+  it was. Commit the change, run a candidate with one declared variable and compare (`build`,
+  "Decide on a change"), then have people label only what moved (`aot-evals agreement label queue
+  --changed`).
 - **A candidate has run and not been compared**: compare it, read the decision with the owner,
   then either run it as the new baseline or put the agent back.
 - **A revision** (the estimand, the design or the checks changed, a new judge or a new use case
@@ -258,4 +305,5 @@ Stop and wait for the person, unless they already asked you to carry on.
   extracting the component evals' handoffs again (`aot-evals --eval <id> handoffs`).
 
 Nothing refuses to run because something is missing: a missing spec field or an unmeasured grader
-nulls the numbers that depend on it, with the reason. Say so plainly when it happens.
+nulls the numbers that depend on it, with the reason. Say so plainly when it happens, and say what
+would fill it.

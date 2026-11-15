@@ -3,12 +3,12 @@
 Our experiments comparing aot-evals with plain Claude Code found that a suite whose checks each
 decide correctly can still miss most of what makes a person fail a run, because nobody wrote
 down what a correct run must do. Checks were derived
-from failure modes per category ("the expected change happened"), and nothing asked, case by
+from failure modes per use case ("the expected change happened"), and nothing asked, case by
 case, whether the list was complete, the task was attached, or the answer's numbers were true.
 
-The agent system's `labels/standard.md`, shared by its evals (docs/v2-design.md §1), holds the
+The agent system's `labels/standard.md`, shared by its evals (docs/method.md), holds the
 rules a person applies when labelling whole runs, with the use cases each rule applies to
-(`use_cases`; a standard migrated from 1.x may still say `categories`). Every case carries
+(`use_cases`). Every case carries
 `requirements`: what a correct run of that case must do, in plain words, each naming the checks
 that decide it:
 
@@ -58,9 +58,8 @@ def load_standard(ev: Evals) -> dict | None:
 
 
 def rule_use_cases(rule: dict) -> list[str]:
-    """The use cases a rule applies to: `use_cases`, or a migrated standard's `categories`; all
-    when it names none."""
-    ucs = rule.get("use_cases", rule.get("categories"))
+    """The use cases a rule applies to: its `use_cases`, or all when it names none."""
+    ucs = rule.get("use_cases")
     return list(ucs) if isinstance(ucs, list) and ucs else [ALL_USE_CASES]
 
 

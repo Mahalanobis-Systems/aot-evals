@@ -1,10 +1,10 @@
 """Self-test fixtures on the online store (examples/store): each one triggers exactly the gate it
 targets, and the agent variants do what they claim.
 
-report.json v2's `gates` (docs/v2-design.md §6; evidence.py) are the 1.x evidence checks that
-survive: `manifest` and `trials_complete` (agent contract), `screened`, `committed` and
-`coverage_list` (design), `independent_reference` and `k` (measurement). One fixture per gate
-asserts that the set of failing gates is exactly {that gate}; a clean baseline fails none.
+report.json's `gates` (docs/method.md; evidence.py) are the evidence checks: `manifest` and
+`trials_complete` (agent contract), `screened`, `committed` and `coverage_list` (design),
+`independent_reference` and `k` (measurement). One fixture per gate asserts that the set of
+failing gates is exactly {that gate}; a clean baseline fails none.
 
 The variants: liar (claims success, changes nothing), flaky (a wrong date on about one trial in
 four), costly (three times the cost), slow (hangs past the timeout), silent (prints nothing),

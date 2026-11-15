@@ -3,7 +3,7 @@
     aot-evals demo [DIR]                the online store, two evals and a candidate, to try it in minutes
     aot-evals doctor                    check the environment (paste into bug reports)
     aot-evals --eval ID init [--component NAME]   create one eval folder with its eval.yaml (default: end-to-end)
-    aot-evals status [--json]           each eval: complete, or what its spec still lacks
+    aot-evals status [--json]           each eval: where it stands, its trust, and what's next for whom
     aot-evals validate [--warnings]     every missing or invalid field of each eval spec, and case problems
     aot-evals import FILE ...           copy an export into data/, record provenance
     aot-evals --eval ID plan [--write]  case targets per use case and pool, from the decision rule
@@ -14,7 +14,6 @@
     aot-evals build [--run]             drafts, the checklist per eval and part, then the baselines
     aot-evals serve [--open]            the grader application: label runs, rule, triage, rules, judges
     aot-evals components [--json]       the optimization loop's components, by part, as a checklist
-    aot-evals migrate --to 2 [--dry-run]   convert a 1.x suite into a 2.0 end-to-end eval (MIGRATION.md)
     aot-evals label queue|page|import|add|status   human labels per judge (page: label in a browser)
     aot-evals calibrate --judge ID      catch and clean pass rates per backend, on the labels
     aot-evals reliability --judge ID    self-consistency and cross-family agreement
@@ -47,8 +46,7 @@ from .util import ContractError
 
 
 def _evals(args) -> Evals:
-    """The agent system's folder. A folder that still holds a 1.x suite is refused: 2.0 reads only
-    eval folders, and `aot-evals migrate --to 2` converts it (MIGRATION.md lists what it did)."""
+    """The agent system's folder: --evals, else found from the working directory."""
     try:
         ev = Evals.find(args.evals, args.agent)
     except ContractError as e:
@@ -56,14 +54,11 @@ def _evals(args) -> Evals:
     if args.cmd not in ("init", "build", "status") and not ev.exists():
         sys.exit(f"no agent at {ev.root}; run `aot-evals --agent NAME --eval end-to-end init` in the "
                  "repository root, or pass --evals PATH")
-    if args.cmd != "migrate" and ev.has_v1_suite and not ev.has_evals:
-        sys.exit(f"{ev.root} holds a 1.x suite (categories.yaml, failure_modes.yaml, ...); 2.0 reads "
-                 "eval folders only. `aot-evals migrate --to 2` converts it into an end-to-end eval")
     return ev
 
 
 def _one_eval(args, ev: Evals):
-    """The eval a 2.0 command works on: --eval, or the agent's only eval."""
+    """The eval a command works on: --eval, or the agent's only eval."""
     try:
         return ev.eval(getattr(args, "eval", None))
     except ContractError as e:
@@ -76,7 +71,7 @@ def _target(args):
 
 
 def _default_runs(ev) -> list[str]:
-    from .report_v2 import default_runs
+    from .report import default_runs
 
     return default_runs(ev)
 
@@ -107,8 +102,8 @@ def cmd_init(args) -> int:
 
 
 def cmd_status(args) -> int:
-    """The phase (Assess, Build, Judge), each eval's spec and trust, what changed since its
-    baseline, and the next step (trust.py; docs/method.md §12)."""
+    """Per eval: where it stands, its spec and trust, what changed since its baseline, and what's
+    next for whom (trust.py; docs/method.md)."""
     from . import trust as trust_mod
 
     ev = _evals(args)
@@ -186,7 +181,7 @@ def cmd_import(args) -> int:
                           handoffs_of=args.handoffs_of)
     print(json.dumps(entry, indent=2))
     if entry["rows"] is None:
-        print("warning: could not count rows; C0 needs a row count. Use .jsonl, .csv, .tsv or "
+        print("warning: could not count rows; the frame needs a row count. Use .jsonl, .csv, .tsv or "
               "a JSON array.", file=sys.stderr)
     return 0
 
@@ -282,12 +277,12 @@ def compare_variables() -> list[str]:
 
 
 def cmd_run(args) -> int:
-    return _run_v2(args, _evals(args))
+    return _run_eval(args, _evals(args))
 
 
-def _run_v2(args, ev: Evals) -> int:
-    """`run` on a 2.0 eval: k from the spec's trials, use cases in place of categories, and the
-    spec's missing fields recorded in the manifest instead of gates (docs/v2-design.md §5)."""
+def _run_eval(args, ev: Evals) -> int:
+    """`run` on an eval: k from the spec's trials, --use-case to run some use cases only, and the
+    spec's missing and invalid fields recorded in the manifest (docs/method.md)."""
     e = _one_eval(args, ev)
     log = _progress(ev, journal.command_gate("run", args.purpose or "resume"))
     if args.resume:
@@ -324,7 +319,7 @@ def _run_v2(args, ev: Evals) -> int:
     for i in spec.blocked("run"):
         print(f"note: {i.field}: {i.why}", file=sys.stderr)
     m = runner_mod.run(e, purpose=args.purpose, k=args.k, case_ids=args.case or None,
-                       categories=args.use_case or None, variable=args.variable,
+                       use_cases=args.use_case or None, variable=args.variable,
                        label=args.label, adhoc_question=args.question, model=args.model,
                        log=log, judges=not args.no_judges, pause_every=args.pause_every,
                        pause_seconds=args.pause_seconds, stop_after=args.stop_after)
@@ -415,26 +410,6 @@ def cmd_label(args) -> int:
     return 1 if res["refused"] else 0
 
 
-def cmd_migrate(args) -> int:
-    from pathlib import Path
-
-    from . import migrate as migrate_mod
-
-    if args.to != "2":
-        sys.exit("aot-evals migrate --to 2: turns a 1.x suite into a 2.0 agent folder with one eval, "
-                 "end-to-end (docs/v2-design.md §8); --dry-run says what it would do")
-    here = Path(args.evals).expanduser() if args.evals else Path.cwd()
-    if not args.evals:
-        here = next((d / "evals" for d in (here.resolve(), *here.resolve().parents) if (d / "evals").is_dir()),
-                    here)
-    evals_dir = migrate_mod.evals_dir_for(here)
-    agent = args.agent
-    if agent is None and here.resolve() != evals_dir and migrate_mod._is_v1(here.resolve()):
-        agent = here.resolve().name  # --evals named one suite
-    migrate_mod.run(evals_dir, agent=agent, dry_run=args.dry_run)
-    return 0
-
-
 def cmd_components(args) -> int:
     from . import components as comp
 
@@ -451,23 +426,21 @@ def cmd_build(args) -> int:
     from . import build as build_mod
 
     ev = _evals(args)
-    if build_mod.is_v2(ev):
-        try:
-            done = build_mod.prepare_v2(ev)
-        except ContractError as e:
-            sys.exit(str(e))
-        print(build_mod.render_v2(done, ev))
-        if args.run:
-            return build_mod.run_v2(ev, main)
-        print("\nNext: fill what each eval's spec lacks (aot-evals validate), then aot-evals build --run")
-        return 0
-    sys.exit(f"{ev.root} holds a 1.x suite; `aot-evals migrate --to 2` converts it")
+    try:
+        done = build_mod.prepare(ev)
+    except ContractError as e:
+        sys.exit(str(e))
+    print(build_mod.render(done, ev))
+    if args.run:
+        return build_mod.run(ev, main)
+    print("\nNext: fill what each eval's spec lacks (aot-evals validate), then aot-evals build --run")
+    return 0
 
 
 def cmd_serve(args) -> int:
     from . import serve as serve_mod
 
-    # one eval at a time: --eval, or the agent's only eval (docs/v2-design.md §1)
+    # one eval at a time: --eval, or the agent's only eval (docs/method.md)
     serve_mod.serve(_target(args), host=args.host, port=args.port, open_browser=args.open)
     return 0
 
@@ -599,7 +572,7 @@ def cmd_calibrate(args) -> int:
         print(f"would call: {pending} (cached judgements are reused)")
         return 0
     rec = cal_mod.calibrate(ev, spec, backends, call=not args.cached_only,
-                            log=_progress(ev, "C10"))
+                            log=_progress(ev, "measurement"))
     print(cal_mod.render(rec))
     return 0
 
@@ -610,7 +583,7 @@ def cmd_reliability(args) -> int:
     ev = _target(args)
     spec = _spec(ev, args.judge)
     backends = args.backend or list(spec.backends)
-    rec = rel_mod.measure(ev, spec, backends, m=args.m, n=args.n, log=_progress(ev, "C11"))
+    rec = rel_mod.measure(ev, spec, backends, m=args.m, n=args.n, log=_progress(ev, "measurement"))
     print(rel_mod.render(rec))
     return 0
 
@@ -622,7 +595,7 @@ def cmd_judge(args) -> int:
     spec = _spec(ev, args.judge)
     runs = args.run or _default_runs(ev)
     for rid in runs:
-        res = apply_to_run(ev, spec.id, rid, backend=args.backend, log=_progress(ev, "C10"))
+        res = apply_to_run(ev, spec.id, rid, backend=args.backend, log=_progress(ev, "measurement"))
         print(f"{rid}: judged {res['judged']} attempt(s), {res['already_judged']} already judged")
     return 0
 
@@ -651,15 +624,15 @@ def cmd_snapshot(args) -> int:
 
 
 def cmd_compare(args) -> int:
-    return _compare_v2(args, _evals(args))
+    return _compare_eval(args, _evals(args))
 
 
-def _compare_v2(args, ev: Evals) -> int:
-    """`compare` on a 2.0 eval: the paired comparison and the decision on the candidate
-    (docs/v2-design.md §5, §6), saved under report/comparisons/."""
+def _compare_eval(args, ev: Evals) -> int:
+    """`compare` on an eval: the paired comparison and the decision on the candidate
+    (docs/method.md), saved under report/comparisons/."""
     from . import compare as compare_mod
     from . import decision as decision_mod
-    from .report_v2 import Side, default_runs
+    from .report import Side, default_runs
 
     e = _one_eval(args, ev)
     base = args.baseline or default_runs(e)
@@ -689,11 +662,11 @@ def cmd_coverage(args) -> int:
 def cmd_report(args) -> int:
     ev = _evals(args)
     from . import decision as decision_mod
-    from . import report_v2
+    from . import report as report_mod
 
     e = _one_eval(args, ev)
-    r = report_v2.build(e, args.run or None, args.candidate or None)
-    print(f"wrote {report_v2.write(e, r)}")
+    r = report_mod.build(e, args.run or None, args.candidate or None)
+    print(f"wrote {report_mod.write(e, r)}")
     decision_mod.record_look(e, r["decision"])
     est = r["estimate"]
     if est["theta"] is not None:
@@ -725,8 +698,8 @@ def cmd_log(args) -> int:
     ev = _evals(args)
     extra = {}
     if args.kind == "decision" and (args.eval or len(ev.evals()) == 1):
-        # a decision about a 2.0 eval carries its spec's hashes, so a decision-rule change journaled
-        # before the candidate ran lets the comparison stand (docs/v2-design.md §5)
+        # a decision about an eval carries its spec's hashes, so a decision-rule change journaled
+        # before the candidate ran lets the comparison stand (docs/method.md)
         from .spec import part_hashes
 
         e = _one_eval(args, ev)
@@ -839,14 +812,14 @@ _MILESTONES = {"start": "phase1_started", "discovery-page": "discovery_written",
                "report": "report_built"}
 
 # Commands that never log themselves: reads, and the commands that write the log.
-_UNLOGGED = {"replay", "status", "components", "migrate", "validate", "log", "activity", "start",
+_UNLOGGED = {"replay", "status", "components", "validate", "log", "activity", "start",
              "discovery-page", "snapshot",
              "doctor", "demo", "telemetry", "benchmarks", "serve"}
 # Commands long enough to log their start, so the activity page shows them in progress.
 _LOG_START = {"run", "calibrate", "reliability", "judge"}
 
 
-def _journal_command(args, argv: list[str], phase: str, code=None, note: str | None = None,
+def _journal_command(args, argv: list[str], moment: str, code=None, note: str | None = None,
                      started: float | None = None) -> None:
     """Log one CLI command to the activity log. Logging never fails the command."""
     if args.cmd in _UNLOGGED:
@@ -866,7 +839,7 @@ def _journal_command(args, argv: list[str], phase: str, code=None, note: str | N
             shown.append(a)
         text = "aot-evals " + " ".join(shown)
         gate = journal.command_gate(args.cmd, getattr(args, "purpose", None))
-        if phase == "start":
+        if moment == "start":
             journal.append(ev, "step", f"started {text}", gate=gate)
             return
         dur = round((time.monotonic() - started) * 1000) if started is not None else None
@@ -883,11 +856,11 @@ def main(argv: list[str] | None = None) -> int:
                     "with --agent (default: found from evals/ upward)")
     ap.add_argument("--agent", help="the agent's suite, evals/agents/AGENT/ (needed when the "
                     "repository holds several)")
-    ap.add_argument("--eval", help="2.0: one eval of the agent, evals/agents/AGENT/EVAL/ (needed when "
+    ap.add_argument("--eval", help="one eval of the agent, evals/agents/AGENT/EVAL/ (needed when "
                     "the agent has several)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("start", help="the banner and the three phases; shown before anything else"
+    sub.add_parser("start", help="the banner and who does what; shown before anything else"
                    ).set_defaults(fn=cmd_start)
 
     sub.add_parser("doctor", help="check the environment; paste the output into a bug report"
@@ -905,20 +878,20 @@ def main(argv: list[str] | None = None) -> int:
     s.set_defaults(fn=cmd_discovery_page)
 
     s = sub.add_parser("init", help="create the agent's suite (evals/agents/AGENT/) with templates; "
-                       "with --eval, one 2.0 eval folder with its eval.yaml")
+                       "with --eval, one eval folder with its eval.yaml")
     s.add_argument("--eval", default=argparse.SUPPRESS,
-                   help="2.0: create this eval, evals/agents/AGENT/EVAL/ (same as the global --eval)")
-    s.add_argument("--component", help="2.0: the eval's unit is this component, behind a context "
+                   help="create this eval, evals/agents/AGENT/EVAL/ (same as the global --eval)")
+    s.add_argument("--component", help="the eval's unit is this component, behind a context "
                    "boundary (default eval id: the component's name)")
     s.set_defaults(fn=cmd_init)
 
-    s = sub.add_parser("status", help="the phase, each eval's spec and trust, what changed since its "
-                       "baseline, and the next step")
+    s = sub.add_parser("status", help="per eval: where it stands, its spec and trust, what changed "
+                       "since its baseline, and what's next for whom")
     s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_status)
 
     s = sub.add_parser("validate", help="every missing or invalid field of each eval spec, and the cases' problems")
-    s.add_argument("--warnings", action="store_true", help="also print warnings and info (2.0: notes "
+    s.add_argument("--warnings", action="store_true", help="also print warnings and info (notes "
                    "and the defaults filled)")
     s.add_argument("--all", action="store_true", help="one line per problem, instead of grouping cases")
     s.set_defaults(fn=cmd_validate)
@@ -948,7 +921,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_handoffs)
 
-    s = sub.add_parser("plan", help="2.0: case targets per use case and pool, from the decision rule")
+    s = sub.add_parser("plan", help="case targets per use case and pool, from the decision rule")
     s.add_argument("--assumed-rate", type=float, help="the value of the estimand's quantity you expect "
                    "(a pass rate, or a failure rate for failure_rate:...); default: the baseline's")
     s.add_argument("--flip-rate", type=float, help="the share of cases that flip between versions, for "
@@ -961,7 +934,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_plan)
 
-    s = sub.add_parser("draw", help="2.0: draw the quality set from the frame, seeded and stratified, with π")
+    s = sub.add_parser("draw", help="draw the quality set from the frame, seeded and stratified, with π")
     s.add_argument("--n", action="append", metavar="USE_CASE=N",
                    help="draw N from this use case, in place of plan.yaml's target (repeatable)")
     s.add_argument("--skip", action="append", metavar="TRACE_ID",
@@ -990,7 +963,7 @@ def main(argv: list[str] | None = None) -> int:
                    help="carry on a stopped or interrupted run in place: skip every (case, trial) "
                    "with a final attempt and run the rest; refused if the build changed")
     s.add_argument("--case", action="append")
-    s.add_argument("--use-case", action="append", help="2.0: limit to this use case (repeatable)")
+    s.add_argument("--use-case", action="append", help="limit to this use case (repeatable)")
     s.add_argument("--question", help="smoke only: run one ad-hoc trigger before any case exists")
     s.add_argument("--variable", help="the declared independent variable, e.g. 'model=claude-haiku-4-5'")
     s.add_argument("--label", help="suffix for the run id")
@@ -1044,15 +1017,10 @@ def main(argv: list[str] | None = None) -> int:
                    "compared candidate, from the candidate run")
     s.set_defaults(fn=cmd_agreement)
 
-    s = sub.add_parser("build", help="the lightest Build: draft what's missing, the checklist, then --run the baseline")
+    s = sub.add_parser("build", help="draft what's missing, the checklist per eval and part, then --run the baseline")
     s.add_argument("--run", action="store_true", help="then run the agent once, the baseline and the report")
     s.add_argument("--k", type=int, default=3, help="--run: trials per case for the baseline (3-5)")
     s.set_defaults(fn=cmd_build)
-
-    s = sub.add_parser("migrate", help="--to 2: a 1.x suite to a 2.0 agent folder with one eval, end-to-end")
-    s.add_argument("--to", help="the version to migrate to: 2")
-    s.add_argument("--dry-run", action="store_true", help="say what would move and map, and write nothing")
-    s.set_defaults(fn=cmd_migrate)
 
     s = sub.add_parser("components", help="the optimization loop's components as a checklist, from the agent's evals")
     s.add_argument("--json", action="store_true")
@@ -1087,7 +1055,7 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("judge", help="apply a judge to past runs")
     s.add_argument("action", choices=["apply"])
     s.add_argument("--judge", required=True)
-    s.add_argument("--run", action="append", help="default: the baseline (every category's newest baseline run)")
+    s.add_argument("--run", action="append", help="default: the baseline (every use case's newest baseline run)")
     s.add_argument("--backend", help="default: the judge's primary backend")
     s.set_defaults(fn=cmd_judge)
 
@@ -1159,7 +1127,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         code = args.fn(args)
         if code == 0 and args.cmd in _MILESTONES:
-            telemetry.emit(_MILESTONES[args.cmd], getattr(args, "gate", None))
+            telemetry.emit(_MILESTONES[args.cmd])
         return code
     except (ContractError, ValueError, KeyError, FileNotFoundError) as e:
         note = f"error: {e}"

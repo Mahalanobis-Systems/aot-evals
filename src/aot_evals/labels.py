@@ -108,8 +108,7 @@ def run_items(ev: Eval, spec: JudgeSpec, run_ids: list[str]) -> list[dict]:
             ji = build_input(spec, case, start, end)
             out.append({"item_id": item_id(spec, case["id"], ji), "case_id": case["id"],
                         "use_case": case.get("use_case"), "run": rid, "trial": a["trial"],
-                        "attempt": a["attempt"], "input": ji,
-                        "category": case.get("use_case")})  # cli.py's queue summary still reads it
+                        "attempt": a["attempt"], "input": ji})
     return out
 
 
@@ -272,8 +271,6 @@ def status(ev: Eval, spec: JudgeSpec) -> dict:
         "holdout": sum(1 for r in labels if r.get("split") == "holdout"),
         "labellers": sorted({r["labeller"] for r in labels}),
         "by_use_case": by_uc, "missing_use_cases": missing,
-        # the same, under the names serve.py's judge panel still reads
-        "by_category": by_uc, "missing_categories": missing,
         # the catch rate is read on failing labels, the clean pass rate on passing ones, so each
         # kind is counted on its own (statistics §3.4)
         "labels_per_kind": {"fail": n_fail, "pass": n_pass},

@@ -2,7 +2,7 @@
 
 An agent may report one of these itself (`outcome` in its stdout); the runner assigns the rest
 (timeouts, unparseable output). Only `ok` is scored for correctness. Every other code is plane-B data: kept,
-counted, never scored as a correctness failure and never dropped (docs/method.md §8; evidence gate trials_complete).
+counted, never scored as a correctness failure and never dropped (docs/method.md; evidence gate trials_complete).
 """
 
 from __future__ import annotations

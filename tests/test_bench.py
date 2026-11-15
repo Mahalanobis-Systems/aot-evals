@@ -1,5 +1,5 @@
 """The bench of graders (bench.py, agreement.py) and the grader application (serve.py), on one
-2.0 eval: the store's end-to-end eval (examples/store).
+eval: the store's end-to-end eval (examples/store).
 
 Acceptance: several people label the same run blind; where they differ the run has no verdict
 until someone rules, and the eval can't be held to people meanwhile; a new labeller warms up on

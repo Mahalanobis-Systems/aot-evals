@@ -1,8 +1,8 @@
-"""Find secrets and personal data in files that are about to be committed (docs/method.md §1, principle 8).
+"""Find secrets and personal data in files that are about to be committed (docs/method.md, principle 8).
 
-Secrets block (a case with one fails C6). Personal data warns: it is often legitimate test
+Secrets block (a case with one fails validation). Personal data warns: it is often legitimate test
 data, and a person decides. Neither list is complete; this is a backstop for a human read
-(C7), not a substitute for one.
+(`aot-evals screen`), not a substitute for one.
 """
 
 from __future__ import annotations

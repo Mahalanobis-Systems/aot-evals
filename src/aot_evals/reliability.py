@@ -6,7 +6,7 @@ model families. Reported (M9):
 - three-level agreement across every verdict for an item: all agree / a strict
   majority / no majority;
 - cross-family agreement between the backends' majority verdicts, with Cohen's kappa;
-- next to them, the clean pass rate and catch rate (`tpr`, `tnr`) of each backend's majority
+- next to them, the catch rate and clean pass rate (`catch`, `clean`) of each backend's majority
   verdict on the same human-labelled items.
 
 Reliability is not validity: two families can agree because they share an error. The report keeps
@@ -123,11 +123,11 @@ def render(rec: dict) -> str:
         return "-" if v is None else f"{100 * v:.1f}%"
     lines = [f"reliability {rec['judge']} v{rec['version']}: {rec['items']} labelled items × m={rec['m']}",
              f"  {'backend':<12} {'family':<12} {'self-consistency':>16}   | validity (majority vs labels): "
-             f"{'TPR':>7} {'TNR':>7}"]
+             f"{'catch':>7} {'clean':>7}"]
     for b, d in rec["backends"].items():
         mv = d["majority_vs_labels"]
         lines.append(f"  {b:<12} {str(d['family']):<12} {f(d['self_consistency']):>16}   | {'':<30} "
-                     f"{f(mv['tpr']):>7} {f(mv['tnr']):>7}")
+                     f"{f(mv['catch']):>7} {f(mv['clean']):>7}")
     tl = rec["three_level"]
     lines.append(f"  three-level agreement: all {f(tl['all'])}, majority {f(tl['majority'])}, none {f(tl['none'])}")
     for p in rec["cross_family"]:

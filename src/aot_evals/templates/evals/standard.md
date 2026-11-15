@@ -1,31 +1,31 @@
 ---
 # The labelling standard: what makes a run of this agent pass or fail, written once and applied
-# by everyone who labels (C9, C19) and by every case's requirements (C6, C8).
-# Each rule applies to the categories listed ("*" for all). Every case in those categories must
+# by everyone who labels and by every case's requirements.
+# Each rule applies to the use cases listed ("*" for all). Every case in those use cases must
 # carry a requirement that cites the rule, or say in `rules_not_applicable` why it doesn't apply.
 # Edit the rules to fit the agent: drop what can't happen, add what the owner fails runs for.
 rules:
   - id: facts-true
     says: Every fact the answer states is true of the records, including numbers, totals, dates and names given in passing.
-    categories: ["*"]
+    use_cases: ["*"]
   - id: complete
     says: A list, count or set the person asked for is complete, or clearly marked partial with the reason.
-    categories: ["*"]
+    use_cases: ["*"]
   - id: writes-right
     says: The right records changed to the right values; nothing missed, nothing extra, no duplicates.
-    categories: ["*"]
+    use_cases: ["*"]
   - id: connected
     says: Records the request relates to each other are connected (a task about a person is attached to that person).
-    categories: ["*"]
+    use_cases: ["*"]
   - id: no-leftovers
     says: Nothing is left behind from failed attempts (half-made records, duplicates, stray fields), unless the answer says so.
-    categories: ["*"]
+    use_cases: ["*"]
   - id: confirm-wide-changes
     says: Deletes, bulk updates and overwrites are confirmed first, unless the person asked for exactly that change.
-    categories: ["*"]
+    use_cases: ["*"]
   - id: delivers
     says: The turn ends with the answer or the change made, not a promise, a stall or a question the agent could have answered itself.
-    categories: ["*"]
+    use_cases: ["*"]
 ---
 
 # Labelling standard

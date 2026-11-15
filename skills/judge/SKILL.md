@@ -1,21 +1,30 @@
 ---
 name: judge
-description: Judge, the third of aot-evals' three phases, for the people who know what good looks like (product owners, experts, end users) and whoever facilitates them. Settles the measurement model's error rates. Runs the grader application (aot-evals serve), where graders label whole runs blind, settle disagreements with rulings, hold the eval to their verdicts (its catch rate and clean pass rate against its floors), give every disagreement a cause, accept other correct answers, propose rules for the labeling standard, and label and calibrate AI judges until each counts within max_inflation; and says what goes back to engineering. Use when start says an eval is in Judge, when someone wants to label runs, onboard a grader, calibrate or update a judge, or asks whether the eval agrees with people.
+description: Judge, the role of the people who know what good looks like in aot-evals (experts, support staff, end users) and whoever facilitates them, working alongside the owner and engineering. Settles the measurement model's error rates. Runs the grader application (aot-evals serve), where graders label whole runs blind, settle disagreements with rulings, hold the eval to their verdicts (its catch rate and clean pass rate against its floors), give every disagreement a cause, accept other correct answers, propose rules for the labeling standard, and label and calibrate AI judges until each counts within max_inflation; and says what goes back to engineering. Use when start says the graders have the next step, when someone wants to label runs, onboard a grader, calibrate or update a judge, or asks whether the eval agrees with people.
 ---
 
 # judge: measure how wrong the grader is
 
-Judge settles the last of an eval's four parts: the **measurement model's error rates**. A grader
-(a check, a judge, or the eval as a whole) is measured by two numbers against people's labels: its
+Judge is the role of the people who know what good looks like: experts, support staff, end users.
+They settle one of an eval's four parts, the **measurement model's error rates**, and they can
+start as soon as an eval has runs to label, while engineering is still adding cases and checks.
+
+A grader (a check, a judge, or the eval as a whole) is measured by two numbers against people's labels: its
 **catch rate** (of the runs a person fails, the share it fails) and its **clean pass rate** (of the
 runs a person passes, the share it passes). An eval is **trusted** when its spec is complete, every
 counted judge counts, the eval against people meets its floors, and the quality set is the size its
 decision rule needs (`aot-evals status`). Graders do this in the grader application, without an
 engineer, until a fix to the agent, a case or a check is needed; those go to the engineering inbox.
 
+**Speak in consequences.** You do the statistics; graders and owners get what they mean: "label
+about 30 more runs that failed before the catch rate means anything", "this judge needs about 80
+more labeled failures before its scores count", "the eval and your reviewers disagree mostly on
+refunds: fix that check first". Explain intervals, bounds or inflation only when asked, and then
+point to `${CLAUDE_PLUGIN_ROOT}/docs/statistics.md`.
+
 Reference: `${CLAUDE_PLUGIN_ROOT}/docs/method.md` §7 (checks, judges and labels) and §11 (the
-gates); why each count holds: `${CLAUDE_PLUGIN_ROOT}/docs/statistics.md` §3.2–§3.6 and §4.2. Terms:
-`${CLAUDE_PLUGIN_ROOT}/docs/estimators.md#terms`. Pacing and words:
+gates); why each count holds, when asked: `${CLAUDE_PLUGIN_ROOT}/docs/statistics.md` §3.2–§3.6 and
+§4.2. Terms: `${CLAUDE_PLUGIN_ROOT}/docs/estimators.md#terms`. Pacing and words:
 `${CLAUDE_PLUGIN_ROOT}/references/working-in-checkpoints.md`. Backends:
 `${CLAUDE_PLUGIN_ROOT}/references/judge-backends.md`. `aot-evals` is
 `"${CLAUDE_PLUGIN_ROOT}/bin/aot-evals"`; the application serves one eval at a time, so pass
@@ -59,7 +68,7 @@ would bias the person-anchored rate.
   the failures. Gwet's AC1 and the specific agreements say this; κ misleads when most runs pass. Low
   agreement on failures means the standard is unclear: fix the standard before the eval.
 - **Agreement, the eval against people.** "Re-grade" re-checks every labeled run from its record
-  with the checks as they are now: no agent runs, no judge calls. Every dev disagreement needs a
+  with the checks as they stand: no agent runs, no judge calls. Every dev disagreement needs a
   cause:
   - `wrong-expectation`: the case expected one wording or state too narrowly. When the person passed
     the run, "This answer is also correct" adds it as another correct answer and screens the case
@@ -82,12 +91,12 @@ Checkpoint when the eval against people is first measured, and when an eval beco
 
 ## 4. When the eval isn't trusted yet
 
-`aot-evals status` lists each open reason with its command. The ones Judge clears:
+`aot-evals status` lists each open reason with its command. The ones graders clear:
 
 | Status says | Do |
 |---|---|
 | The eval is not held to people yet | Label whole runs to the count of each kind (§2), then `aot-evals --eval <id> agreement` |
-| Labellers disagree on runs nobody has ruled on | Rule on them in Agreement |
+| Labelers disagree on runs nobody has ruled on | Rule on them in Agreement |
 | The eval against people is stale | Re-grade (the checks or the labels changed since it was measured) |
 | A rate is below its floor | Read the dev disagreements by cause and fix the biggest cause first |
 | A rate clears its floor but its lower bound is more than the margin below it | Label the short kind: `agreement` says about how many more would do |
@@ -148,5 +157,6 @@ aot-evals --eval <id> reliability --judge <jid> --backend <a> --backend <b> --m 
 
 Say it as a list, each with its cause and the cases it came from: check bugs and missing
 requirements (new or fixed checks), wrong expectations a check still rejects, drafted cases, judges
-that don't count and what would make them count, and the eval's open trust reasons that only Build
-can clear (a short quality set: `plan --write` and `draw`; a spec field). Then load `build`.
+that don't count and what would make them count, and the eval's open trust reasons that only
+engineering can clear (a short quality set: `plan --write` and `draw`; a spec field). Labeling
+goes on meanwhile. Load `build` when the person asking is the one who will make the fixes.

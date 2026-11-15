@@ -1,7 +1,7 @@
-"""`aot-evals serve`: the grader application (docs/method.md §7), for one eval.
+"""`aot-evals serve`: the grader application (docs/method.md), for one eval.
 
-A local web application for the Judge phase, on one eval of an agent system (`--eval`, or the
-agent's only eval; docs/v2-design.md §1): people label whole runs (several people, blind to
+A local web application for the people who know what good looks like, on one eval of an agent system (`--eval`, or the
+agent's only eval; docs/method.md): people label whole runs (several people, blind to
 each other, with a warm-up and overlaps), settle disagreements between labellers with rulings,
 see where the suite and people disagree and give each a cause, accept another correct answer,
 propose rules from rulings for the owner to accept, label and recalibrate judges, draft new cases,
@@ -59,10 +59,10 @@ def _judges(ev: Eval) -> list[dict]:
         out.append({"id": spec.id, "version": spec.version, "question": spec.meta.get("question"),
                     "guidance": spec.body, "primary": spec.primary, "labels": st["labels"],
                     "pass": st["pass"], "fail": st["fail"], "labellers": st["labellers"],
-                    "missing_use_cases": st.get("missing_use_cases", st.get("missing_categories")) or [],
+                    "missing_use_cases": st.get("missing_use_cases") or [],
                     "calibration": (cal or {}).get("status") if is_current(ev, spec, cal) else
                     ("stale" if cal else None),
-                    "tpr": prim.get("tpr"), "tnr": prim.get("tnr"),
+                    "catch": prim.get("catch"), "clean": prim.get("clean"),
                     "pending_calls": pending_calls(ev, spec, [spec.primary]) if labelled else {},
                     "queue": queue_path(ev, spec).exists()})
     return out
@@ -242,7 +242,7 @@ def act(ev: Eval, action: str, body: dict) -> dict:
     else:
         raise ValueError(f"unknown action {action!r}")
     journal.append(ev, "decision" if action in ("rule-dispute", "decide", "triage") else "step", text,
-                   gate="C19", by=who or None)
+                   gate="measurement", by=who or None)
     return out
 
 
@@ -332,7 +332,7 @@ def serve(ev: Eval, host: str = "127.0.0.1", port: int = 8765, open_browser: boo
             "network you trust.")
     log("Send each grader their own link by adding &labeller=NAME to it.")
     log("Everything it writes goes into the eval's files; review and commit them as usual. Ctrl-C stops it.")
-    journal.append(ev, "step", f"the grader application started on {ev.id}", gate="C19")
+    journal.append(ev, "step", f"the grader application started on {ev.id}", gate="measurement")
     if open_browser:
         webbrowser.open(url)
     try:

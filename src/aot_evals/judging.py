@@ -3,7 +3,7 @@
 A judge check line is a `kind: check` line with `type: judge`, plus the backend, model, judge
 version and hash, the score P(pass), the threshold used, and the judge's cost. The verdict is
 recorded whether or not the judge is calibrated; the report decides whether it counts (its floor,
-docs/v2-design.md §4).
+docs/method.md).
 """
 
 from __future__ import annotations

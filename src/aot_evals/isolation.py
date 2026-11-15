@@ -1,4 +1,4 @@
-"""Keep the agent away from the answers (docs/method.md §8: the agent must not see the cases).
+"""Keep the agent away from the answers (docs/method.md: the agent must not see the cases).
 
 evals/ lives in the repository the agent runs in. An agent with a coding harness can grep its
 working directory, match a case file and read the expected answer. Two defences:
@@ -10,7 +10,7 @@ working directory, match a case file and read the expected answer. Two defences:
   deleted when the run ends.
 - Every run is checked for exposure, isolated or not: eval files (cases, checks, labels) that
   changed during the run, and agent output that names a case file or the suite's path. Either
-  makes the run's manifest a problem (C12), so it cannot become a baseline unnoticed.
+  makes the run's manifest a problem (the `manifest` gate), so it cannot become a baseline unnoticed.
 """
 
 from __future__ import annotations

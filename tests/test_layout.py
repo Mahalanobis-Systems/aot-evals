@@ -1,5 +1,5 @@
 """Where an agent's evals live: evals/agents/<agent>/ beside its discovery report, several agents
-per repository (docs/v2-design.md §1), with paths resolved from the repository root.
+per repository (docs/method.md), with paths resolved from the repository root.
 
 Nesting agents by hand (evals/a, evals/b) made invoke.cwd resolve from evals/, and commits to
 one agent's evals moved the other agent's agent_commit.

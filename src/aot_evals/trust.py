@@ -1,16 +1,15 @@
-"""The three phases, how far each eval's number can be trusted, and what changed since its
-baseline (docs/method.md §12).
+"""Where each eval stands, how far its number can be trusted, what changed since its baseline,
+and what's next for whom (docs/method.md).
 
-The user meets the method as three phases, each settling some of an eval's four parts
-(estimators §1–§6):
+Three roles work on an agent's evals, usually at the same time:
 
-- **Assess** settles the estimand: what the agent is for, where its evals go (the context
-  boundaries), its use cases with their shares and costs, and the decision each eval drives.
-- **Build** settles the sampling design, the checks of the measurement model and the decision
-  rule, around the agent contract: the agent runs from a command, the quality set is drawn, each
-  failure mode has one counted check, and a baseline has run under the current spec.
-- **Judge** settles the rest of the measurement model: the error rates. People label whole runs,
-  judges are calibrated, and the eval is held to people.
+- **the owner** says what the agent is for, which mistakes cost most and what a change must show:
+  the estimand (use cases, shares, costs, the decision) and the decision rule;
+- **engineering** wires the agent up and keeps the loop running: the agent contract, the cases
+  (the sampling design), the checks, baselines and changes (the `build` skill);
+- **the people who know what good looks like** label whole runs, settle disagreements and write
+  rules, so judges are calibrated and the eval is held to people (the `judge` skill and
+  `aot-evals serve`).
 
 Trust is per eval, and is read from the same report.json the report writes:
 
@@ -21,7 +20,8 @@ Trust is per eval, and is read from the same report.json the report writes:
 - **trusted**: every spec field filled, every counted judge within `max_inflation`, the eval
   against people at its floors, and a quality set the decision rule's power calls for.
 
-`aot-evals status` prints it and `status --json` carries it.
+Each eval's `next` lists one step per role that has one, `{role, who, step}`. `aot-evals status`
+prints it and `status --json` carries it.
 """
 
 from __future__ import annotations
@@ -31,26 +31,22 @@ from pathlib import Path
 from .repo import Eval, Evals
 from .util import ContractError, git_commit_info, git_same_tree, load_json
 
-PHASES = {  # id: (name, the parts it settles, what it does)
-    "assess": ("Assess", ("estimand",),
-               "what the agent is for, where its evals go, its use cases and what a failure in each costs"),
-    "build": ("Build", ("agent contract", "sampling design", "measurement model: the checks", "decision rule"),
-              "the agent wired to run, the quality set drawn, a check per failure mode, the decision rule, "
-              "a baseline"),
-    "judge": ("Judge", ("measurement model: the error rates",),
-              "people label whole runs, judges are calibrated, and the eval is held to people"),
-}
-ORDER = tuple(PHASES)
+ROLES = {"owner": "the owner", "engineering": "engineering",
+         "graders": "the people who know what good looks like"}
 LEVELS = ("untested", "provisional", "trusted")
 MEASURED_PARTS = ("estimand", "design", "measurement")
 PART_WORD = {"estimand": "estimand", "design": "sampling design", "measurement": "measurement model",
              "decision_rule": "decision rule"}
+OWNER_PARTS = ("estimand", "decision_rule")  # the spec fields the owner decides
 
 
-def _phase(pid: str, why: str, nxt: str | None) -> dict:
-    name, parts, about = PHASES[pid]
-    return {"id": pid, "name": name, "settles": list(parts), "about": about, "why": why, "next": nxt,
-            "done": [PHASES[p][0] for p in ORDER[:ORDER.index(pid)]]}
+def _step(role: str, step: str) -> dict:
+    return {"role": role, "who": ROLES[role], "step": step}
+
+
+def _owner_issue(spec):
+    """The first missing or invalid field the owner decides, or None."""
+    return next((i for i in (*spec.missing, *spec.invalid) if i.field.split(".", 1)[0] in OWNER_PARTS), None)
 
 
 def _comparison_flip_rate(ev: Eval) -> float | None:
@@ -92,43 +88,60 @@ def _sized(ev: Eval) -> tuple[bool | None, str]:
 
 
 def eval_trust(ev: Eval, report: dict | None = None) -> dict:
-    """One eval's phase and trust level, each with its reasons, read from report.json v2."""
-    from . import report_v2
+    """One eval's standing, trust level and next steps per role, each with its reasons, read
+    from report.json."""
+    from . import report as report_mod
 
     spec = ev.spec()
     out = {"eval": spec.eval_id, "level": "untested", "why": [], "theta": None, "ci": None,
            "conditions": {"spec": spec.complete, "estimate": False, "judges": None, "people": None,
-                          "sized": None}}
-    runs = report_v2.default_runs(ev)
+                          "sized": None}, "stands": None, "next": []}
+    owner = _owner_issue(spec)
+    owner_steps = [_step("owner", f"decide {owner.field} in {spec.eval_id}/eval.yaml ({owner.why})")] if owner else []
+    runs = report_mod.default_runs(ev)
     if not runs:
         out["why"].append(f"no baseline yet: aot-evals --eval {spec.eval_id} run --purpose baseline")
-        out["phase"] = _phase("build", "no baseline has run", _build_next(ev, spec))
+        out["stands"] = "no baseline has run"
+        out["next"] = [*owner_steps, _step("engineering", _engineering_next(ev, spec))]
         return out
     try:
-        r = report if report is not None else report_v2.build(ev, runs)
+        r = report if report is not None else report_mod.build(ev, runs)
     except ContractError as e:
         out["why"].append(str(e))
-        out["phase"] = _phase("build", "the report could not be read", _build_next(ev, spec))
+        out["stands"] = "the report could not be read"
+        out["next"] = [*owner_steps, _step("engineering", _engineering_next(ev, spec))]
         return out
     est = r.get("estimate") or {}
     if r.get("refused") or est.get("theta") is None:
         why = r.get("refused") or est.get("null_reason") or "θ̂ is null"
         out["why"].append(why)
-        out["phase"] = _phase("build", "no number under the current spec yet", _build_next(ev, spec))
+        out["stands"] = "no number under the current spec yet"
+        out["next"] = [*owner_steps, _step("engineering", _engineering_next(ev, spec))]
         return out
     out["conditions"]["estimate"] = True
     out["theta"], out["ci"] = est.get("theta"), est.get("ci")
     out["level"] = "provisional"
     why = out["why"]
+    steps: dict[str, str] = {}
+    if owner:
+        steps["owner"] = owner_steps[0]["step"]
     if not spec.complete:
         first = (spec.missing or spec.invalid)[0]
         why.append(f"the spec lacks {len(spec.missing)} and has {len(spec.invalid)} invalid field(s), first "
                    f"{first.field}: {first.why} (aot-evals validate)")
+        other = next((i for i in (*spec.missing, *spec.invalid) if i.field.split(".", 1)[0] not in OWNER_PARTS),
+                     None)
+        if other:
+            steps["engineering"] = f"fill {other.field} in {spec.eval_id}/eval.yaml ({other.why})"
     meas = r.get("measurement") or {}
     judge_gates = [g for g in meas.get("gates") or [] if g.get("id") in ("judge_floor", "judge_calibration")]
     out["conditions"]["judges"] = not judge_gates
     for g in judge_gates:
         why.append(g.get("detail") or g["id"])
+    if judge_gates:
+        first_gate = judge_gates[0].get("detail") or judge_gates[0]["id"]
+        steps.setdefault("graders", f"label runs for the judges in the grader application (aot-evals --eval "
+                                    f"{spec.eval_id} serve), so they can be calibrated: {first_gate}")
     people = meas.get("eval_vs_people") or {}
     floor = people.get("floor") or {}
     status = floor.get("status") or "unmeasured"
@@ -136,32 +149,36 @@ def eval_trust(ev: Eval, report: dict | None = None) -> dict:
     if status == "unmeasured" or not people.get("labels"):
         why.append("the eval is not held to people yet: label whole runs (aot-evals agreement label queue, or "
                    "aot-evals serve), then aot-evals agreement")
+        steps.setdefault("graders", f"label whole runs in the grader application (aot-evals --eval {spec.eval_id} "
+                                    "serve), so the eval is held to people")
     elif people.get("stale"):
         why.append("the eval against people is stale: aot-evals agreement regrade")
+        steps.setdefault("engineering", f"regrade the labelled runs: aot-evals --eval {spec.eval_id} agreement regrade")
     elif status != "meets":
         reasons = floor.get("reasons") or [f"the eval against people is {status}"]
         why.append("eval against people: " + "; ".join(reasons))
+        steps.setdefault("graders", "give every disagreement with the eval a cause in the grader application "
+                                    f"(aot-evals --eval {spec.eval_id} serve); engineering fixes what they find")
     sized, note = _sized(ev)
     out["conditions"]["sized"] = sized
     if not sized:
         why.append(note)
+        steps.setdefault("engineering", note)
     if not why:
         out["level"] = "trusted"
         why.append("every spec field filled, every counted judge within max_inflation, the eval held to people "
                    "at its floors, and the quality set the decision rule needs")
-    if out["conditions"]["judges"] and out["conditions"]["people"]:
-        out["phase"] = _phase("judge", "the error rates are measured; the eval is held to people",
-                              None if out["level"] == "trusted" else why[0])
-    else:
-        out["phase"] = _phase("judge", "a baseline has run under the current spec; the error rates are next",
-                              why[0])
+    out["stands"] = ("a number under the current spec, held to people" if out["conditions"]["people"]
+                     else "a number under the current spec, not yet held to people")
+    out["next"] = [_step(role, steps[role]) for role in ROLES if role in steps]
     return out
 
 
-def _build_next(ev: Eval, spec) -> str:
-    """Build's next step for one eval, in the order the parts need it."""
+def _engineering_next(ev: Eval, spec) -> str:
+    """Engineering's next step toward an eval's first number, in the order the parts need it."""
     sid = spec.eval_id
-    blocking = [i for i in (*spec.missing, *spec.invalid) if {"run", "draw", "estimate"} & set(i.blocks)]
+    blocking = [i for i in (*spec.missing, *spec.invalid) if {"run", "draw", "estimate"} & set(i.blocks)
+                and i.field.split(".", 1)[0] not in OWNER_PARTS]
     if blocking:
         return f"fill {blocking[0].field} in {sid}/eval.yaml ({blocking[0].why}); aot-evals validate lists the rest"
     try:
@@ -181,7 +198,8 @@ def _build_next(ev: Eval, spec) -> str:
 
 
 def changes(ev: Eval) -> list[dict]:
-    """What changed since the newest baseline run, each with what it invalidates and the way back."""
+    """What changed since the newest baseline run, each with what it invalidates, the way back and
+    whose step that is (`role`)."""
     from .spec import part_hashes
 
     base = ev.baseline_runs()
@@ -193,13 +211,13 @@ def changes(ev: Eval) -> list[dict]:
     then = newest.get("spec_sha") or {}
     revised = [p for p in MEASURED_PARTS if then.get(p) != now.get(p)]
     if revised:
-        out.append({"kind": "revision", "parts": revised,
+        out.append({"kind": "revision", "parts": revised, "role": "engineering",
                     "what": f"the {' and '.join(PART_WORD[p] for p in revised)} changed since the baseline: a "
                             "revision, so old and new numbers are different quantities (estimators §9)",
                     "next": f"run the baseline again under the current spec: aot-evals --eval {ev.id} run "
                             "--purpose baseline"})
     elif then.get("decision_rule") != now.get("decision_rule"):
-        out.append({"kind": "decision_rule", "parts": ["decision_rule"],
+        out.append({"kind": "decision_rule", "parts": ["decision_rule"], "role": "owner",
                     "what": "the decision rule changed since the baseline",
                     "next": f"commit eval.yaml (or aot-evals --eval {ev.id} log --kind decision \"why\") before "
                             "the candidate runs, or the comparison refuses it (rule 21)"})
@@ -207,12 +225,12 @@ def changes(ev: Eval) -> list[dict]:
     if root is not None and newest.get("agent_commit"):
         info = git_commit_info(root, exclude=ev.evals_dir)
         if info.get("dirty"):
-            out.append({"kind": "agent-uncommitted", "parts": [],
+            out.append({"kind": "agent-uncommitted", "parts": [], "role": "engineering",
                         "what": "the agent has uncommitted changes",
                         "next": "commit the agent before running: a run of an uncommitted build can't be compared"})
         elif info.get("commit") and info["commit"] != newest["agent_commit"] and \
                 git_same_tree(root, info["commit"], newest["agent_commit"], exclude=ev.evals_dir) is not True:
-            out.append({"kind": "agent", "parts": [],
+            out.append({"kind": "agent", "parts": [], "role": "engineering",
                         "what": f"the agent changed since the baseline ({newest['agent_commit'][:7]} → "
                                 f"{info['commit'][:7]})",
                         "next": f"run a candidate with one declared variable, then compare: aot-evals --eval {ev.id} "
@@ -226,7 +244,7 @@ def changes(ev: Eval) -> list[dict]:
             compared.update((load_json(p) or {}).get("candidate_runs") or [])
     fresh = [m["run_id"] for m in cands if m["run_id"] not in compared]
     if fresh:
-        out.append({"kind": "candidate", "parts": [],
+        out.append({"kind": "candidate", "parts": [], "role": "engineering",
                     "what": f"candidate {fresh[-1]} has run and has not been compared",
                     "next": f"aot-evals --eval {ev.id} compare --candidate {fresh[-1]}, then have people label "
                             "what moved (aot-evals agreement label queue --changed)"})
@@ -241,35 +259,44 @@ def _agent_cwd(ev: Eval) -> Path | None:
 
 
 def summary(agent_dir: Evals) -> dict:
-    """The agent system's phase (its earliest eval's), each eval's trust, changes and next step."""
+    """The agent system: where it stands, each eval's trust, changes and next steps per role."""
     discovered = agent_dir.discovery_path().exists()
     if not agent_dir.exists() or not agent_dir.has_evals:
         if discovered:
-            ph = _phase("build", "the discovery report is written; no eval yet",
-                        "aot-evals build: the end-to-end eval, and one per component that earns one")
+            stands = "the discovery report is written; no eval yet"
+            nxt = [_step("engineering", "aot-evals build: the end-to-end eval, and one per component that earns one")]
         else:
-            ph = _phase("assess", "no discovery report yet",
-                        "run the assessment: /aot-evals:start in Claude Code")
-        return {"agent": str(agent_dir.root), "phase": ph, "discovery_report": discovered, "evals": []}
+            stands = "no discovery report yet"
+            nxt = [_step("owner", "run discovery: /aot-evals:start in Claude Code, about 5 minutes")]
+        return {"agent": str(agent_dir.root), "stands": stands, "next": nxt, "discovery_report": discovered,
+                "evals": []}
     rows = []
     for ev in agent_dir.evals():
         t = eval_trust(ev)
         t["changes"] = changes(ev)
-        if t["changes"]:
-            t["phase"]["next"] = t["changes"][0]["next"]
+        for c in t["changes"]:  # a change comes first for its role: the old next step waits on it
+            t["next"] = [s for s in t["next"] if s["role"] != c["role"]]
+        for c in reversed(t["changes"]):
+            if not any(s["role"] == c["role"] and s["step"] == c["next"] for s in t["next"]):
+                t["next"].insert(0, _step(c["role"], c["next"]))
+        t["next"] = _dedupe(t["next"])
         rows.append(t)
-    earliest = min(rows, key=lambda t: ORDER.index(t["phase"]["id"]))
-    ph = dict(earliest["phase"])
-    ph["why"] = f"{earliest['eval']}: {ph['why']}"
-    return {"agent": str(agent_dir.root), "phase": ph, "discovery_report": discovered, "evals": rows}
+    counts = {lv: sum(t["level"] == lv for t in rows) for lv in LEVELS}
+    stands = f"{len(rows)} eval(s): " + ", ".join(f"{n} {lv}" for lv, n in counts.items() if n)
+    return {"agent": str(agent_dir.root), "stands": stands, "next": [], "discovery_report": discovered,
+            "evals": rows}
+
+
+def _dedupe(steps: list[dict]) -> list[dict]:
+    """One step per role, the first; roles in ROLES order."""
+    first: dict[str, dict] = {}
+    for s in steps:
+        first.setdefault(s["role"], s)
+    return [first[r] for r in ROLES if r in first]
 
 
 def render(s: dict) -> str:
-    ph = s["phase"]
-    lines = [f"agent at {s['agent']}",
-             f"Phase: {ph['name']}, which settles the {', '.join(ph['settles'])} ({ph['why']})"]
-    if ph["done"]:
-        lines[-1] += f"; done: {', '.join(ph['done'])}"
+    lines = [f"agent at {s['agent']}", s["stands"]]
     for t in s["evals"]:
         theta = ""
         if t["theta"] is not None:
@@ -277,17 +304,13 @@ def render(s: dict) -> str:
             lo = f"{ci[0]:.1%}" if isinstance(ci[0], (int, float)) else "?"
             hi = f"{ci[1]:.1%}" if len(ci) > 1 and isinstance(ci[1], (int, float)) else "?"
             theta = f"  θ̂ {t['theta']:.1%} [{lo}, {hi}]"
-        lines.append(f"\n  {t['eval']}: {t['phase']['name']}, {t['level']}{theta}")
+        lines.append(f"\n  {t['eval']}: {t['level']}{theta}; {t['stands']}")
         for w in t["why"]:
             lines.append(f"    - {w}")
         for c in t.get("changes") or []:
             lines.append(f"    changed: {c['what']}")
-            lines.append(f"      → {c['next']}")
-        nxt = t["phase"].get("next")
-        if nxt and nxt not in t["why"]:
-            lines.append(f"    next: {nxt}")
-        elif nxt:
-            lines.append("    next: the first item above")
-    if not s["evals"] and ph.get("next"):
-        lines.append(f"next: {ph['next']}")
+        for st in t.get("next") or []:
+            lines.append(f"    next for {st['who']}: {st['step']}")
+    for st in s.get("next") or []:
+        lines.append(f"next for {st['who']}: {st['step']}")
     return "\n".join(lines)

@@ -3,7 +3,7 @@ judges or cases needed.
 
 Two sources:
 - runs: budgets vs actuals per use case for one or more runs (the same numbers as report P4);
-- an export (C0): per-row cost, latency, tokens and outcome read from an imported trace dump
+- an export (`aot-evals import`): per-row cost, latency, tokens and outcome read from an imported trace dump
   through a field mapping, so a team can see plane B in week one, before any eval exists.
 """
 
@@ -13,7 +13,7 @@ from collections import defaultdict
 
 from .importer import export_file, iter_rows
 from .repo import Evals
-from .report import Context, operational
+from .results import Context, operational
 from .util import get_path
 
 EXPORT_FIELDS = ("use_case", "cost_usd", "latency_ms", "tokens_input", "tokens_output",

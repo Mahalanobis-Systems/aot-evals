@@ -1,4 +1,4 @@
-"""2.0 measurement (docs/v2-design.md §4, §6; estimators §5; statistics §3): catch and clean pass
+"""The measurement model (docs/method.md; estimators §5; statistics §3): catch and clean pass
 rates, the judge floor from max_inflation, the corrections feeding `estimate`, the eval held to
 people (report `measurement`, agreement.json's margin-based evidence and labels per kind), and
 `trials: auto`.
@@ -24,7 +24,6 @@ from test_estimand import DRAW, Store, _baseline, make_store
 from aot_evals import stats
 from aot_evals.agreement import item_key
 from aot_evals.measurement import judge_floor, labels_needed, people_floor
-from aot_evals.repo import Evals
 from aot_evals.spec import check
 
 
@@ -205,10 +204,10 @@ def test_a_judge_within_max_inflation_counts_and_is_corrected(store):
     _label_judge(store, (60, 60), (400, 400))
     cal = json.loads((store.eval / "checks" / "judge" / "end-state-judge.calibration.json").read_text())
     m = cal["backends"]["local"]
-    assert cal["status"] == "calibrated" and "min_tpr" not in cal
+    assert cal["status"] == "calibrated"
     assert cal["floor"].startswith("measurement.max_inflation")
     assert m["catch"] == 1.0 and m["clean"] == 1.0 and m["labels_per_kind"] == {"fail": 60, "pass": 400}
-    assert m["catch"] == m["tnr"] and m["clean"] == m["tpr"]  # 1.x names kept beside them
+    assert "tpr" not in m and "tnr" not in m
     store.commit()
     _baseline(store)
     assert store.cli("report") == 0
@@ -224,7 +223,7 @@ def test_a_judge_within_max_inflation_counts_and_is_corrected(store):
     assert est["se"] > obs["se"] * 0.99  # the calibration's uncertainty widens it
     lines = [x for x in store.ev().run_records(r["runs"][0]) if x["kind"] == "check"]
     assert {x["check_id"] for x in lines if not x["counted"]} == {"end-state-matches"}
-    assert store.cli("screen", "--judges", "--all", "--read-by", "tester") == 0  # 2.0 judges screen too
+    assert store.cli("screen", "--judges", "--all", "--read-by", "tester") == 0  # judges screen too
     code = next(m for m in r["measurement"]["failure_modes"] if m["id"] == "unrequested-change")
     assert code["type"] == "code" and code["floor"]["status"] == "pass" and code["inflation"] == 1.0
 
@@ -241,7 +240,7 @@ def test_a_judge_over_max_inflation_is_refused(store):
     assert fm["floor"]["status"] == "refused" and fm["inflation_at_lower_bounds"] > 2.0
     assert fm["catch"] == pytest.approx(0.8) and fm["clean"] == pytest.approx(0.9)
     assert r["estimate"]["theta"] is None and "max_inflation" in r["estimate"]["null_reason"]
-    # labels for a 2.0 judge are queued from its eval's runs, by use case; judge apply reads it too
+    # labels for a judge are queued from its eval's runs, by use case; judge apply reads it too
     assert store.cli("label", "queue", "--judge", "end-state-judge", "--n", "5") == 0
     q = (store.eval / "checks" / "judge" / "end-state-judge.queue.csv").read_text()
     assert "refund" in q or "order-status" in q
@@ -292,14 +291,6 @@ def test_calibrate_and_label_status_speak_catch_and_clean(store, capsys):
     assert store.cli("label", "status", "--judge", "end-state-judge") == 0
     out = capsys.readouterr().out
     assert "10 failing, 100 passing" in out and "max_inflation" in out
-
-
-def test_min_tpr_on_a_2_0_judge_is_a_note(store):
-    _with_judge(store)
-    p = store.eval / "checks" / "judge" / "end-state-judge.md"
-    p.write_text(p.read_text().replace("version: 1\n", "version: 1\nmin_tpr: 0.8\n"))
-    spec = Evals(store.agent).eval("end-to-end").spec()
-    assert any(n.field == "checks/judge/end-state-judge.md" and "min_tpr" in n.why for n in spec.notes)
 
 
 # ---- the eval against people: agreement.json and its gates ------------------------------------

@@ -205,7 +205,7 @@ def passes(screen: dict | None) -> bool:
 def judge_verdicts(ev: Eval, case: dict):
     """(start, end) -> [(check_id, passed)] for the case's calibrated judges (calls cost money)."""
     from .judging import JudgeRunner
-    from .report import judge_states
+    from .results import judge_states
 
     states = judge_states(ev)
     runner = JudgeRunner(ev)

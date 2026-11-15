@@ -1,4 +1,4 @@
-"""Where an agent system's evals go (estimators §1, rule 3; v2-design §1, §10.1): the parts of the
+"""Where an agent system's evals go (estimators §1, rule 3; docs/method.md): the parts of the
 system, their context boundaries, and which of them earn an eval of their own.
 
 agent.yaml's `components:` lists each part of the system the orchestrator calls:

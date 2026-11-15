@@ -1,4 +1,4 @@
-"""The online-store example (examples/store; docs/v2-design.md §9): what it claims, checked.
+"""The online-store example (examples/store; docs/method.md): what it claims, checked.
 
 - Both specs are complete once the export is imported and the handoffs extracted.
 - The shipped quality sets are `draw`s from that export (valid π, the frame's hash), and every case

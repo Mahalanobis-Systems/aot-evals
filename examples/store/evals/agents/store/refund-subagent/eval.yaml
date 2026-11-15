@@ -1,4 +1,4 @@
-# The refund subagent, on its own (estimators §1, Eval 2; docs/v2-design.md §9).
+# The refund subagent, on its own (estimators §1, Eval 2; examples/store/README.md).
 eval: refund-subagent
 version: 1.0                       # major.minor; see estimators §9 for which changes are major
 

@@ -1,14 +1,14 @@
-"""The activity log (docs/method.md §4): what Claude and the CLI did, in order, for the person to watch.
+"""The activity log (docs/method.md): what Claude and the CLI did, in order, for the person to watch.
 
 The agent system's `journal/activity.jsonl` is append-only, and shared by its evals
-(docs/v2-design.md §1): an entry about one eval goes into the same log. Every CLI command logs
+(docs/method.md): an entry about one eval goes into the same log. Every CLI command logs
 itself (cli.main); the skills add the steps, findings, decisions and questions between commands
 with `aot-evals log`. Every append re-renders `journal/activity.html`, a branded page that
 reloads itself, so the person can keep it open in a browser tab and watch the work instead of
 the terminal.
 
 The directory carries its own `.gitignore` (`*`): the log is a working record for the people in
-the session and may quote unreviewed trace text, so it never enters git (docs/method.md §1, principle 8). The
+the session and may quote unreviewed trace text, so it never enters git (docs/method.md, principle 8). The
 committed record of each decision is the file the decision changed.
 """
 
@@ -26,11 +26,13 @@ KINDS = ("step", "finding", "decision", "question", "command", "progress", "mile
 WAITING_KINDS = ("question", "milestone")
 KIND_LABEL = {"step": "doing", "finding": "found", "decision": "decided", "question": "asked you",
               "command": "ran", "progress": "progress", "milestone": "checkpoint"}
-# Which gate a CLI command works on, for commands that are about one gate.
-COMMAND_GATE = {"import": "C0", "screen": "C7", "label": "C9", "calibrate": "C10",
-                "reliability": "C11", "judge": "C10", "compare": "C13", "coverage": "C14",
-                "redundancy": "C15", "report": "C18", "agreement": "C19", "init": "C0"}
-RUN_GATE = {"smoke": "C1", "baseline": "C12", "candidate": "C13", "drift": "C16"}
+# Which part of an eval a CLI command works on (an entry's `gate`), for commands about one part.
+COMMAND_GATE = {"import": "design", "draw": "design", "handoffs": "design", "screen": "design",
+                "coverage": "design", "label": "measurement", "calibrate": "measurement",
+                "reliability": "measurement", "judge": "measurement", "agreement": "measurement",
+                "compare": "decision_rule"}
+RUN_GATE = {"smoke": "agent_contract", "baseline": "decision_rule", "candidate": "decision_rule",
+            "drift": "decision_rule"}
 RELOAD_MS = 4000
 _PROGRESS_EVERY_S = 2.0
 _last_render = 0.0
@@ -58,7 +60,7 @@ def _ensure_dir(ev: Evals) -> None:
     d.mkdir(parents=True, exist_ok=True)
     ignore = d / ".gitignore"
     if not ignore.exists():
-        ignore.write_text("# aot-evals activity log: a working record, never committed (docs/method.md §4)\n*\n")
+        ignore.write_text("# aot-evals activity log: a working record, never committed (docs/method.md)\n*\n")
 
 
 def entries(ev: Evals) -> list[dict]:
@@ -137,7 +139,7 @@ def activity_page(ev: Evals, items: list[dict]) -> str:
                         f'<span class="t" data-ts="{_esc(m["ts"])}">{_esc(_clock(m["ts"]))}</span></td>'
                         f'<td>{_esc(m.get("gate") or "")}</td>'
                         f'<td><a href="{href}">{_esc(m.get("text", ""))}</a></td></tr>')
-        parts.append('<h2>Checkpoints</h2><table><thead><tr><th>When</th><th>Gate</th>'
+        parts.append('<h2>Checkpoints</h2><table><thead><tr><th>When</th><th>Part</th>'
                      '<th>Checkpoint</th></tr></thead><tbody>' + "".join(rows) + '</tbody></table>')
 
     rows = []
@@ -163,9 +165,9 @@ def activity_page(ev: Evals, items: list[dict]) -> str:
                     f'<td class="kind">{_esc(KIND_LABEL.get(kind, kind))}</td><td>{text}</td></tr>')
     parts.append('<h2>Activity, newest first</h2>')
     if rows:
-        parts.append('<table class="full log"><colgroup><col style="width:7em"><col style="width:4em">'
+        parts.append('<table class="full log"><colgroup><col style="width:7em"><col style="width:8em">'
                      '<col style="width:7em"><col></colgroup><thead><tr><th class="num">Time</th>'
-                     '<th>Gate</th><th>What</th><th></th></tr></thead><tbody>' + "".join(rows) +
+                     '<th>Part</th><th>What</th><th></th></tr></thead><tbody>' + "".join(rows) +
                      '</tbody></table>')
     else:
         parts.append('<p class="muted">No activity yet.</p>')

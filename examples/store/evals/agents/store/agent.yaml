@@ -1,4 +1,4 @@
-# The online store's support agent (docs/v2-design.md §9; docs/problems.md). A toy: the agent and
+# The online store's support agent (examples/store/README.md; docs/problems.md). A toy: the agent and
 # its refund subagent are small Python programs, the order system and payments are fakes in env/.
 id: store
 description: Answers order-status, return and address requests, and routes refunds to a refund subagent.

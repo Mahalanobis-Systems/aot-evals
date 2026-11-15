@@ -1,4 +1,4 @@
-"""The measurement model of a 2.0 eval (estimators §5; statistics §3; docs/v2-design.md §4, §6):
+"""The measurement model of an eval (estimators §5; statistics §3; docs/method.md):
 how wrong each grader is, whether it may count, how the estimate is corrected for it, and how
 many trials each case runs.
 
@@ -6,9 +6,9 @@ many trials each case runs.
 against people's labels as a diagnostic test with failure as the positive: its catch rate (of
 the runs a person failed, the share it failed) and its clean pass rate (of the runs a person
 passed, the share it passed), each on its own count of labels of that kind (statistics §3.2,
-§3.4). 1.x called them TNR and TPR.
+§3.4).
 
-**The judge floor** (v2-design §4, decided §10.3). A judge counts only when the cases its errors
+**The judge floor** (docs/method.md). A judge counts only when the cases its errors
 cost are within `measurement.max_inflation` (default 2.0) of a code check's, at the eval's
 current failure rate on its mode. The inflation factor is q(1 − q) / (J² p(1 − p)), with
 q = (1 − clean) + J·p (statistics §3.3, `stats.judge_inflation`), read from the one-sided lower
@@ -189,7 +189,7 @@ def floor_rate(observed: dict | None, cal: dict) -> dict | None:
 
 def judge_floor(cal: dict, rate: dict | None, limit: float, alpha: float) -> dict:
     """Whether a judge may count: its inflation factor at the rate, from its one-sided lower
-    bounds on catch and clean at α, at or under `limit` (v2-design §4). `status` is pass |
+    bounds on catch and clean at α, at or under `limit` (docs/method.md). `status` is pass |
     refused | uncalibrated | stale | invalid | unknown (no scored run to read the rate at)."""
     out = {"status": None, "reason": None, "max_inflation": limit, "rate": None, "inflation": None,
            "inflation_at_lower_bounds": None, "alpha": alpha}
@@ -326,14 +326,14 @@ def variance(s) -> dict | None:
 
 
 def trials_for_run(ev) -> dict:
-    """k for the next run of a 2.0 eval: the spec's number, or for `auto` the k the baseline's
-    variance split recommends, else 3 until there is one (rule 16; v2-design §5)."""
+    """k for the next run of an eval: the spec's number, or for `auto` the k the baseline's
+    variance split recommends, else 3 until there is one (rule 16; docs/method.md)."""
     t = ev.spec().part("measurement").get("trials")
     if isinstance(t, int) and not isinstance(t, bool):
         return {"spec": t, "k": t, "source": "measurement.trials"}
     if t != "auto":
         return {"spec": t, "k": K_DEFAULT, "source": "default: measurement.trials is not a number"}
-    from .report_v2 import Scored, default_runs, refusal
+    from .report import Scored, default_runs, refusal
 
     runs = default_runs(ev)
     s = Scored(ev, runs) if runs else None
@@ -348,12 +348,12 @@ def trials_for_run(ev) -> dict:
 # ---- the report's measurement key and the correction -----------------------------------------
 
 def section(s, weights: dict | None, refused: str | None, floor_at: dict | None = None) -> dict:
-    """report.json's `measurement` (v2-design §6) and what the estimate needs from it.
+    """report.json's `measurement` (docs/method.md) and what the estimate needs from it.
 
     `floor_at` maps a failure mode to the rate its judge's floor is read at, taken from the
     reference (baseline) runs when these runs are a candidate: whether a judge counts is fixed
     before the candidate is looked at, so a candidate can't lose its measurement by failing less
-    (v2-design §4). Without it the floor is read at these runs' own rate."""
+    (docs/method.md). Without it the floor is read at these runs' own rate."""
     from . import agreement as ag
 
     ev, spec = s.ev, s.spec
@@ -414,7 +414,7 @@ def section(s, weights: dict | None, refused: str | None, floor_at: dict | None 
         dev, every = result.get("dev") or {}, result.get("all") or {}
         people.update(catch=dev.get("catch"), clean=dev.get("clean"),
                       all={"catch": every.get("catch"), "clean": every.get("clean")},
-                      split="dev: the floor reads the split disagreements are fixed on, as in 1.x; `all` "
+                      split="dev: the floor reads the split disagreements are fixed on; `all` "
                             "feeds the correction",
                       floor=people_floor(spec, dev.get("catch") or {}, dev.get("clean") or {}, whole),
                       problems=list(result.get("problems") or []), gates=list(result.get("gates") or []))

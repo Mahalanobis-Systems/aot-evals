@@ -1,6 +1,6 @@
 """What the plugin shows first, and the discovery report page.
 
-The banner and the phase message are printed by the CLI, not written by the model: a model asked
+The banner and the welcome message are printed by the CLI, not written by the model: a model asked
 to show ASCII art or a welcome screen often skips it, and a command prints it every time."""
 
 from __future__ import annotations
@@ -21,33 +21,33 @@ BANNER = r"""
 by Mahal Systems
 """
 
-PHASES = """\
-I'll build tests for one of your agents in three phases. Each settles part
-of what a test needs before its number can be trusted.
+ROLES = """\
+I'll build tests for one of your agents. Three kinds of people work on
+them, usually at the same time, and I'll say what's next for each.
 
-Assess (about 5 minutes): what the number is for.
-  I'll scan this repository to find your agents and ask which one to test.
-  Then I'll ask three questions about it, and read its code, tools, records
-  and data. You'll get a report: what it handles, what a mistake in each
-  kind of request costs, and where its tests go.
+The owner says what the agent is for, which mistakes cost most, and what
+a change must show before it ships.
+  First, about 5 minutes: I'll scan this repository to find your agents
+  and ask which one to test. Then I'll ask three questions about it, and
+  read its code, tools, records and data. You'll get a report: what it
+  handles, what a mistake in each kind of request costs, and where its
+  tests go.
 
-Build (half a day for the first pass): which cases, how they're checked,
-and when to act.
-  I'll wire up a safe place to run it, draw test cases at random from real
-  requests and write hard ones to find bugs, put a check on each way it can
-  fail, agree with you when a change is good enough to ship, and run the
-  first full test. I'll only stop for things that could touch real people,
-  data or money.
+Engineering wires the agent up and keeps its tests running.
+  A safe place to run it, test cases drawn at random from real requests
+  and hard ones written to find bugs, a check on each way it can fail, a
+  baseline, and a comparison for every change. I'll only stop for things
+  that could touch real people, data or money.
 
-Judge (ongoing): how often the checks are wrong.
-  The people who know what good looks like label runs in the grader
-  application, AI judges are measured against them, and each eval earns
-  trust once it agrees with them.
+The people who know what good looks like label runs.
+  In the grader application they label whole runs, settle disagreements
+  and write the rules labels follow. AI judges are measured against them,
+  and each eval earns trust once it agrees with them.
 """
 
 
 def start_text() -> str:
-    return BANNER.lstrip("\n") + "\n" + PHASES
+    return BANNER.lstrip("\n") + "\n" + ROLES
 
 
 def slug(name: str) -> str:
@@ -71,9 +71,6 @@ PILLARS = [  # (key in the report's front matter, headline, what it means, tag l
      "Examples drawn from real runs, grouped into the use cases the agent actually handles.",
      "Test cases · use cases"),
 ]
-
-# Pillar headings in reports written before 0.1.1, still placed and numbered as their pillar.
-OLD_HEADS = {"Safe testing env": "Safe testing environment", "Golden use cases": "Golden test cases"}
 
 STATES = {"done": "✓", "partial": "◐", "risk": "!", "todo": "○"}
 
@@ -104,7 +101,7 @@ def _i(s) -> str:
 
 def _overview(fm: dict, agent: str) -> str:
     minutes = fm.get("minutes")
-    kicker = "Assess complete" + (f" · {minutes} minutes" if minutes else "")
+    kicker = "Discovery complete" + (f" · {minutes} minutes" if minutes else "")
     stats = "".join(f'<div class="stat"><span class="n">{_i(x.get("value"))}</span>'
                     f'<span class="l">{_i(x.get("label"))}</span></div>'
                     for x in (fm.get("stats") or [])[:3] if isinstance(x, dict))
@@ -146,7 +143,7 @@ def _next(fm: dict) -> str:
     for st in nx.get("steps") or []:
         you = st.get("who") == "you"
         steps.append(f'<li class="{"you" if you else "us"}"><div><span class="t">{_i(st.get("title"))}</span>'
-                     f'<span class="who">{"You" if you else "Build"}</span>'
+                     f'<span class="who">{"You" if you else "Claude"}</span>'
                      f'<div class="d">{_i(st.get("detail"))}</div></div>'
                      f'<div class="when">{_i(st.get("when"))}</div></li>')
     alts = "".join(f'<p><b>{_i(a.get("name"))}.</b> {_i(a.get("why"))}</p>'
@@ -158,7 +155,7 @@ def _next(fm: dict) -> str:
   <p class="path">{_i(nx.get("why"))}</p>
   <ol class="steps">{"".join(steps)}</ol>
   <div class="cta"><code>/aot-evals:start</code>
-    <span>Run it again to start Build. The first pass takes about half a day.</span></div>
+    <span>Run it again to wire the agent up and run its first baseline, about half a day.</span></div>
   {alts}
 </section>"""
 
@@ -250,12 +247,11 @@ def discovery_body(fm: dict, text: str, agent: str) -> str:
     names = [p[1] for p in PILLARS]
     before, after = [], []
     rank = {n: k for k, n in enumerate(names)}  # the four pillars in their order, then the rest as written
-    secs = sorted(secs, key=lambda hb: rank.get(OLD_HEADS.get(hb[0], hb[0]), len(names)))
+    secs = sorted(secs, key=lambda hb: rank.get(hb[0], len(names)))
     for head, body in secs:
-        pillar = OLD_HEADS.get(head, head)
-        if pillar in names:
-            num = f'<span class="num">{names.index(pillar) + 1:02d}</span> '
-            golden = pillar == "Golden test cases" and isinstance(fm.get("grid"), dict)
+        if head in names:
+            num = f'<span class="num">{names.index(head) + 1:02d}</span> '
+            golden = head == "Golden test cases" and isinstance(fm.get("grid"), dict)
             extra = grid_html(fm["grid"]) if golden else ""
             before.append(f'<section class="detail-group" id="{slug(head)}"><h2>{num}{markdown.inline(head)}</h2>'
                           f"{markdown.render(body)}{extra}</section>")

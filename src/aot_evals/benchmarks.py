@@ -1,8 +1,8 @@
-"""The public benchmark catalog (references/benchmarks.yaml) and how Assess matches an agent to it.
+"""The public benchmark catalog (references/benchmarks.yaml) and how discovery matches an agent to it.
 
-Assess runs from this local copy: no web search, no model call. `match()` scores every catalog
+Discovery runs from this local copy: no web search, no model call. `match()` scores every catalog
 entry against the agent's workloads and task types and returns the best fits with the reason each
-might fit. Build may search the web for newer benchmarks and propose additions to the catalog
+might fit. Engineering may search the web for newer benchmarks and propose additions to the catalog
 (references/benchmarks.md says how). The catalog's fields and vocabularies are in
 references/benchmarks.md; `validate()` enforces them, and tests/test_benchmarks.py runs it.
 """

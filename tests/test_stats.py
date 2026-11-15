@@ -57,7 +57,7 @@ def test_floor_evidence_separates_clearing_a_floor_from_having_shown_it():
     assert e["meets_point"] and not e["meets_margin"] and 0.6 < e["lower"] < 0.65
     assert e["n_needed"] == 53  # statistics §4.2's table
     assert stats.floor_evidence(23, 30, 0.75)["n_needed"] == 65
-    assert stats.floor_evidence(2, 2, 0.75)["meets_margin"] is False  # TNR on two labels
+    assert stats.floor_evidence(2, 2, 0.75)["meets_margin"] is False  # a catch rate on two labels
     big = stats.floor_evidence(90, 100, 0.85)
     assert big["meets_point"] and big["meets_margin"] and big["n_needed"] == 100
     assert stats.floor_evidence(5, 10, 0.85)["n_needed"] is None  # below the floor: more won't help
@@ -77,7 +77,7 @@ def test_rogan_gladen_undoes_a_known_judge_error():
     # true failure rate 30%, catch 0.8, clean 0.9: the judge fails 0.3*0.8 + 0.7*0.1 = 31%
     r = stats.rogan_gladen(310, 1000, 800, 1000, 900, 1000)
     assert abs(r["point"] - 0.30) < 1e-9 and r["ci"][0] < 0.30 < r["ci"][1]
-    assert abs(r["j"] - 0.7) < 1e-12 and r["youden_j"] == r["j"]  # 1.x key kept until stage 8
+    assert abs(r["j"] - 0.7) < 1e-12 and "youden_j" not in r
     thin = stats.rogan_gladen(310, 1000, 24, 30, 27, 30)  # same rates on 30 labels a kind
     assert (thin["ci"][1] - thin["ci"][0]) > (r["ci"][1] - r["ci"][0])
     assert stats.rogan_gladen(50, 100, 50, 100, 50, 100) is None  # a coin flip can't be corrected
@@ -239,18 +239,18 @@ def test_stratified_draw_records_inclusion_probabilities():
     assert all(d["inclusion_probability"][x] == 0.5 for x in d["drawn"]["a"])
 
 
-def test_cost_flags_catch_a_write_in_a_read_only_category():
+def test_cost_flags_catch_a_write_in_a_read_only_use_case():
     assert stats.failure_severity(writes=True, reversible=False, noticed=None) == "high"
     assert stats.failure_severity(writes=False, reversible=None, noticed=True) == "low"
     assert stats.failure_severity(writes=True, reversible=None, noticed=True) is None
     f = stats.cost_flags([("report", "low"), ("report", "high"), ("book", "medium")],
                          {"report": "low", "book": "medium"})
-    assert f["categories"]["report"]["flag"] and f["categories"]["report"]["exceeds_declared"]
-    assert not f["categories"]["book"]["flag"] and f["even"] is False
+    assert f["use_cases"]["report"]["flag"] and f["use_cases"]["report"]["exceeds_declared"]
+    assert not f["use_cases"]["book"]["flag"] and f["even"] is False
     assert stats.cost_flags([("book", "medium")], {"book": "medium"})["even"] is True
 
 
-# ---- 2.0 statistics library (docs/statistics.md §2.1, §2.3, §3.3, §4.1, §4.5, §4.6) ----------
+# ---- the statistics library (docs/statistics.md §2.1, §2.3, §3.3, §4.1, §4.5, §4.6) ----------
 
 def test_hajek_mean_weights_each_case_by_one_over_pi():
     # an oversampled case (pi = 0.25) counts four times; the others twice
@@ -375,7 +375,7 @@ def test_holm_controls_any_false_alarm_and_is_stricter_than_bh():
     assert stats.holm([]) == [] and stats.holm([None]) == [None]
 
 
-# ---- 2.0 estimand and design (docs/statistics.md §2.1-§2.4, §4.1, §4.5; estimators §7) ----------
+# ---- estimand and design (docs/statistics.md §2.1-§2.4, §4.1, §4.5; estimators §7) ----------
 
 def test_stratified_draw_is_prefix_stable_and_replaces_skips_from_its_order():
     pop = {"a": [f"a{i}" for i in range(20)], "b": [f"b{i}" for i in range(5)]}

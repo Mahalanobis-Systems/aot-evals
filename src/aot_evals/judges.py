@@ -1,4 +1,4 @@
-"""Judge checks (docs/method.md §7): one failure mode, one binary typed question, any backend.
+"""Judge checks (docs/method.md): one failure mode, one binary typed question, any backend.
 
 A judge is `<eval>/checks/judge/<check-id>.md`: YAML frontmatter plus a human-readable body.
 
@@ -110,16 +110,15 @@ class JudgeSpec:
         return self.meta.get("mode", "binary")
 
     def sha(self) -> str:
-        """Hash of everything that changes what the judge decides (not the prose body). A 1.x
-        judge's min_tpr / min_tnr never did, so `migrate` drops them without staling it."""
-        relevant = {k: v for k, v in self.meta.items() if k not in ("primary", "min_tpr", "min_tnr")}
+        """Hash of everything that changes what the judge decides (not the prose body)."""
+        relevant = {k: v for k, v in self.meta.items() if k != "primary"}
         return hashlib.sha256(json.dumps(relevant, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
     def backend_sha(self, backend: str) -> str:
         """sha() for one backend: the question and inputs plus that backend's own config only, so
         adding or changing another backend leaves this backend's cached judgements valid."""
         relevant = {k: v for k, v in self.meta.items()
-                    if k not in ("primary", "min_tpr", "min_tnr", "backends")}
+                    if k not in ("primary", "backends")}
         relevant["backend"] = self.backends.get(backend)
         return hashlib.sha256(json.dumps(relevant, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
