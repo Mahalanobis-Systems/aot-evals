@@ -6,6 +6,11 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+- **report.json v2 gains `gates`**, the 1.x evidence checks that survive, keyed by part and
+  computed on the reported and candidate runs: `manifest` (with isolation) and `trials_complete`
+  (agent contract), `screened`, `committed` and `coverage_list` (design), `independent_reference`
+  and `k` (measurement), each `{id, status, detail}` (docs/v2-design.md §6). The committed-cases
+  check now also catches an edited case file whose status line came first.
 - **2.0: the online store is the example, the demo and the test fixture** (stage 8,
   docs/v2-design.md §9). `examples/store/` holds the support agent and its refund subagent (both
   speak the agent contract), fakes for the order system and payments in `env/`, a trace export
@@ -24,6 +29,10 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
   G1–G14 gates (2.0's spec fields and evidence checks replace them), `status --gates`,
   `report --html`, `run --category` and `--force`. `init` without `--eval` creates the end-to-end
   eval. `coverage` reads an eval's `coverage.yaml`; `ops` reads its constraints per use case.
+- **Judge labels and whole-run labels name the use case**: the label queue (`<judge>.queue.csv`),
+  the labels imported from it, the labelling page, `agreement label queue` and agreement.json's rows
+  carry `use_case` in place of `category`; agreement.json adds `use_cases` beside `categories`, and
+  `label status` counts labels per use case. `calibrate` no longer writes the 1.x floors' `evidence`.
 - **Command judges in a 2.0 eval run from the repository root**, as agent.yaml's paths do; they
   ran from the agent's folder.
 - **`aot-evals migrate --to 2`** (stage 8, docs/v2-design.md §8) turns a 1.x suite into a 2.0

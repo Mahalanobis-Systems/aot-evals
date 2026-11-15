@@ -432,6 +432,7 @@ values are null with a reason, never 0, and nothing is pre-rounded.
 | `comparison` | as 1.x, with Δθ̂ design-weighted, the verdict read from the paired sign-flip test per cluster, `per_use_case` adjusted p-values, `bug_finding` flips apart, and `variance_band` removed; null without `--candidate` | Decision rule |
 | `coverage`, `redundancy`, `cases`, `conditions`, `next_actions` | not in v2 yet; `aot-evals coverage` prints the coverage grid (§7) | |
 | `checks` | as 1.x, with `catch` and `clean` in place of `tnr` and `tpr` | Measurement |
+| `gates` | the evidence checks on the runs, keyed by part: `{agent_contract[…], design[…], measurement[…]}`, each entry `{id, status: "pass" \| "fail" \| null, detail}` (below) | Agent contract, design, measurement |
 
 **How the estimate is computed** (estimators §7). A trial scores 1 for `pass_rate` when every
 counted check of the modes that apply to its case passed, and for `failure_rate:<mode>` when that
@@ -518,9 +519,28 @@ reported runs, so a paired rule with no candidate is `unknown`.
 
 **Removed from v1:** `validity` (compounded validity), `online` (always null), `regime`,
 `sets` (now `estimate`, `design` and `use_cases`), `categories` (now `use_cases`), the `simple`
-flag, `conditions.simulator`, and gates G9 and C16/C17. `gates` becomes `spec.missing` plus the
-evidence checks that remain (manifest integrity, screening, trial completeness, isolation), keyed
-by part.
+flag, `conditions.simulator`, and the C0–C19 command gates. The 1.x `gates` list (G1–G14)
+becomes `spec.missing` (what the spec lacks) plus the evidence gates below, keyed by part; G3
+and G14 are now `measurement.gates`, G6 is the quality pool's design (rule 5), G7 and G11 are
+the comparison's refusals and its `trade`/`worse` verdicts, and G9 is gone with simulators.
+
+**The evidence gates** (`gates`, evidence.py) are the 1.x report gates that survive, each with a
+stable id so a fixture can trigger exactly one (tests/test_fixtures.py). They are computed on
+every run the report reads: the reported runs and, with `--candidate`, the candidate's. `status`
+is null when there is nothing to judge (no run, or no bug-finding set for `coverage_list`).
+
+| Part | id | 1.x | Fails when |
+|---|---|---|---|
+| `agent_contract` | `manifest` | G1 | a run's manifest lacks `agent_commit`, `evals_commit`, `harness`, `k` or a model id per call site; or eval files (cases, checks) changed during the run, or the agent's output names them (isolation: re-run with `invoke.isolate: true`). A check's bytecode cache is not an eval file |
+| `agent_contract` | `trials_complete` | G13 | a (case, trial) the run planned has no final attempt (a stopped run), or a trial's attempt numbers skip one |
+| `design` | `screened` | G8 | a case of the runs has not passed its screen; such cases stay out of θ̂ and the rows (`excluded`), and dropped cases are listed in the detail |
+| `design` | `committed` | G12, committed-cases half | a case file of the runs is untracked or has uncommitted edits (kept out of θ̂, rule 17), or the runs hold attempts for a case the eval doesn't have |
+| `design` | `coverage_list` | G5 | the coverage list (`design.bug_finding_set.coverage`) names no source, is made from the cases, lacks `read_on` or entries, or was not committed before the first case (the same commit counts); `coverage.list_problems` |
+| `measurement` | `independent_reference` | G10 | a counted code check declares `USES_AGENT_REPORT = True`, or a case's screen found it claim-sensitive (passing on a bare success claim) |
+| `measurement` | `k` | G2 | a run other than a smoke run has k < 3 |
+
+No evidence gate nulls θ̂ by itself: the cases `screened` and `committed` name are already left
+out of it, and the others are read beside the number.
 
 `report/agreement.json` keeps its file and its role (gates read it), renames `catch`/`clean`
 consistently, and adds `labels_per_kind`, `labels_needed`, the margin-based evidence and `gates`.

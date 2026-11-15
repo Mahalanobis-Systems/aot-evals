@@ -4,7 +4,8 @@
 This module writes the keys of the estimand, the sampling design and the measurement model:
 `eval`, `spec`, `estimate` (the headline θ̂), `use_cases` (the per-use-case table, the
 diagnostic beside it), `design` and `measurement` (each failure mode's grader with its catch and
-clean pass rates and its floor, the eval held to people, the variance split; measurement.py).
+clean pass rates and its floor, the eval held to people, the variance split; measurement.py),
+and `gates`, the evidence checks on the runs keyed by part (evidence.py).
 The decision rule's keys, `decision` and `comparison`, come from decision.py.
 Keys may be added within v2, never removed or renamed. Everything is recomputed from per-trial
 records, nothing is pre-rounded, and an unknown value is null with its reason, never 0.
@@ -32,7 +33,7 @@ from __future__ import annotations
 from collections import defaultdict
 from types import SimpleNamespace
 
-from . import stats
+from . import evidence, stats
 from .design import case_status, clusters, load_draw
 from .repo import POOLS, Eval
 from .report import correctness, operational, run_passes
@@ -399,6 +400,9 @@ def build(ev: Eval, run_ids: list[str] | None = None, candidate_runs: list[str] 
         "use_cases": base.rows(),
         "design": design_key(base.s),
         "measurement": base.meas,
+        # the 1.x evidence gates that survive, keyed by part, on every run the report reads
+        "gates": evidence.gates(ev, base.manifests + (cand.manifests if cand else []), base.s.cases,
+                                base.s.untracked),
     }
     comparison = decision_mod.comparison(ev, base, cand) if cand else None
     report["comparison"] = comparison

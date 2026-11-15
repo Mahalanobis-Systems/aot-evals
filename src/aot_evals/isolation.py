@@ -96,7 +96,8 @@ def answer_files(ev: Evals) -> dict[str, str]:
         base = ev.p(d)
         if base.is_dir():
             for p in sorted(base.rglob("*")):
-                if p.is_file() and not p.name.endswith((".queue.csv", ".judgements.jsonl")):
+                if (p.is_file() and not p.name.endswith((".queue.csv", ".judgements.jsonl"))
+                        and "__pycache__" not in p.parts):  # Python rewrites these when a check runs
                     out[str(p.relative_to(ev.root))] = sha256_file(p)[:16]
     return out
 

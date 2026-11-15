@@ -21,7 +21,7 @@ import pytest
 import yaml
 from test_estimand import DRAW, Store, _baseline, make_store
 
-from aot_evals import cli, stats
+from aot_evals import stats
 from aot_evals.agreement import item_key
 from aot_evals.measurement import judge_floor, labels_needed, people_floor
 from aot_evals.repo import Evals
@@ -426,6 +426,3 @@ def test_report_measurement_key_shape(store):
     assert meas["eval_vs_people"]["labels"] == {"fail": 0, "pass": 0}
     assert meas["variance"]["n_cases"] == sum(DRAW.values())
 
-
-def test_v2_commands_accept_measurement(store):
-    assert cli.V2_READY >= {"label", "calibrate", "agreement", "judge"}

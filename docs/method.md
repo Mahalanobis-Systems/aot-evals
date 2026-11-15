@@ -2,7 +2,8 @@
 
 > **On the 2.0 branch this page describes 1.x, which the code no longer runs.** The 1.x suite
 > files, the old layout, the commands' 1.x paths, `allocate`, `checkpoint`, `redundancy` and the
-> C0–C19 and G1–G14 gates are removed; every command reads a 2.0 eval, and
+> C0–C19 and G1–G14 gates are removed (G1, G2, G5, G8, G10, G13 and half of G12 survive as
+> report.json's evidence `gates`, v2-design §6); every command reads a 2.0 eval, and
 > `aot-evals migrate --to 2` converts a 1.x suite. Until this page is rewritten for 2.0, the
 > reference for behavior is [v2-design.md](v2-design.md), with [estimators.md](estimators.md),
 > [problems.md](problems.md) and [statistics.md](statistics.md).
