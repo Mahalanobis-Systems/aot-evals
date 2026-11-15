@@ -1,12 +1,13 @@
-"""The branded HTML pages (docs/method.md §9, brand/README.md).
+"""The branded HTML pages (brand/README.md).
 
 `page()` is the one template behind every HTML file the plugin writes: the report shell, the
 discovery page, the grader application and the activity log (start.py, serve.py, journal.py).
 
-The report shell (`shell`, `write_shell`; `aot-evals report --html`, not yet back in 2.0) is one
-self-contained file: embedded fonts and logo, the brand style sheet, a header and footer, and
-`report.json` inlined as `<script type="application/json" id="data">`. It makes no network
-requests and opens from the filesystem. Claude writes the panels into its `<main id="panels">`,
+The report shell (`shell`, `write_shell`) is unused in 2.0: `report --html` was removed, and the
+report skill writes its HTML from report.json v2 itself. It was one self-contained file:
+embedded fonts and logo, the brand style sheet, a header and footer, and `report.json` inlined as
+`<script type="application/json" id="data">`. It made no network requests and opened from the
+filesystem. Claude wrote the panels into its `<main id="panels">`,
 shaped around the reader's question (report skill).
 """
 

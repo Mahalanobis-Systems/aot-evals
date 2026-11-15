@@ -29,7 +29,7 @@ the remaining fields of the case. An agent that already has a CLI can use `{ques
 `{timeout}`, `{case_id}` and `{trial}` placeholders in `invoke.command` and ignore stdin.
 
 `model` is `invoke.model` from `agent.yaml`, or empty when unset. `aot-evals run --model <id>`
-overrides it for one run without editing `agent.yaml`. An agent that honours `model` can then be
+overrides it for one run without editing `agent.yaml`. An agent that honors `model` can then be
 measured on another model, such as a cheaper one, a local one or a fine-tune, with the same suite.
 
 ## stdout: the result
@@ -78,7 +78,7 @@ next unused number, so it can reach `max_attempts` or more.
 `seed` and `observe` are what make state-diff grading possible. Without `observe`, checks see
 only `output`. That fits an agent whose deliverable is text (an analysis, a summary), but not one
 that changes things. For an agent that changes things, grading only what it says it did is the
-failure G10 exists to refuse: in comparable benchmarks, 45–48% of failures were confident false
+failure the evidence gate `independent_reference` exists to refuse: in comparable benchmarks, 45–48% of failures were confident false
 claims of success.
 
 Where the world can be sandboxed (framework Q4): a git repo at a commit, stateful fakes behind a
@@ -100,9 +100,9 @@ invoke:
 ```
 
 Use the CLI's full path in the hooks (`"${CLAUDE_PLUGIN_ROOT}/bin/aot-evals"`, expanded) when an
-older `aot-evals` may be on the PATH: the hooks run in the agent's environment. Under replay, C1 is
-marked not applicable (a replay doesn't show the agent runs), replays of the same records count as
-one agent version (C15), and plane B is not measured.
+older `aot-evals` may be on the PATH: the hooks run in the agent's environment. Under replay, a
+run shows that the checks work, not that the agent runs; replays of the same records are one
+version of the agent, so comparing them decides nothing; and cost and latency are not measured.
 
 `records/<case-id>.t<trial>.json` is one recorded run: `{"answer": ..., "world": ...}`, plus
 optional `usage` and `model_ids`. The world is whatever the checks need, recorded at the time:

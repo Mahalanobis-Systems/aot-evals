@@ -37,33 +37,36 @@ security issue, follow [SECURITY.md](SECURITY.md) instead.
 ### Conventions
 
 - **The method is the contract.** [docs/method.md](docs/method.md) describes what every command,
-  gate and file does. A change in behaviour updates it in the same pull request.
+  gate and file does. A change in behavior updates it in the same pull request; why a rule holds
+  lives in [docs/statistics.md](docs/statistics.md), linked rather than repeated.
 - **Runtime code stays light.** `src/aot_evals/` runs in users' environments through
   `bin/aot-evals`: standard library and PyYAML only. The `anthropic` SDK is imported lazily by the
   Anthropic judge backend. Python 3.11 is the floor.
 - **Every gate change needs a fixture test** (`tests/test_fixtures.py`, `tests/test_judges.py`),
   and each self-test fixture must trigger exactly the gate it targets.
+- **Docs credit their sources.** Cite the literature directly, credit the field each piece comes
+  from, and don't claim a first.
 - **Unknown is `null`, never `0`**, and nothing in `report.json` is pre-rounded.
 - **Skills** (`skills/*/SKILL.md`) are instructions to Claude. Keep them short and concrete, and
   test a changed skill by running it.
 - Working on this repository with Claude Code picks up `.claude/CLAUDE.md`, which repeats these
   rules.
 
-Good first contributions: a vertical taxonomy template with a real source
+Good first contributions: a vertical coverage-list template with a real source
 ([templates/taxonomies/](templates/taxonomies/README.md)), a judge backend, a clearer error
 message for something that confused you.
 
 ## Versioning
 
-aot-evals follows [Semantic Versioning](https://semver.org/). While the version is `0.x`:
+aot-evals follows [Semantic Versioning](https://semver.org/):
 
-- **Minor** (`0.2.0`): new features, and any breaking change. Breaking means a user must change
-  something: the agent contract ([references/agent-contract.md](references/agent-contract.md)),
-  the files in a suite, `report.json` keys, CLI commands or flags. The changelog entry says what
-  to change.
-- **Patch** (`0.1.1`): fixes and improvements that need nothing from users.
-
-From `1.0.0`, breaking changes take a major version.
+- **Major** (`2.0.0`): any breaking change. Breaking means a user must change something: the agent
+  contract ([references/agent-contract.md](references/agent-contract.md)), the files of an eval,
+  `report.json` keys or its schema version, CLI commands or flags. The changelog entry leads with
+  what to change.
+- **Minor** (`2.1.0`): new features that need nothing from users, such as a key added to
+  `report.json` within its schema version.
+- **Patch** (`2.0.1`): fixes and improvements that need nothing from users.
 
 ## Releasing
 
@@ -75,25 +78,28 @@ unreleased work on `main` never reaches users.
 2. On a clean branch from `main`, run:
 
    ```bash
-   python3 scripts/release.py 0.2.0
+   python3 scripts/release.py 2.1.0
    ```
 
    It writes the version to `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`
-   (the version and the `ref` the plugin installs from, `aot-evals--v0.2.0`), `pyproject.toml`
-   and `src/aot_evals/__init__.py`, and moves the `Unreleased` notes under `## 0.2.0 — <date>`.
-3. Open a pull request titled `Release 0.2.0`, and merge it when CI passes.
+   (the version and the `ref` the plugin installs from, `aot-evals--v2.1.0`), `pyproject.toml`
+   and `src/aot_evals/__init__.py`, and moves the `Unreleased` notes under `## 2.1.0 — <date>`.
+3. Open a pull request titled `Release 2.1.0`, and merge it when CI passes.
 4. On merge, the [release workflow](.github/workflows/release.yml) tags the merge commit
-   `aot-evals--v0.2.0` and publishes a GitHub release with the changelog section. Users get it
+   `aot-evals--v2.1.0` and publishes a GitHub release with the changelog section. Users get it
    with `claude plugin marketplace update aot-evals` and `claude plugin update
    aot-evals@aot-evals` (then a restart), or automatically if they turned on auto-update for
    the marketplace.
 
 The release also attaches the method as published files, built by `scripts/build_site.py`:
-`evals.json` (the method, process, practice findings, benchmark catalog, situations and
+`evals.json` (schema `aot-evals/site@2`: the method, the three guiding documents with their terms
+and rules, the online-store example, practice findings, benchmark catalog, situations and
 templates as data, which mahalsystems.ai imports) and `aot-evals-method-<version>.zip` (the same
-as plain files, to download and read without the plugin). The commands, gates, measurements,
-experiments and panels are parsed from the tables in docs/method.md, so keep their columns as
-they are; `tests/test_build_site.py` fails if a table no longer parses. To see what a release
+as plain files, to download and read without the plugin). The four parts, the three phases, the
+commands, the spec's fields, report.json's keys and the gates are parsed from the tables in
+docs/method.md, so keep their columns as they are; `tests/test_build_site.py` fails if a table no
+longer parses or the commands table misses a CLI command, and `tests/test_docs_links.py` fails on
+any relative link or `#anchor` that doesn't resolve. To see what a release
 will publish:
 
 ```bash

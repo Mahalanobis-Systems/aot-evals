@@ -69,6 +69,15 @@ COMPONENTS = [
 ]
 STATES = ("done", "partial", "todo", "later", "n/a")
 
+# The phase that builds each component (trust.py): Assess settles the estimand, Build the agent
+# contract, the sampling design, the checks and the decision rule, Judge the error rates.
+PART_PHASE = {CONTRACT: "build", ESTIMAND: "assess", DESIGN: "build", MEASUREMENT: "build", DECISION: "build"}
+JUDGE_PHASE = {"judges", "grader-ui", "calibration-set", "two-blind", "pool", "misclassification"}
+
+
+def phase_of(part: str, cid: str) -> str:
+    return "judge" if cid in JUDGE_PHASE else PART_PHASE[part]
+
 
 def _boundaries(agent_dir: Evals, units: dict[str, str]) -> tuple[str, str, str]:
     """agent.yaml's components, each placed (rule 3), and whether each that earns an eval has one."""
@@ -268,7 +277,8 @@ def checklist(ev: Evals) -> list[dict]:
         r = report.get(cid)
         if isinstance(r, dict) and r.get("state") in STATES and rank[r["state"]] > rank.get(st, 0):
             st, why = r["state"], r.get("note") or why
-        out.append({"group": part, "part": part, "id": cid, "name": name, "how": how, "state": st, "why": why})
+        out.append({"group": part, "part": part, "phase": phase_of(part, cid), "id": cid, "name": name,
+                    "how": how, "state": st, "why": why})
     return out
 
 

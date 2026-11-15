@@ -53,7 +53,7 @@ def _evals(args) -> Evals:
         ev = Evals.find(args.evals, args.agent)
     except ContractError as e:
         sys.exit(str(e))
-    if args.cmd not in ("init", "build") and not ev.exists():
+    if args.cmd not in ("init", "build", "status") and not ev.exists():
         sys.exit(f"no agent at {ev.root}; run `aot-evals --agent NAME --eval end-to-end init` in the "
                  "repository root, or pass --evals PATH")
     if args.cmd != "migrate" and ev.has_v1_suite and not ev.has_evals:
@@ -107,20 +107,26 @@ def cmd_init(args) -> int:
 
 
 def cmd_status(args) -> int:
+    """The phase (Assess, Build, Judge), each eval's spec and trust, what changed since its
+    baseline, and the next step (trust.py; docs/method.md §12)."""
+    from . import trust as trust_mod
+
     ev = _evals(args)
-    if not ev.has_evals:
-        sys.exit(f"no eval in {ev.root} yet: `aot-evals --eval end-to-end init` creates the first")
-    specs = [e.spec() for e in _selected_evals(args, ev)]
+    s = trust_mod.summary(ev)
+    specs = {e.id: e.spec() for e in _selected_evals(args, ev)} if ev.exists() and ev.has_evals else {}
+    s["evals"] = [t for t in s["evals"] if t["eval"] in specs]
     if args.json:
-        print(json.dumps({"agent": str(ev.root),
-                          "evals": [{"eval": s.eval_id, **s.as_dict()} for s in specs]}, indent=2))
+        print(json.dumps({**s, "evals": [{**specs[t["eval"]].as_dict(), **t} for t in s["evals"]]},
+                         indent=2, default=str))
         return 0
-    print(f"agent at {ev.root}")
-    for s in specs:
-        state = "complete" if s.complete else f"{len(s.missing)} missing, {len(s.invalid)} invalid"
-        blocked = sorted({b for i in (*s.missing, *s.invalid) for b in i.blocks})
-        print(f"  {s.eval_id:<20} {state}" + (f"  (blocks {', '.join(blocked)})" if blocked else ""))
-    if not all(s.complete for s in specs):
+    print(trust_mod.render(s))
+    if specs:
+        print("\nspecs:")
+    for sp in specs.values():
+        state = "complete" if sp.complete else f"{len(sp.missing)} missing, {len(sp.invalid)} invalid"
+        blocked = sorted({b for i in (*sp.missing, *sp.invalid) for b in i.blocks})
+        print(f"  {sp.eval_id:<20} {state}" + (f"  (blocks {', '.join(blocked)})" if blocked else ""))
+    if specs and not all(sp.complete for sp in specs.values()):
         print("\nnext: aot-evals validate, for each missing or invalid field")
     return 0
 
@@ -880,7 +886,7 @@ def main(argv: list[str] | None = None) -> int:
                     "the agent has several)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("start", help="the banner and the two phases; shown before anything else"
+    sub.add_parser("start", help="the banner and the three phases; shown before anything else"
                    ).set_defaults(fn=cmd_start)
 
     sub.add_parser("doctor", help="check the environment; paste the output into a bug report"
@@ -905,17 +911,18 @@ def main(argv: list[str] | None = None) -> int:
                    "boundary (default eval id: the component's name)")
     s.set_defaults(fn=cmd_init)
 
-    s = sub.add_parser("status", help="the phase, trust per category, what changed, and the next step")
+    s = sub.add_parser("status", help="the phase, each eval's spec and trust, what changed since its "
+                       "baseline, and the next step")
     s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_status)
 
-    s = sub.add_parser("validate", help="every problem across all gates; for 2.0 evals, the eval spec")
+    s = sub.add_parser("validate", help="every missing or invalid field of each eval spec, and the cases' problems")
     s.add_argument("--warnings", action="store_true", help="also print warnings and info (2.0: notes "
                    "and the defaults filled)")
     s.add_argument("--all", action="store_true", help="one line per problem, instead of grouping cases")
     s.set_defaults(fn=cmd_validate)
 
-    s = sub.add_parser("import", help="C0: import an export with its provenance")
+    s = sub.add_parser("import", help="import an export with its provenance (a frame to draw from)")
     s.add_argument("file")
     s.add_argument("--source", required=True, help="system and dataset, e.g. 'Datadog LLM Obs: prod-traces'")
     s.add_argument("--query", required=True, help="the query or filter that produced the export")
@@ -965,7 +972,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--dry-run", action="store_true", help="say what would change, write nothing")
     s.set_defaults(fn=cmd_draw)
 
-    s = sub.add_parser("screen", help="C7: screen cases")
+    s = sub.add_parser("screen", help="screen cases: reference, do-nothing, non-answer and liar screens")
     s.add_argument("--judges", action="store_true",
                    help="let calibrated judges count in the non-answer and liar screens (calls cost money)")
     s.add_argument("--case", action="append", help="limit to this case id (repeatable)")
@@ -999,7 +1006,7 @@ def main(argv: list[str] | None = None) -> int:
                    "timeout (default 5; 0 never stops)")
     s.set_defaults(fn=cmd_run)
 
-    s = sub.add_parser("label", help="C9: human labels per judge")
+    s = sub.add_parser("label", help="human labels per judge")
     s.add_argument("action", choices=["queue", "page", "import", "add", "status"])
     s.add_argument("--csv", help="import: the filled-in queue CSV")
     s.add_argument("--judge")
@@ -1013,7 +1020,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--open", action="store_true", help="queue, page: open the labelling page")
     s.set_defaults(fn=cmd_label)
 
-    s = sub.add_parser("agreement", help="C19: the suite's verdict on whole runs against a person's")
+    s = sub.add_parser("agreement", help="the eval's verdict on whole runs against a person's")
     s.add_argument("what", nargs="*", help="(nothing): measure; label queue|page|import|add|status; rule; regrade")
     s.add_argument("--run", action="append",
                    help="label queue, regrade: these runs (default: latest baseline); label import: attach "
@@ -1062,14 +1069,14 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("records", help="directory of <case-id>.t<trial>.json records")
     s.set_defaults(fn=cmd_replay)
 
-    s = sub.add_parser("calibrate", help="C10: measure a judge's backends on its labels")
+    s = sub.add_parser("calibrate", help="a judge's catch and clean pass rates per backend, on its labels")
     s.add_argument("--judge", required=True)
     s.add_argument("--backend", action="append", help="limit to these backends (default: all)")
     s.add_argument("--dry-run", action="store_true", help="print how many judge calls it would make")
     s.add_argument("--cached-only", action="store_true", help="use cached judgements; make no calls")
     s.set_defaults(fn=cmd_calibrate)
 
-    s = sub.add_parser("reliability", help="C11: self-consistency and cross-family agreement")
+    s = sub.add_parser("reliability", help="self-consistency and cross-family agreement (reliability, not validity)")
     s.add_argument("--judge", required=True)
     s.add_argument("--backend", action="append", help="two or more, from different families")
     s.add_argument("--m", type=int, default=3, help="sessions per item per backend (default 3)")
@@ -1083,7 +1090,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--backend", help="default: the judge's primary backend")
     s.set_defaults(fn=cmd_judge)
 
-    s = sub.add_parser("ops", help="E14: plane-B sweep against budgets")
+    s = sub.add_parser("ops", help="operational sweep (cost, latency, errors) against the spec's constraints")
     s.add_argument("--run", action="append")
     s.add_argument("--export", help="sweep an imported export instead of runs")
     s.add_argument("--field", action="append",
@@ -1097,12 +1104,12 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--exclude", action="append", help="glob of run outputs to leave out (repeatable)")
     s.set_defaults(fn=cmd_snapshot)
 
-    s = sub.add_parser("compare", help="C13: paired comparison of a candidate against the baseline")
+    s = sub.add_parser("compare", help="paired comparison of a candidate against the baseline, and the decision")
     s.add_argument("--baseline", action="append", help="baseline run id(s); default: the latest baseline")
     s.add_argument("--candidate", action="append", help="candidate run id(s); default: the latest candidate")
     s.set_defaults(fn=cmd_compare)
 
-    s = sub.add_parser("coverage", help="C14: coverage against the external taxonomy")
+    s = sub.add_parser("coverage", help="coverage of the bug-finding set against the eval's coverage list")
     s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_coverage)
 
@@ -1111,7 +1118,8 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--kind", choices=[k for k in journal.KINDS if k not in ("command", "milestone")],
                    default="step", help="step (default): about to do; finding; decision; question "
                    "(you have stopped for the person); progress")
-    s.add_argument("--gate", help="the gate this is about, e.g. C3")
+    s.add_argument("--gate", help="what this is about: a part (estimand, design, measurement, "
+                   "decision_rule) or an evidence gate id")
     s.add_argument("--detail", help="a second line: evidence, source, numbers")
     s.add_argument("--by", help="decision: who decided (the owner's name, or claude)")
     s.set_defaults(fn=cmd_log)
@@ -1129,14 +1137,14 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--workload", action="append", default=[], metavar="TAG",
                    help="the agent's workload tag(s); run with no options to list them")
     s.add_argument("--task", action="append", default=[], metavar="TEXT",
-                   help="one of the agent's task types, in plain words (repeatable)")
+                   help="one of the agent's use cases, in plain words (repeatable)")
     s.add_argument("--limit", type=int, default=8, help="how many fits to show (default 8)")
     s.add_argument("--include-saturated", action="store_true", help="also show benchmarks models have saturated")
     s.add_argument("--json", action="store_true", help="print the matches as JSON")
     s.add_argument("--validate", action="store_true", help="check the catalog against its schema")
     s.set_defaults(fn=cmd_benchmarks)
 
-    s = sub.add_parser("report", help="C18: write report/report.json")
+    s = sub.add_parser("report", help="write <eval>/report/report.json (aot-evals/report@2)")
     s.add_argument("--run", action="append", help="run id(s); default: the latest baseline")
     s.add_argument("--candidate", action="append", help="include a comparison with these candidate run(s)")
     s.set_defaults(fn=cmd_report)

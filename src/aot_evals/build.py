@@ -101,7 +101,7 @@ def _draft_coverage(ev: Evals, path, has_cases: bool) -> bool:
                 "entries": [{"id": f"situation.{c['id']}", "title": c.get("name") or c["id"]} for c in cols]})
     path.write_text(
         "# Drafted by `aot-evals build` from the situations public benchmarks test. Add the jobs from\n"
-        "# a document written for another purpose (product spec, help centre, tool surface).\n"
+        "# a document written for another purpose (product spec, help center, tool surface).\n"
         "# Commit this before the first case: coverage is measured only against a list that came first.\n"
         + yaml.safe_dump(tax, sort_keys=False))
     return True

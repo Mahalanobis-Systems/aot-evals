@@ -36,8 +36,8 @@ Then open Claude Code in your agent's repository and run the one command to reme
 The first time, it runs Assess: it finds your agents, asks which one to test and three
 questions about it, and writes a discovery report like the one above in about five minutes.
 Run `/aot-evals:start` again whenever you want to know where things stand: it names the phase
-(Assess, Build or Judge), how far each kind of task can be trusted, what changed since the last
-baseline, and carries on with the next step, stopping for your review at each checkpoint.
+(Assess, Build or Judge) of each eval, how far its number can be trusted, what changed since
+its baseline, and carries on with the next step, stopping for your review at each checkpoint.
 
 **Try it on a toy agent first (a few minutes).** In Claude Code, in any empty folder, ask:
 *"Run `aot-evals demo` and show me what it made."* It builds a toy online store's support agent
@@ -74,56 +74,69 @@ fix next. They rest on four things, and AOT Evals checks each one for your agent
 
 ## How it works
 
-Three phases, each ending in something handed to the next group of people.
+An eval exists to make a decision, so aot-evals treats each eval as a statistical estimator with
+four parts written down in one file, `eval.yaml`: the **estimand** (what number, about what, for
+which decision), the **sampling design** (which cases, drawn how), the **measurement model** (how
+wrong the grader is) and the **decision rule** (when to act). None of it is new: each part comes
+from a field that solved it long ago, from survey sampling to diagnostic testing to clinical
+trials ([docs/estimators.md](docs/estimators.md)). You meet them as three phases, each ending in
+something handed to the next group of people.
 
-**Assess (about 5 minutes).** AOT Evals scans your repository for agents and asks which one to
-test. It asks three questions: why you're testing it now, what the goals around it are, and what
-you'll use the tests for. Then four reads run side by side: how the agent works, its tools and
-where it could be tested safely, its traffic and the kinds of tasks it handles, and what data it
-touches and how private it is. You get a plain-English discovery report: an overview of the four
-pillars, the details behind each, and the next steps.
+**Assess (about 5 minutes): the estimand.** AOT Evals scans your repository for agents and asks
+which one to test. It asks three questions: what decision the tests will drive, whether some
+mistakes are much worse than others, and what a change should have to show before it ships. Then
+four reads run side by side: how the agent works and where its evals go (one end to end, plus one
+per subagent a team ships on its own), its tools and where it could be tested safely, its traffic
+and the kinds of request it handles, and what data it touches and how private it is. You get a
+plain-English discovery report.
 
-**Build (half a day for the first pass).** Engineering wires the agent to the contract, seeds
-cases from real runs with a check on each, runs the baseline, and hands the grader application to
-the people who will label. Everything else the method knows how to do (a coverage list, shares and
-budgets, screens, judge calibration) is an upgrade that raises trust in a number, and the report
-says which upgrades are still missing rather than refusing to run.
+**Build (half a day for the first pass): the design, the checks and the decision rule.**
+Engineering wires the agent to the contract, draws a quality set at random from real traffic
+(and writes hard cases to find bugs, checked against a coverage list), puts one counted check on
+each way the agent can fail, writes down the decision rule with the owner, runs the baseline, and
+hands the grader application to the people who will label. Nothing refuses to run because
+something is missing: a missing field nulls the numbers that depend on it, with the reason.
 
-**Judge (ongoing).** In the grader application (`aot-evals serve`), product owners, experts or
-end users label whole runs pass or fail, the suite
-is held to their verdicts, judges are calibrated on their labels, and their rulings become rules.
-Each category moves from provisional to validated on its own. When something changes, the agent,
-a new use case, a rule, a judge, `aot-evals status` names the change and the short path back.
+**Judge (ongoing): the grader's error rates.** In the grader application (`aot-evals serve`),
+product owners, experts or end users label whole runs pass or fail, the eval is held to their
+verdicts (its catch rate and clean pass rate), AI judges are measured on their labels, and their
+rulings become rules. When something changes (the agent, a use case, a check, a judge, the traffic
+mix), `aot-evals status` names the change and the way back.
 
 Under the hood:
 
-- **Three planes, reported separately:** correctness, operational cost, and trust in the
-  instruments.
-- **Two case sets:** one for finding errors, one for estimating quality.
-- **Commands C0–C19, each with an exit gate.** A gate is a trust upgrade, never a lock. Refusal
-  gates G1–G14 mean a number that can't be defended isn't printed.
-- **A fixed `report.json` schema**, which Claude renders into a local HTML report written for the
-  question being asked.
+- **A weighted headline.** θ̂ is the pass rate weighted by each use case's share of traffic and
+  the cost of a failure in it, with the per-use-case table beside it and an interval on both.
+- **Two pools:** a bug-finding set picked by hand to find failures, and a quality set drawn at
+  random with each case's inclusion probability. Only the second is a rate.
+- **Case counts from the decision rule's power**, with the judges' errors counted: a judge whose
+  mistakes would cost more than twice the cases of a code check doesn't count.
+- **Paired, clustered comparisons** of a changed agent, and non-inferiority tests for "no worse";
+  a component change ships only when the whole agent shows no regression too.
+- **A fixed `report.json` schema** (`aot-evals/report@2`), which Claude renders into a local HTML
+  report written for the question being asked.
 - **A local catalog of over 350 public agent benchmarks** ([references/benchmarks.md](references/benchmarks.md)).
   Assess matches your agent against it without a web search, and says what each fit is good for:
-  a grading design, a case template, a sandbox design or a baseline number.
-  The matches also set the columns of the report's golden test case grid: the situations
-  (unanswerable, ambiguous, forbidden, multi-turn, …) that benchmarks were built to test, laid
-  against your agent's own task types, so the empty cells are visible before a case is written.
-  Cases still come from your own traffic, never from a benchmark.
+  a grading design, a case template, a sandbox design or a baseline number. The matches also set
+  the situations (unanswerable, ambiguous, forbidden, multi-turn, …) the bug-finding set should
+  reach. Cases still come from your own traffic, never from a benchmark.
 
-The method, with every command, measurement and gate, is in [docs/method.md](docs/method.md).
+The reference for every command, file and gate is [docs/method.md](docs/method.md); why each rule
+holds is in [docs/problems.md](docs/problems.md) (by worked example) and
+[docs/statistics.md](docs/statistics.md) (the derivations). Coming from 1.x? `aot-evals migrate
+--to 2` converts a suite; see [CHANGELOG.md](CHANGELOG.md).
 
 <details>
 <summary><b>What ships</b></summary>
 
 | Part | Where |
 |---|---|
-| Skills: `start` (the one to remember: says where things stand and carries on), `assess` (the first phase), `build` (engineering: the lightest Build, then upgrades), `judge` (graders: the grader application, agreement, judges), `report`. All but `report` appear in the `/` menu | [skills/](skills/) |
-| `aot-evals` CLI: the deterministic half (gates, import, allocation, screening, runs, judge labelling, calibration and reliability, operational counters, `report.json`, checkpoints) | [bin/aot-evals](bin/aot-evals), [src/aot_evals/](src/aot_evals/) |
-| The suite the plugin keeps in your repository, `evals/agents/<agent>/` | [docs/method.md §3](docs/method.md#3-repository-contract); templates in [src/aot_evals/templates/evals/](src/aot_evals/templates/evals/) |
+| Skills: `start` (the one to remember: says where things stand, runs Assess, and carries on), `build` (engineering: the design, the checks, the decision rule, the baseline), `judge` (graders: the grader application, agreement, judges), `report`. All but `report` appear in the `/` menu | [skills/](skills/) |
+| `aot-evals` CLI: the deterministic half (the eval spec, import, plan and draw, screening, runs, labels, calibration and reliability, operational counters, comparisons and decisions, `report.json`) | [bin/aot-evals](bin/aot-evals), [src/aot_evals/](src/aot_evals/) |
+| The evals the plugin keeps in your repository, `evals/agents/<agent>/<eval>/` | [docs/method.md §4](docs/method.md#4-files); templates in [src/aot_evals/templates/evals/](src/aot_evals/templates/evals/) |
 | Case, code-check and judge templates | [templates/](templates/) |
-| Reference material: the eval-creation process, the agent-properties framework, sourced literature findings, the agent contract, judge backends | [references/](references/) |
+| The method's structure, its twelve problems and its statistics | [docs/](docs/) |
+| Reference material: sourced literature findings, the agent contract, judge backends, the benchmark catalog | [references/](references/) |
 | The grader application (`aot-evals serve`) | [src/aot_evals/serve.py](src/aot_evals/serve.py) |
 | A toy agent with two finished evals (`aot-evals demo`) | [examples/store/](examples/store/) |
 | Banner mod: draws the AOT EVALS banner in the terminal when `aot-evals start` runs | [hooks/](hooks/) |
@@ -138,33 +151,38 @@ The skills drive the CLI for you, but you can run it directly in a Claude Code s
 several agents in one repository, pass `--agent NAME` to every command.
 
 ```bash
-aot-evals demo [DIR]                             # a toy agent with a finished suite
+aot-evals demo [DIR]                             # the online store: two evals, both baselines, a change decided
 aot-evals doctor                                 # check the environment
-aot-evals --agent NAME init                      # create evals/agents/NAME/
-aot-evals status                                 # the phase, trust per category, what changed, what's next
-aot-evals status --gates                         # the gate table, C0–C19
-aot-evals import traces.jsonl --source ... --query ... --window ...   # C0
-aot-evals ops --export <id> --field cost_usd=... # E14: operational costs in week one
-aot-evals run --purpose smoke --question "..."   # C1: the agent runs end to end
-aot-evals allocate --write                       # C5
-aot-evals screen; aot-evals screen --read-by NAME --case ID           # C7
-aot-evals run --purpose baseline --k 5           # C12 (judges run with their primary backend)
+aot-evals build [--run]                          # create the evals from the discovery report; --run the baselines
+aot-evals --eval ID init [--component NAME]      # create one eval folder with its eval.yaml
+aot-evals status                                 # the phase, each eval's trust, what changed, what's next
+aot-evals validate                               # every missing or invalid field of each eval spec
+aot-evals import traces.jsonl --source ... --query ... --window ...   # a frame to draw from
+aot-evals --eval ID handoffs                     # a component eval's frame, from the end-to-end traces
+aot-evals ops --export <id> --field cost_usd=... # operational costs, before any label
+aot-evals run --purpose smoke --question "..."   # the agent runs end to end
+aot-evals --eval ID plan --write                 # case targets per use case, from the decision rule
+aot-evals --eval ID draw                         # the seeded random draw of the quality set
+aot-evals screen; aot-evals screen --read-by NAME --case ID
+aot-evals --eval ID run --purpose baseline       # k from the spec (judges run with their primary backend)
 aot-evals run ... --pause-every 20 --pause-seconds 900   # pace a rate-limited runtime
-aot-evals serve --open                           # the grader application: label, rule, triage, rules, judges
+aot-evals --eval ID serve --open                 # the grader application: label, rule, triage, rules, judges
 aot-evals agreement label queue --changed        # label only what the last change moved
-aot-evals label queue --judge J --open; aot-evals label import --judge J --csv ...  # C9, on a page
-aot-evals calibrate --judge J                    # C10 / E3 / E5
-aot-evals reliability --judge J --backend A --backend B   # C11 / E4
-aot-evals run --purpose candidate --k 5 --variable model=...    # a second version
-aot-evals compare; aot-evals coverage; aot-evals redundancy     # C13, C14, C15
-aot-evals report                                 # C18 → <suite>/report/report.json
+aot-evals agreement                              # the eval held to people
+aot-evals label queue --judge J --open; aot-evals label import --judge J --csv ...
+aot-evals calibrate --judge J                    # catch and clean pass rates per backend
+aot-evals reliability --judge J --backend A --backend B
+aot-evals --eval ID run --purpose candidate --variable model=...   # a changed agent
+aot-evals --eval ID compare                      # the paired comparison and the decision
+aot-evals coverage                               # the bug-finding set against the coverage list
+aot-evals --eval ID report                       # <eval>/report/report.json
 aot-evals activity --open                        # the live activity log (every command logs itself)
-aot-evals log "..." [--kind finding|decision|question] --gate C3     # add to it
-aot-evals checkpoint --gate C3 --ask "..." --open   # a checkpoint page for the owner
+aot-evals log "..." [--kind finding|decision|question]   # add to it
+aot-evals migrate --to 2 [--dry-run]             # convert a 1.x suite
 ```
 
-Drift monitoring (C16) and online evaluation (C17) are described in the method but not yet
-automated.
+Sequential looks, a reusable holdout for optimizers, drift monitoring and online evaluation are
+described in the method but not yet computed ([docs/method.md §13](docs/method.md#13-not-in-20)).
 
 </details>
 

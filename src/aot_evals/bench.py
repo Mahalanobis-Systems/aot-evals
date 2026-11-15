@@ -1,4 +1,4 @@
-"""The bench of graders (docs/method.md §4.2): what people do in the Judge phase, without an engineer.
+"""The bench of graders (docs/method.md §7): what people do in the Judge phase, without an engineer.
 
 The grader application (`aot-evals serve`) and the CLI share this module. It works on one eval
 (docs/v2-design.md §1). Everything it writes is a plain file in that eval's folder, or in the

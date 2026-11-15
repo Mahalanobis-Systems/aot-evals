@@ -1,4 +1,4 @@
-"""`aot-evals serve`: the grader application (docs/method.md §4.2), for one eval.
+"""`aot-evals serve`: the grader application (docs/method.md §7), for one eval.
 
 A local web application for the Judge phase, on one eval of an agent system (`--eval`, or the
 agent's only eval; docs/v2-design.md §1): people label whole runs (several people, blind to

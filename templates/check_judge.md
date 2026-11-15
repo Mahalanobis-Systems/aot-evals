@@ -8,9 +8,9 @@ detects: failure               # noul only: a "yes" means the failure is present
 # choice:  options: {grounded: "...", invented: "..."}   pass_options: [grounded]
 # score:   options: [Poor, Adequate, Good]               pass_min_level: 1
 inputs: [end.output, case.inputs.source_document]   # the only fields the judge sees (dotted paths into case / start / end)
-mode: binary                   # binary | pairwise (pairwise needs a different family from the agent, G4)
-min_tpr: 0.75                  # floors: below either, the judge is uncalibrated and greyed (G3)
-min_tnr: 0.75
+mode: binary                   # binary | pairwise (pairwise: a different family from both sides, both orders)
+# No floors here: the eval's measurement.max_inflation sets them. The judge counts once its catch
+# and clean pass rates, at their lower bounds, cost no more cases than that (docs/method.md §7).
 primary: jev                   # the backend whose verdicts count
 backends:
   jev:

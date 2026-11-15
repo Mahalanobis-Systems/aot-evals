@@ -1,7 +1,7 @@
 """Intervals and sizing arithmetic. Standard library only.
 
 Every function returns `None` rather than a number when the input cannot support one: the
-report's rule is that unknown values are `null`, never `0` (docs/method.md §8).
+report's rule is that unknown values are `null`, never `0` (docs/method.md §10).
 """
 
 from __future__ import annotations

@@ -5,7 +5,7 @@
 no web search, no model call, so it costs no time or tokens. The point is not to run these
 benchmarks. In this method, public benchmarks are a source of grading designs, case templates,
 sandbox designs and baseline numbers; the cases themselves come from the
-agent's own traffic (docs/method.md §1, principle 1).
+agent's own traffic (docs/method.md §1, principle 2).
 
 ## Matching
 
@@ -54,14 +54,14 @@ asker, injected instruction, person does a step. Each says what it catches, its 
 whether it applies to nearly every agent (`universal`), and the catalog entries that established
 it (`from`). `aot-evals benchmarks --workload ... --task ...` prints the situations the matched
 benchmarks test, plus the universal ones; the discovery report uses them as the columns of its
-golden test case grid, with the agent's task types as rows. A benchmark that tests a situation
+golden test case grid, with the agent's use cases as rows. A benchmark that tests a situation
 lists it under `situations`; `tests/test_benchmarks.py` checks that every `from` id exists and
 tags the situation back.
 
 ## Keeping it current
 
 - **Assess never searches.** It reads this file.
-- **Build may search.** When the `build` skill builds the taxonomy (C2) it can look for
+- **Build may search.** When the `build` skill writes an eval's coverage list it can look for
   benchmarks newer than the catalog for the agent's workload. Anything found goes into the report
   marked "not in the catalog", and into a pull request that adds it here with every field filled.
 - **`python3 scripts/benchmarks_refresh.py`** prints the names in Berkeley RDI's list that the

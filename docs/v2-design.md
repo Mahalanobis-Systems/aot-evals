@@ -1,8 +1,8 @@
 # aot-evals 2.0 design
 
-*Working design for building aot-evals 2.0; once 2.0 ships, [method.md](method.md) and the
-reference pages take over from it. It turns the model in [estimators.md](estimators.md) into
-files, fields and outputs. Until 2.0 is released, method.md describes 1.x. Terms follow
+*The design record for aot-evals 2.0: how the model in [estimators.md](estimators.md) became
+files, fields and outputs, and the decisions taken on the way (§10). [method.md](method.md) is the
+reference for what 2.0 does; where the two differ, method.md wins. Terms follow
 [estimators.md](estimators.md#terms); "spec" here always means an eval's `eval.yaml`.*
 
 Every field below traces to one of the four parts of an eval (estimand, sampling design,

@@ -1,6 +1,6 @@
-/* aot-evals report style: the Mahal Systems brand applied to docs/method.md §9.
-   Inlined into every report by `aot-evals report --html` (src/aot_evals/brand.py), after the
-   embedded @font-face rules. Brand colors only, plus a neutral grey ramp; light backgrounds only
+/* aot-evals report style: the Mahal Systems brand applied to the report skill's panels.
+   Inlined into every HTML report by the report skill, after the embedded @font-face rules, and
+   into the discovery and activity pages (src/aot_evals/brand.py). Brand colors only, plus a neutral grey ramp; light backgrounds only
    (the logo has no dark version). Tabular numerals; dense tables; no gradients or shadows. */
 
 :root {
@@ -122,7 +122,7 @@ details > summary { cursor: pointer; color: var(--forest); }
   tr.fail td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 
-/* ---- checkpoints and the activity log (docs/method.md §9) ---- */
+/* ---- the activity log and the discovery page ---- */
 .muted { color: var(--grey-muted); }
 .detail { color: var(--grey-muted); font-size: 12px; white-space: pre-wrap; }
 code { font-size: 12px; background: var(--light-forest); padding: 0 3px; }

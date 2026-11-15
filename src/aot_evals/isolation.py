@@ -1,4 +1,4 @@
-"""Keep the agent away from the answers (docs/method.md §4: the agent must not see the cases).
+"""Keep the agent away from the answers (docs/method.md §8: the agent must not see the cases).
 
 evals/ lives in the repository the agent runs in. An agent with a coding harness can grep its
 working directory, match a case file and read the expected answer. Two defences:

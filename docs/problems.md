@@ -1,6 +1,7 @@
 # Twelve problems every agent eval has to solve
 
-*Target design for aot-evals 2.0. Draft 4.*
+*Why each part of an aot-evals 2.0 eval matters, by worked example. [method.md](method.md) is the
+reference for what the tool does.*
 
 You don't need statistics to build trustworthy evals. You need to recognize twelve problems, because
 each one makes an eval say something that isn't true.

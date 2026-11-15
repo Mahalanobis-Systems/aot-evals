@@ -1,8 +1,10 @@
 # Judge backends
 
-A judge's spec (`evals/checks/judge/<check-id>.md`) declares one or more backends. Each backend
-returns a score s = P(pass) for an item. The `primary` backend's verdicts count once the judge is
-calibrated. The other backends exist for comparison (E5) and for reliability (C11).
+A judge's spec (`evals/agents/<agent>/<eval>/checks/judge/<check-id>.md`) declares one or more
+backends. Each backend returns a score s = P(pass) for an item. The `primary` backend's verdicts
+count once the judge's catch and clean pass rates are measured and within the eval's
+`max_inflation`. The other backends exist for comparison (`aot-evals calibrate` measures every
+backend on the same labels) and for reliability (`aot-evals reliability`).
 
 | `type` | Calls | Score | Cost per judgement |
 |---|---|---|---|
@@ -12,7 +14,7 @@ calibrated. The other backends exist for comparison (E5) and for reliability (C1
 
 ## `systemone`
 
-This is the typed-decision interface of a System One model such as TypeSafe's Jev (docs/method.md §5). It is
+This is the typed-decision interface of a System One model such as TypeSafe's Jev (docs/method.md §7). It is
 the same wire contract whether you call TypeSafe directly, a reseller, or a local open-weight
 server (LAYA), so only `base_url`, `api_key_env` and the auth header change.
 
@@ -49,7 +51,7 @@ jev:
 What we know about these models' probabilities, and how calibration handles it:
 - **Don't trust the confidence until it is measured.** The first independent measurement put
   Jev's calibration last of twelve models (ECE 0.246). Probabilities often saturate at exactly
-  0 or 1. C10 therefore picks the threshold on your labels and reports ECE and the Brier score.
+  0 or 1. `calibrate` therefore picks the threshold on your labels and reports ECE and the Brier score.
 - **`noul` returns a probability but no confidence field.** That probability is the score.
 - **An empty state comes back as a number (≈ 0.46), not an error.** The backend refuses to send
   an empty state and records an instrument error instead.
@@ -70,7 +72,8 @@ claude:
 - **No refusal fallback.** If the model refuses, the item gets an instrument error rather than a
   verdict from another model, because a judge is calibrated per model.
 - **Model family matters.** Use a different family from the agent's (`agent.yaml`
-  `model_family`). G4 refuses a same-family generative judge for pairwise grading.
+  `model_family`), and for pairwise grading a different family from both sides, judging both
+  orders (docs/statistics.md §3.5). 2.0 does not check this yet.
 
 ## `command`
 

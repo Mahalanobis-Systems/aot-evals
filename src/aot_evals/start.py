@@ -22,21 +22,27 @@ by Mahal Systems
 """
 
 PHASES = """\
-I'll build tests for one of your agents in three phases.
+I'll build tests for one of your agents in three phases. Each settles part
+of what a test needs before its number can be trusted.
 
-Assess (about 5 minutes): what the agent is for, and a first report.
+Assess (about 5 minutes): what the number is for.
   I'll scan this repository to find your agents and ask which one to test.
   Then I'll ask three questions about it, and read its code, tools, records
-  and data. You'll get a report with what I found and the likely ways forward.
+  and data. You'll get a report: what it handles, what a mistake in each
+  kind of request costs, and where its tests go.
 
-Build (half a day for the first pass): get the loop running.
-  I'll wire up a safe place to run it, turn real runs into test cases with a
-  check on each, and run the first full test. I'll only stop for things that
-  could touch real people, data or money.
+Build (half a day for the first pass): which cases, how they're checked,
+and when to act.
+  I'll wire up a safe place to run it, draw test cases at random from real
+  requests and write hard ones to find bugs, put a check on each way it can
+  fail, agree with you when a change is good enough to ship, and run the
+  first full test. I'll only stop for things that could touch real people,
+  data or money.
 
-Judge (ongoing): the people who know what good looks like take over.
-  They label runs in the grader application, the tests are held to their
-  verdicts, and each kind of task earns trust on its own.
+Judge (ongoing): how often the checks are wrong.
+  The people who know what good looks like label runs in the grader
+  application, AI judges are measured against them, and each eval earns
+  trust once it agrees with them.
 """
 
 
@@ -62,8 +68,8 @@ PILLARS = [  # (key in the report's front matter, headline, what it means, tag l
      "Runs that can't touch real people, data or money, and are fast and cheap to repeat.",
      "Safe · secure · efficient"),
     ("golden_use_cases", "Golden test cases",
-     "Examples drawn from real runs, grouped into the task types the agent actually handles.",
-     "Test cases · task types"),
+     "Examples drawn from real runs, grouped into the use cases the agent actually handles.",
+     "Test cases · use cases"),
 ]
 
 # Pillar headings in reports written before 0.1.1, still placed and numbered as their pillar.
@@ -179,7 +185,7 @@ def grid_html(grid: dict) -> str:
     if not cols or not rows:
         return ""
     vocab = {s["id"]: s for s in benchmarks.situations()}
-    head = ['<th>Task type</th>', '<th class="mod">Plain request<small>answerable, clear</small></th>']
+    head = ['<th>Use case</th>', '<th class="mod">Plain request<small>answerable, clear</small></th>']
     for c in cols:
         v = vocab.get(c["id"], {})
         head.append(f'<th class="mod">{_i(c.get("name") or v.get("name") or c["id"])}'
