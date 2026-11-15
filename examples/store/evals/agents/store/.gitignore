@@ -7,3 +7,6 @@ checks/judge/*.queue.csv
 pulled/
 *.trace.json
 __pycache__/
+*/runs/*/raw/
+*/checks/judge/*.queue.csv
+*/data/

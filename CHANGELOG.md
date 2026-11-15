@@ -33,6 +33,16 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
   the labels imported from it, the labelling page, `agreement label queue` and agreement.json's rows
   carry `use_case` in place of `category`; agreement.json adds `use_cases` beside `categories`, and
   `label status` counts labels per use case. `calibrate` no longer writes the 1.x floors' `evidence`.
+- **The grader application serves one 2.0 eval**: `aot-evals serve` takes `--eval` (optional when
+  the agent has one eval). Its overview shows the eval's spec (complete, or the fields it lacks),
+  its baseline and latest candidate, the eval against people (the spec's floors, labels per kind
+  against the count needed, what still stands in the way) and, per use case, cases, baseline
+  coverage, labelled runs and catch and clean pass rates; the 1.x phase, trust per category and
+  "since the baseline" panels are gone. Labels, rulings, triage, proposals and drafts are the eval's
+  own; an accepted rule joins the agent system's shared `labels/standard.md` with `use_cases`
+  (proposals and drafts say `use_case(s)` in place of `category`); its actions, like every eval's
+  commands, go to the agent system's shared activity log. `doctor` lists each eval with its cases,
+  checks a component eval's own `invoke.cwd`, and finds judges in every eval.
 - **Command judges in a 2.0 eval run from the repository root**, as agent.yaml's paths do; they
   ran from the agent's folder.
 - **`aot-evals migrate --to 2`** (stage 8, docs/v2-design.md §8) turns a 1.x suite into a 2.0

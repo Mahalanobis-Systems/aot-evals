@@ -133,15 +133,12 @@ def judge_states(ev: Evals) -> dict[str, dict]:
     from .judges import load_spec
     from .labels import load_labels
     from .reliability import load_reliability
-    from .repo import Eval
 
-    v2 = isinstance(ev, Eval)
     out: dict[str, dict] = {}
     for fm in ev.failure_modes():
-        # 2.0: the mode's counted check and its diagnostics (rule 12); 1.x: its list of checks
-        ids = ((([fm["check"]] if isinstance(fm.get("check"), str) else [])
-                + [d for d in fm.get("diagnostics") or [] if isinstance(d, str)]) if v2
-               else fm.get("checks") or [])
+        # the mode's counted check and its diagnostics (rule 12)
+        ids = (([fm["check"]] if isinstance(fm.get("check"), str) else [])
+               + [d for d in fm.get("diagnostics") or [] if isinstance(d, str)])
         for cid in ids:
             if cid in out or ev.check_type(cid) != "judge":
                 continue

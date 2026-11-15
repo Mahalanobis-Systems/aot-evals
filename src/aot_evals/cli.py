@@ -382,7 +382,7 @@ def cmd_label(args) -> int:
         path, picked = labels_mod.make_queue(ev, spec, runs, args.n, args.seed)
         by_cat: dict[str, int] = {}
         for it in picked:
-            by_cat[it["category"]] = by_cat.get(it["category"], 0) + 1
+            by_cat[it["use_case"]] = by_cat.get(it["use_case"], 0) + 1
         print(f"wrote {len(picked)} items to {path} (git-ignored), stratified: {by_cat}")
         page = label_page.write(ev, spec)
         print(f"label them on the page {page} (git-ignored), or fill the `label` column with "
@@ -464,8 +464,8 @@ def cmd_build(args) -> int:
 def cmd_serve(args) -> int:
     from . import serve as serve_mod
 
-    ev = _evals(args)
-    serve_mod.serve(ev, host=args.host, port=args.port, open_browser=args.open)
+    # one eval at a time: --eval, or the agent's only eval (docs/v2-design.md §1)
+    serve_mod.serve(_target(args), host=args.host, port=args.port, open_browser=args.open)
     return 0
 
 

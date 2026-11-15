@@ -1,7 +1,7 @@
-"""C9: a local page for labelling a judge's queue, instead of editing a CSV of JSON blobs.
+"""A local page for labelling a judge's queue, instead of editing a CSV of JSON blobs.
 
 `aot-evals label page --judge ID` reads `<check-id>.queue.csv` and writes one self-contained page
-to `data/labelling/<check-id>.html`. data/ is git-ignored in every suite, and the page carries the
+to `<eval>/data/labelling/<check-id>.html`. Each eval's data/ is git-ignored, and the page carries the
 same judge inputs as the queue, so it never enters git either.
 
 The page shows one item at a time: the judge's question and its Pass/Fail guidance, then each
@@ -22,14 +22,14 @@ from .brand import _esc, page
 from .judges import JudgeSpec, command_spec
 from .labels import QUEUE_FIELDS, queue_path
 from .markdown import render as md
-from .repo import Evals
+from .repo import Eval
 
 
-def page_path(ev: Evals, spec: JudgeSpec) -> Path:
+def page_path(ev: Eval, spec: JudgeSpec) -> Path:
     return ev.p("data", "labelling", f"{spec.id}.html")
 
 
-def read_queue(ev: Evals, spec: JudgeSpec) -> list[dict]:
+def read_queue(ev: Eval, spec: JudgeSpec) -> list[dict]:
     path = queue_path(ev, spec)
     if not path.exists():
         raise FileNotFoundError(f"no queue at {path}; run `aot-evals label queue --judge {spec.id}` first")
@@ -37,7 +37,7 @@ def read_queue(ev: Evals, spec: JudgeSpec) -> list[dict]:
         return list(csv.DictReader(f))
 
 
-def write(ev: Evals, spec: JudgeSpec) -> Path:
+def write(ev: Eval, spec: JudgeSpec) -> Path:
     rows = read_queue(ev, spec)
     items = []
     for r in rows:
@@ -122,7 +122,7 @@ SCRIPT = r"""
     const done = Object.keys(st.labels).length;
     $("count").textContent = (st.i + 1) + " of " + n + " · " + done + " labelled";
     $("progress").style.width = (100 * done / n) + "%";
-    $("meta").textContent = "case " + it.case_id + " · " + (it.category || "no category") +
+    $("meta").textContent = "case " + it.case_id + " · " + (it.use_case || "no use case") +
       (it.trial !== "" ? " · trial " + it.trial : "") + (it.run ? " · run " + it.run : "");
     const f = $("fields");
     f.innerHTML = "";

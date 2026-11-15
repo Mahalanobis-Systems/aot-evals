@@ -1,4 +1,4 @@
-"""C7 `screen`: is each case a valid test?
+"""`screen`: is each case a valid test? (rule 17)
 
 Three screens per case (M22):
 
@@ -12,7 +12,7 @@ Three screens per case (M22):
 
 The do-nothing screen runs twice: once with no output and once with a confident success claim
 as the output. A check that fails the first and passes the second is grading the agent's own
-report of success; it is recorded in `claim_sensitive_checks` and refused by G10.
+report of success; it is recorded in `claim_sensitive_checks`, and the case does not count.
 
 Three more screens use the case's reference answer (`expected_end_state.output`) and any other
 correct wordings of it (`expected_end_state.output_variants`), because a check that matches one
@@ -44,14 +44,14 @@ import json
 import re
 
 from .checks import run_check
-from .repo import Evals
+from .repo import Eval
 from .util import now_iso, write_json
 
 SUCCESS_CLAIM = ("Done. I completed everything you asked: all changes were made and verified "
                  "successfully.")
 
 
-def screen_case(ev: Evals, case: dict, judges=None) -> dict:
+def screen_case(ev: Eval, case: dict, judges=None) -> dict:
     """`judges`, when given, is a callable (start, end) -> [(check_id, passed)] for the case's
     calibrated judges. Their verdicts then count in every screen as the code checks' do: the
     reference must pass them, and doing nothing, a non-answer or the liar must fail one. A use case
@@ -158,7 +158,7 @@ def screen_case(ev: Evals, case: dict, judges=None) -> dict:
     else:
         result["wrong_number_fails"] = None
     if result["claim_sensitive_checks"]:
-        result["notes"].append("these checks pass when the agent merely claims success (G10)")
+        result["notes"].append("these checks pass when the agent merely claims success")
     return result
 
 
@@ -188,7 +188,7 @@ def _same(a, b) -> bool:
 
 
 def passes(screen: dict | None) -> bool:
-    """Whether a case has cleared every screen and counts toward gated numbers (G8)."""
+    """Whether a case has cleared every screen and counts toward the estimate (rule 17)."""
     if not screen or screen.get("dropped"):
         return False
     if screen.get("human_read") is not True or screen.get("reference_passes") is not True:
@@ -202,7 +202,7 @@ def passes(screen: dict | None) -> bool:
     return dn is True
 
 
-def judge_verdicts(ev: Evals, case: dict):
+def judge_verdicts(ev: Eval, case: dict):
     """(start, end) -> [(check_id, passed)] for the case's calibrated judges (calls cost money)."""
     from .judging import JudgeRunner
     from .report import judge_states
@@ -224,7 +224,7 @@ def judge_verdicts(ev: Evals, case: dict):
     return run
 
 
-def run_screen(ev: Evals, case_ids: list[str] | None = None, read_by: str | None = None,
+def run_screen(ev: Eval, case_ids: list[str] | None = None, read_by: str | None = None,
                drop: str | None = None, reason: str | None = None, judges: bool = False) -> list[dict]:
     """Screen cases and write each result into the case file's `screen` block."""
     rows = []
@@ -246,6 +246,6 @@ def run_screen(ev: Evals, case_ids: list[str] | None = None, read_by: str | None
         case_out = {k: v for k, v in case.items() if not k.startswith("_")}
         case_out["screen"] = screen
         write_json(path, case_out)
-        rows.append({"case": cid, "category": case.get("use_case", case.get("category")), **screen,
+        rows.append({"case": cid, "use_case": case.get("use_case"), **screen,
                      "passes": passes(screen)})
     return rows
