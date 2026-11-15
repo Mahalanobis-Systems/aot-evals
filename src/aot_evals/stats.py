@@ -1,7 +1,7 @@
 """Intervals and sizing arithmetic. Standard library only.
 
 Every function returns `None` rather than a number when the input cannot support one: the
-report's rule is that unknown values are `null`, never `0` (docs/method.md §10).
+report's rule is that unknown values are `null`, never `0` (docs/method.md).
 """
 
 from __future__ import annotations
@@ -91,7 +91,7 @@ def weighted_estimate(strata: Sequence[tuple[float, float, int]]) -> dict | None
     """Share-weighted pass rate over strata (weight, passes, n) with a normal interval. `passes`
     may be fractional (the sum of per-case pass rates when n counts cases).
 
-    Used for the quality estimate (M14): weights are each category's observed share of traffic.
+    Used for the quality estimate (M14): weights are each use case's observed share of traffic.
     """
     usable = [(w, s, n) for w, s, n in strata if n > 0 and w > 0]
     if not usable:
@@ -412,9 +412,8 @@ def rogan_gladen(fail_k: float, n: int, catch_k: float, catch_n: int, clean_k: f
     of all three inputs, so a judge calibrated on few labels gives a wide one. Undefined (None)
     unless J > 0: a grader no better than chance cannot be corrected.
 
-    Failure is the positive class here, as everywhere in 2.0. The 1.x signature took a generic
-    positive class with TPR and TNR; for pass as the positive, TPR is the clean pass rate and TNR
-    the catch rate, and the corrected pass rate is one minus this one.
+    Failure is the positive class here, as everywhere in aot-evals; the corrected pass rate is one
+    minus this one.
     """
     if min(n, catch_n, clean_n) <= 0:
         return None
@@ -422,8 +421,6 @@ def rogan_gladen(fail_k: float, n: int, catch_k: float, catch_n: int, clean_k: f
     out = rogan_gladen_rate(f_obs, f_obs * (1 - f_obs) / n, catch_k, catch_n, clean_k, clean_n)
     if out is None:
         return None
-    # `youden_j` is the 1.x key, kept beside `j` until stage 8.
-    out["youden_j"] = out["j"]
     out["method"] = "rogan_gladen_delta"
     return out
 
@@ -521,7 +518,7 @@ def judge_inflation(p: float, catch: float, clean: float) -> float | None:
     better than chance) or p is not strictly between 0 and 1.
 
     Pass lower confidence bounds on catch and clean for the conservative reading a judge floor
-    uses (docs/v2-design.md §4). It treats the rates as known: their own uncertainty adds a term
+    uses (docs/method.md). It treats the rates as known: their own uncertainty adds a term
     that shrinks only with more labels (statistics §3.3, third caution).
     """
     if not 0 < p < 1 or not (0 <= catch <= 1 and 0 <= clean <= 1):
@@ -1283,8 +1280,8 @@ def cochran_q(trials_by_case: Sequence[Sequence[bool]], draws: int = 5_000, seed
 
 def benjamini_hochberg(pvalues: Sequence[float | None]) -> list[float | None]:
     """Benjamini-Hochberg adjusted p-values (false discovery rate), None left in place. Use when
-    several categories are each tested: at 10 categories and alpha 0.05, two suites in five with
-    no real change would show at least one "significant" category by chance."""
+    several use cases are each tested: at 10 use cases and alpha 0.05, two suites in five with
+    no real change would show at least one "significant" use case by chance."""
     idx = [(p, i) for i, p in enumerate(pvalues) if p is not None]
     m = len(idx)
     out: list[float | None] = [None] * len(pvalues)
@@ -1372,12 +1369,12 @@ def t_quantile(p: float, df: float) -> float | None:
     return (lo + hi) / 2
 
 
-# ---- what the score is for: category weights (docs/statistics.md §1.1, §2.2) ---------------
+# ---- what the score is for: use case weights (docs/statistics.md §1.1, §2.2) ---------------
 
 def objective_weights(shares: dict[str, float | None], weights: dict[str, float | None]) -> dict[str, float] | None:
     """Normalized weights of the headline objective, sum(share x weight x pass rate) /
-    sum(share x weight). `weights` is how much a failure in each category matters, as a ratio;
-    equal weights give the traffic-weighted score as the special case. None when a category
+    sum(share x weight). `weights` is how much a failure in each use case matters, as a ratio;
+    equal weights give the traffic-weighted score as the special case. None when a use case
     lacks a share or a weight: an unstated weight is unknown, not 1."""
     if not shares or any(not isinstance(shares.get(c), (int, float)) for c in shares):
         return None
@@ -1389,10 +1386,10 @@ def objective_weights(shares: dict[str, float | None], weights: dict[str, float 
 
 
 def blind_spot(objective_weight: float, smallest_drop: float, overall_mde: float | None) -> dict | None:
-    """Can the headline score see a regression in this category? A drop of `smallest_drop` in a
-    category moves the objective by objective_weight x smallest_drop. If that is below the
-    comparison's detectable effect, the score is blind to it, and the category needs a guardrail
-    of its own: a non-inferiority test on that category alone. A 2% category that drops 10
+    """Can the headline score see a regression in this use case? A drop of `smallest_drop` in a
+    use case moves the objective by objective_weight x smallest_drop. If that is below the
+    comparison's detectable effect, the score is blind to it, and the use case needs a guardrail
+    of its own: a non-inferiority test on that use case alone. A 2% use case that drops 10
     points moves a traffic-weighted score by 0.2 points; a 100-case comparison detects about 11."""
     if overall_mde is None or objective_weight < 0 or smallest_drop <= 0:
         return None
@@ -1404,7 +1401,7 @@ def cases_per_arm(p1: float, p2: float, power_z: float = Z80_POWER) -> int | Non
     """Cases per version to detect a change from pass rate p1 to p2, unpaired, two-sided 5%:
     (z_a + z_b)^2 (p1 q1 + p2 q2) / (p1 - p2)^2. Pairing lowers it. Halving a failure rate takes
     55 cases at 50% failure, 118 at 30%, 431 at 10% and 4,665 at 1%: improvement is sized by the
-    change worth seeing, not by how hard the category is."""
+    change worth seeing, not by how hard the use case is."""
     if p1 == p2 or not (0 <= p1 <= 1 and 0 <= p2 <= 1):
         return None
     return math.ceil((Z95 + power_z) ** 2 * (p1 * (1 - p1) + p2 * (1 - p2)) / (p1 - p2) ** 2)
@@ -1414,20 +1411,20 @@ def allocation_target(state: str, *, smallest_change: float | None = None, flip_
                       tolerated_drop: float | None = None, costly_mode_rates: Sequence[float] = (),
                       guardrail_drop: float | None = None, floor: int = 3,
                       probability: float = 0.95) -> dict | None:
-    """One category's case target, from its state and its costly failure modes.
+    """One use case's case target, from its state and its costly failure modes.
 
     - state "improve" (room to improve): cases to see a net change of `smallest_change` given the
-      category's `flip_rate` (cases_for_flip_rate);
+      use case's `flip_rate` (cases_for_flip_rate);
     - state "solved" (the remaining failures explained): a regression guard that surfaces a
       `tolerated_drop` with `probability` (cases_to_surface: 29 for 10 points, 59 for 5,
       149 for 2, 299 for 1, past which a check on every production run beats offline cases);
     - on top, in either state: each rare, costly failure mode at its rate needs enough cases to
       surface it (one entry in `costly_mode_rates` per mode);
-    - if the blind-spot check fired, the cases a non-inferiority guardrail on the category alone
+    - if the blind-spot check fired, the cases a non-inferiority guardrail on the use case alone
       needs to see `guardrail_drop` (taken as a detection need, the conservative reading).
 
     The target is the largest of the needs (the same cases serve every job), never below
-    `floor`. Weights enter through the inputs: a heavier category gets a smaller smallest_change,
+    `floor`. Weights enter through the inputs: a heavier use case gets a smaller smallest_change,
     tolerated_drop and guardrail_drop, and more of its failure modes count as costly.
     """
     needs: dict[str, int | None] = {}
@@ -1449,8 +1446,8 @@ def allocation_target(state: str, *, smallest_change: float | None = None, flip_
 
 def neyman_allocation(strata: dict[str, tuple[float, float]], total: int, floor: int = 0) -> dict[str, int] | None:
     """Split `total` cases across strata in proportion to objective weight x standard deviation
-    (Neyman 1934), with weight = share x category weight: the narrowest interval on the weighted
-    objective for a fixed budget. `strata` maps a category to (objective weight, expected pass
+    (Neyman 1934), with weight = share x use case weight: the narrowest interval on the weighted
+    objective for a fixed budget. `strata` maps a use case to (objective weight, expected pass
     rate). A stratum near 0% or 100% still gets `floor`. Rounded by largest remainder."""
     if total <= 0 or not strata:
         return None
@@ -1590,12 +1587,12 @@ def failure_severity(*, writes: bool, reversible: bool | None, noticed: bool | N
 
 
 def cost_flags(failures: Sequence[tuple[str, str | None]], declared: dict[str, str | None]) -> dict:
-    """The uneven-cost check on real failures. `failures` is (category, severity) for each
-    baseline failure or triaged disagreement; `declared` is each category's declared cost
-    (low, medium, high) from the owner. A category is flagged when its failures span more than
+    """The uneven-cost check on real failures. `failures` is (use case, severity) for each
+    baseline failure or triaged disagreement; `declared` is each use case's declared cost
+    (low, medium, high) from the owner. A use case is flagged when its failures span more than
     one severity with a high one among them (uneven), or when any failure is worse than its
-    declared cost (e.g. a read-only request that wrote to a record, in a category the owner
-    rated low). `even` is true only when no category is flagged and every severity is known."""
+    declared cost (e.g. a read-only request that wrote to a record, in a use case the owner
+    rated low). `even` is true only when no use case is flagged and every severity is known."""
     by_cat: dict[str, list[str | None]] = {}
     for cat, sev in failures:
         by_cat.setdefault(cat, []).append(sev)
@@ -1611,5 +1608,5 @@ def cost_flags(failures: Sequence[tuple[str, str | None]], declared: dict[str, s
         out[cat] = {"failures": len(sevs), "severities": {s: known.count(s) for s in SEVERITY if s in known},
                     "worst": worst, "declared": decl, "uneven": uneven, "exceeds_declared": exceeds,
                     "flag": uneven or exceeds}
-    return {"categories": out, "unknown_severity": unknown,
+    return {"use_cases": out, "unknown_severity": unknown,
             "even": bool(out) and unknown == 0 and not any(v["flag"] for v in out.values())}

@@ -1,4 +1,4 @@
-"""`coverage`: the bug-finding set against its external coverage list (docs/v2-design.md §1, §3;
+"""`coverage`: the bug-finding set against its external coverage list (docs/method.md;
 estimators rule 10; statistics §2.5).
 
 The list (`<eval>/coverage.yaml`, named by `design.bug_finding_set.coverage`) comes from a document
@@ -10,7 +10,7 @@ is always 100%, so the list must name its source and be committed before the fir
 
 from __future__ import annotations
 
-from .repo import ALL_CATEGORIES, Eval
+from .repo import ALL_USE_CASES, Eval
 from .util import git, git_adding_commit, git_adding_commits, git_strictly_before, load_yaml
 
 
@@ -68,7 +68,7 @@ def coverage(ev: Eval) -> dict:
         for fm in ev.failure_modes():
             ids = [c["id"] for c in cases if entry in (c.get("coverage_entries") or [])
                    and (fm["id"] in (c.get("failure_modes") or [])
-                        or fm.get("use_cases") == ALL_CATEGORIES
+                        or fm.get("use_cases") == ALL_USE_CASES
                         or c.get("use_case") in (fm.get("use_cases") or []))]
             cells.append({"entry": entry, "failure_mode": fm["id"], "n": len(ids),
                           "bug_finding": sum(1 for c in cases if c["id"] in ids and c.get("pool") == "bug_finding"),

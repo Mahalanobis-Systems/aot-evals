@@ -47,9 +47,8 @@ def test_the_store_standard_is_shared_and_its_rules_apply_by_use_case(store_repo
     assert [r["id"] for r in rules_for(rules, "refund")] == [
         "does-what-was-asked", "says-what-happened", "asks-for-the-order-number"]
     assert [r["id"] for r in rules_for(rules, "address")] == ["does-what-was-asked", "says-what-happened"]
-    # a standard migrated from 1.x may still say categories
-    assert rules_for([{"id": "x", "says": "y", "categories": ["refund"]}], "refund")
-    assert not rules_for([{"id": "x", "says": "y", "categories": ["refund"]}], "address")
+    assert rules_for([{"id": "x", "says": "y", "use_cases": ["refund"]}], "refund")
+    assert not rules_for([{"id": "x", "says": "y", "use_cases": ["refund"]}], "address")
 
 
 def test_no_standard_is_named(store_repo):

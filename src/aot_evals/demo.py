@@ -1,4 +1,4 @@
-"""`aot-evals demo [DIR]`: the online store (examples/store; docs/v2-design.md §9), to try aot-evals
+"""`aot-evals demo [DIR]`: the online store (examples/store; docs/method.md), to try aot-evals
 in a few minutes.
 
 It copies the example (a support agent, its refund subagent, fakes for the order system and

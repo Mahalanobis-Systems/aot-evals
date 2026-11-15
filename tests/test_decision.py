@@ -1,5 +1,5 @@
-"""2.0 decision rules (docs/v2-design.md §5, §6; estimators §6; statistics §4): report.json's
-`decision` and `comparison`, and `compare` on a 2.0 eval.
+"""Decision rules (docs/method.md; estimators §6; statistics §4): report.json's
+`decision` and `comparison`, and `compare` on an eval.
 
 The fixture is test_estimand's store (the end-to-end eval, cost weights, a non-inferiority rule
 with a refund gate) on a toy agent with variants that make a known change:
@@ -451,7 +451,7 @@ def _refunds(s: Store, tmp_path, *, judge: bool, frame: dict | None = None) -> N
     """The store's refund-subagent eval (examples/store), on a toy subagent. With `judge`,
     breaks-policy is graded by a deliberately undersized judge of the fixture's own: catch 0.95 and
     clean 0.99, the store's policy judge's rates, on only 20 failure and 100 pass labels, so the
-    floor refuses it (v2-design §9: those rates need about 100 and 500; the store ships them, and
+    floor refuses it (docs/method.md: those rates need about 100 and 500; the store ships them, and
     test_store.py shows its judge counts). Without, the quantity is the code-checked wrong-amount
     rate."""
     from test_estimand import END_STATE, PASS, STORE
@@ -519,7 +519,7 @@ def _refunds(s: Store, tmp_path, *, judge: bool, frame: dict | None = None) -> N
 
 
 def test_an_undersized_judge_is_refused_and_the_decision_unknown(store, tmp_path):
-    """v2-design §9: at 20 and 100 labels a judge at the policy judge's rates costs more than
+    """docs/method.md: at 20 and 100 labels a judge at the policy judge's rates costs more than
     max_inflation 2.0 at its lower bounds, so θ̂ is null and the decision unknown (rule 13)."""
     _refunds(store, tmp_path, judge=True)
     r = _report(store, eval_id="refund-subagent")

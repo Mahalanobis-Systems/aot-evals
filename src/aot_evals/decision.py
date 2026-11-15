@@ -1,5 +1,5 @@
-"""The decision rule of a 2.0 eval (estimators §6; statistics §4; docs/v2-design.md §5, §6):
-report.json's `decision` and `comparison`, and `compare` on a 2.0 eval.
+"""The decision rule of an eval (estimators §6; statistics §4; docs/method.md):
+report.json's `decision` and `comparison`, and `compare` on an eval.
 
 **The tests.** Each gate is one of three one-sided tests at the rule's α:
 
@@ -45,8 +45,8 @@ recorded in `<eval>/report/looks.jsonl`, and deciding the same change again on o
 or trials added after looking) leaves the result unknown. `sequential` and `optimizer_holdout`
 need intervals this version does not compute, so their decisions are unknown, never a pass.
 
-**Which runs compare** (v2-design §5). `compare` refuses when an estimand, design or measurement
-hash differs from the current spec's, when the two sides are not one build apart (1.x G7), and
+**Which runs compare** (docs/method.md). `compare` refuses when an estimand, design or measurement
+hash differs from the current spec's, when the two sides are not one build apart, and
 when the decision rule changed since a run was made unless the new rule was on record no later than
 the first run decided on: committed in eval.yaml (`committed_rule`) or journaled (`aot-evals log
 --kind decision`), problem 12.
@@ -62,8 +62,8 @@ from pathlib import Path
 
 from . import stats
 from .measurement import alpha_of, judge_block, lower_bound
-from .report import operational
-from .report_v2 import Side, _budget
+from .report import Side, _budget
+from .results import operational
 from .spec import DEFAULT_POWER, part_hashes, quantity, use_cases
 from .util import ContractError, append_jsonl, git, load_yaml_text, now_iso, read_jsonl
 
@@ -439,7 +439,7 @@ def _required(ev, req: dict, base: Side, cand: Side | None) -> dict:
     rule = {k: req[k] for k in ("test", "margin", "bar", "alpha", "power") if req.get(k) is not None}
     rule.setdefault("alpha", _alpha(other.spec()))
     rule.setdefault("power", _power(other.spec()))
-    from .report_v2 import default_runs
+    from .report import default_runs
 
     if cand is None:
         if rule.get("test") in PAIRED:
@@ -584,7 +584,7 @@ def _when(ts: str | None) -> datetime | None:
 
 def committed_rule(ev, now: str | None, decided: list[dict]) -> str | None:
     """The commit of eval.yaml that records the current decision rule, when it counts as written
-    down before the decided runs (v2-design §5): the oldest commit of the newest unbroken stretch
+    down before the decided runs (docs/method.md): the oldest commit of the newest unbroken stretch
     of eval.yaml's history whose decision-rule hash is `now`. With the evals in the agent's
     repository it counts when it is an ancestor of each decided run's agent commit, or of the
     evals commit the run recorded (both are stamped when the run starts). With the evals in a
@@ -631,7 +631,7 @@ def committed_rule(ev, now: str | None, decided: list[dict]) -> str | None:
 
 def rule_change_problem(ev, manifests: list[dict], decided: list[dict]) -> str | None:
     """When the decision rule changed since a run was made, the change must be on record before
-    the first run decided on (v2-design §5; problem 12, rule 21): journaled (`log --kind
+    the first run decided on (docs/method.md; problem 12, rule 21): journaled (`log --kind
     decision`), or committed in eval.yaml (`committed_rule`). None when it is."""
     from . import journal
 
@@ -678,7 +678,7 @@ def _pct(v: float | None) -> str:
 
 
 def comparison(ev, base: Side, cand: Side) -> dict:
-    """report.json's `comparison` for a 2.0 eval: 1.x's paired comparison, with the change in
+    """report.json's `comparison` for an eval: the paired comparison, with the change in
     θ̂ design-weighted, its verdict from the two-sided sign-flip test per cluster at 2α (so
     "better" is exactly a superiority test passing at α), and no variance band."""
     spec = base.spec
@@ -806,7 +806,7 @@ def _combine(gates: list[dict], combine: str, multiplicity: str, alpha: float) -
 
 
 def decide(ev, base: Side, cand: Side | None, comp: dict | None = None) -> dict:
-    """report.json's `decision` (v2-design §6)."""
+    """report.json's `decision` (docs/method.md)."""
     spec = base.spec
     rule = spec.part("decision_rule")
     alpha, power = alpha_of(spec), _power(spec)

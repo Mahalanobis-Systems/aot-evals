@@ -1,4 +1,4 @@
-"""The lightest Build (build.py): a baseline with one generic check, and the component checklist,
+"""`aot-evals build` (build.py): a baseline with one generic check, and the component checklist,
 on the store (examples/store). Drafting a new agent from its discovery report is test_components'."""
 
 from __future__ import annotations

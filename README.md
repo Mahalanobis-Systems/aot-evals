@@ -157,8 +157,6 @@ The first run's discovery report covers the four things good evals rest on:
 | **Safe testing environment** | Runs that can't touch real people, data or money, and are fast and cheap to repeat. | Safe · secure · efficient |
 | **Golden test cases** | Examples drawn from real runs, grouped by the kinds of request the agent actually handles. | Test cases · kinds of request |
 
-Coming from 1.x? `aot-evals migrate --to 2` converts a suite. See [CHANGELOG.md](CHANGELOG.md).
-
 <details>
 <summary><b>What ships</b></summary>
 
@@ -211,11 +209,10 @@ aot-evals coverage                               # the bug-finding set against t
 aot-evals --eval ID report                       # <eval>/report/report.json
 aot-evals activity --open                        # the live activity log (every command logs itself)
 aot-evals log "..." [--kind finding|decision|question]   # add to it
-aot-evals migrate --to 2 [--dry-run]             # convert a 1.x suite
 ```
 
 Sequential looks, a reusable holdout for optimizers, drift monitoring and online evaluation are
-described in the method but not yet computed ([docs/method.md §13](docs/method.md#13-not-in-20)).
+described in the method but not yet computed ([docs/method.md §13](docs/method.md#13-not-computed-yet)).
 
 </details>
 
@@ -223,7 +220,7 @@ described in the method but not yet computed ([docs/method.md §13](docs/method.
 
 AOT Evals sends pseudonymous usage telemetry so we can see how many teams use it and how far they
 get: a random local install id, the milestone reached (the assessment started, discovery report written,
-a checkpoint at a gate, a report built), the gate id, the version, your OS name and a timestamp.
+a report built, the demo run), the version, your OS name and a timestamp.
 It **never** sends your code, agent, repository, cases, answers, file paths or IP address. A
 notice is shown before the first event, and it's off whenever Claude Code's own telemetry is off,
 on Bedrock, Google Cloud and Foundry, and in CI. See exactly what would be sent:

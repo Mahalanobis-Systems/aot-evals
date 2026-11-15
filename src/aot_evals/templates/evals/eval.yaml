@@ -1,4 +1,4 @@
-# The eval spec (docs/v2-design.md §2): this eval's four parts, written down. Fill every field;
+# The eval spec (docs/method.md): this eval's four parts, written down. Fill every field;
 # `aot-evals --eval __EVAL__ validate` lists what is missing and which numbers it blocks. An empty
 # field is reported as missing, never read as 0 or 1.
 eval: __EVAL__
@@ -66,6 +66,6 @@ decision_rule:
   use_case_gates: []               # [{use_case, test, margin}] for a use case decided on separately
 __ALSO__
   constraints:
-    default: {}                    # cost_per_success_usd, latency_p90_ms, ... as in 1.x budgets.yaml
+    default: {}                    # cost_per_success_usd, latency_p90_ms, ...
     use_cases: {}
 __INVOKE__

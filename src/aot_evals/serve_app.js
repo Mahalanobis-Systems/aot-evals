@@ -164,7 +164,7 @@
 
   // ---- rules ----------------------------------------------------------------------------------
   function rules(st) {
-    let h = `<section class="panel"><h2>The labelling standard</h2>` + (st.standard.rules.length ? `<ul>` + st.standard.rules.map((r) => `<li><strong>${esc(r.id)}</strong>: ${esc(r.says)} <span class="muted">${esc((r.use_cases || r.categories || ["*"]).join(", "))}${r.from ? " · " + esc(r.from) : ""}</span></li>`).join("") + `</ul>` : `<p class="muted">No rules yet.</p>`) + `</section>`;
+    let h = `<section class="panel"><h2>The labelling standard</h2>` + (st.standard.rules.length ? `<ul>` + st.standard.rules.map((r) => `<li><strong>${esc(r.id)}</strong>: ${esc(r.says)} <span class="muted">${esc((r.use_cases || ["*"]).join(", "))}${r.from ? " · " + esc(r.from) : ""}</span></li>`).join("") + `</ul>` : `<p class="muted">No rules yet.</p>`) + `</section>`;
     const open = st.proposals.filter((p) => p.status === "proposed");
     h += `<section class="panel"><h2>Proposed rules (${open.length})</h2><p class="muted">When rulings keep going the same way, propose the pattern as a rule. The owner accepts it into the standard, and the runs it could flip are listed for a recheck.</p>` +
       st.proposals.map((p) => `<div class="ga-item" data-rule-id="${esc(p.id)}"><p><strong>${esc(p.says)}</strong></p><p class="muted">${esc((p.use_cases || ["*"]).join(", "))} · proposed by ${esc(p.by)} on ${esc(p.at)} · ${esc(p.status)}${p.decided_by ? " by " + esc(p.decided_by) : ""}</p>` +
@@ -179,14 +179,14 @@
   function judges(st) {
     if (!st.judges.length) return `<section class="panel"><h2>Judges</h2><p>This eval has no AI judges: every check is code. Nothing to calibrate.</p></section>`;
     let h = st.judges.map((j) => `<section class="panel" data-judge="${esc(j.id)}"><h2>${esc(j.id)} <span class="muted">v${esc(j.version)}</span></h2><p><strong>${esc(j.question || "")}</strong></p>
-      <p>${j.labels} labels (${j.pass} pass, ${j.fail} fail)${j.labellers.length ? " by " + esc(j.labellers.join(", ")) : ""}. Calibration: <strong>${esc(j.calibration || "none")}</strong>${j.tpr != null ? ` · passes good work ${pct(j.tpr)}, catches failures ${pct(j.tnr)}` : ""}.</p>
+      <p>${j.labels} labels (${j.pass} pass, ${j.fail} fail)${j.labellers.length ? " by " + esc(j.labellers.join(", ")) : ""}. Calibration: <strong>${esc(j.calibration || "none")}</strong>${j.clean != null ? ` · passes good work ${pct(j.clean)}, catches failures ${pct(j.catch)}` : ""}.</p>
       ${j.missing_use_cases.length ? `<p class="muted">No labels yet in the use cases: ${esc(j.missing_use_cases.join(", "))}</p>` : ""}
       <div class="ga-actions"><button data-jlabel>Label items for this judge</button><button data-calibrate>Recalibrate</button></div>
       ${S.confirm && S.confirm.judge === j.id ? `<div class="ga-flash">${esc(S.confirm.message)} <button class="ga-btn solid" data-confirm>Confirm: ${S.confirm.calls} call(s)</button></div>` : ""}</section>`).join("");
     const q = S.judgeQ, it = q && q.items[q.i];
     if (q) {
       const j = st.judges.find((x) => x.id === q.judge);
-      h += `<section class="panel"><h2>Labelling for ${esc(q.judge)}</h2>` + (it ? `<p class="muted">Item ${q.i + 1} of ${q.items.length} · ${esc(it.use_case || it.category)} · ${esc(it.case_id)}</p><p><strong>${esc(j.question)}</strong></p>
+      h += `<section class="panel"><h2>Labelling for ${esc(q.judge)}</h2>` + (it ? `<p class="muted">Item ${q.i + 1} of ${q.items.length} · ${esc(it.use_case)} · ${esc(it.case_id)}</p><p><strong>${esc(j.question)}</strong></p>
         <p class="muted">Pass means this item does not show the failure this judge is for; fail means it does.</p>
         <div class="ga-fields">` + Object.keys(it.input).map((k) => `<div class="ga-field"><h3>${esc(k)}</h3><pre>${esc(show(it.input[k]))}</pre></div>`).join("") +
         `</div><div class="ga-actions"><button data-jl="pass">Pass</button><button data-jl="fail">Fail</button><textarea id="ga-jnote" placeholder="Note"></textarea></div>` : `<p>Nothing left to label for this judge.</p>`) + `</section>`;

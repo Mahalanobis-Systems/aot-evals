@@ -1,4 +1,4 @@
-"""`agreement`: the eval's verdict on whole runs against a person's (rule 15; docs/v2-design.md §6).
+"""`agreement`: the eval's verdict on whole runs against a person's (rule 15; docs/method.md).
 
 Acceptance: labelled runs are re-graded with the eval as it is now; a run the person fails and
 the eval passes is listed with the person's note; the eval is held to people until every dev

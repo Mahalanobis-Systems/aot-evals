@@ -20,7 +20,6 @@ identifier is created or anything is sent.
 |---|---|
 | `aot_evals_phase1_started` | `aot-evals start` |
 | `aot_evals_discovery_written` | `aot-evals discovery-page` |
-| `aot_evals_checkpoint` | `aot-evals checkpoint` |
 | `aot_evals_report_built` | `aot-evals report` |
 | `aot_evals_demo_run` | `aot-evals demo` |
 
@@ -29,8 +28,7 @@ Each event carries only these fields:
 | Field | Example | Why |
 |---|---|---|
 | install id | a random `uuid4`, stored in `${XDG_CONFIG_HOME:-~/.config}/aot-evals/install-id` (`0600`) | unique installs, and whether they return |
-| event | `aot_evals_checkpoint` | how far teams get |
-| gate | `C3` (checkpoints only; anything but a gate id is dropped) | where teams stop |
+| event | `aot_evals_report_built` | how far teams get |
 | version | `0.1.0` | adoption per release |
 | os | `Darwin` / `Linux` / `Windows` | platform mix |
 | timestamp | ISO-8601 UTC | when |

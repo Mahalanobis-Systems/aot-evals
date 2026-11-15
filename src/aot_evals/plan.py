@@ -1,6 +1,6 @@
-"""`plan` for a 2.0 eval: how many cases each use case and pool needs, worked out from the decision
-rule (docs/v2-design.md §2, "What the generated plan holds"; estimators rules 7 and 8; statistics
-§2.3, §3.3, §4.1). It replaces 1.x `allocate`.
+"""`plan` for an eval: how many cases each use case and pool needs, worked out from the decision
+rule (docs/method.md, "What the generated plan holds"; estimators rules 7 and 8; statistics
+§2.3, §3.3, §4.1).
 
 1. **The headline need.** The independent cases the decision rule's test needs at its α and power:
    `stats.threshold_n` for a threshold test (with the grader's error written into the test), or
@@ -37,8 +37,8 @@ STATUSES = ("filled", "short", "scheduled", "out_of_scope")
 
 
 def _judge_rates(ev: Eval, check_id: str) -> tuple[float, float] | None:
-    """A judge's current (catch, clean) from its calibration, primary backend: 1.x calls them
-    TNR and TPR. None when uncalibrated or stale."""
+    """A judge's current (catch, clean) from its calibration, primary backend. None when
+    uncalibrated or stale."""
     from .calibrate import is_current, load_calibration
     from .judges import load_spec
 
@@ -50,7 +50,7 @@ def _judge_rates(ev: Eval, check_id: str) -> tuple[float, float] | None:
     if not is_current(ev, spec, cal):
         return None
     m = (cal.get("backends") or {}).get(cal.get("primary") or spec.primary or "") or {}
-    catch, clean = m.get("catch", m.get("tnr")), m.get("clean", m.get("tpr"))
+    catch, clean = m.get("catch"), m.get("clean")
     if isinstance(catch, (int, float)) and isinstance(clean, (int, float)):
         return float(catch), float(clean)
     return None
@@ -157,7 +157,7 @@ def plan(ev: Eval, assumed_rate: float | None = None, flip_rate: float | None = 
     weights, source = use_case_weights(spec)
     ucs = use_cases(spec)
     over = (spec.part("design").get("quality_set") or {}).get("oversample") or {}
-    from .report_v2 import measured
+    from .report import measured
 
     base = measured(ev)
     base_uc = base.get("use_cases") or {}
@@ -318,7 +318,7 @@ def render(p: dict) -> str:
 
 
 def write(ev: Eval, p: dict) -> None:
-    header = ("# Written by `aot-evals plan --write` (docs/v2-design.md §2). Edit only `status` and\n"
+    header = ("# Written by `aot-evals plan --write` (docs/method.md). Edit only `status` and\n"
               "# `reason`: status is filled | short | scheduled | out_of_scope; scheduled and\n"
               "# out_of_scope need a reason. Everything else is recomputed.\n")
     ev.p(PLAN_FILE).write_text(header + dump_yaml(p))

@@ -73,7 +73,7 @@ claude:
   verdict from another model, because a judge is calibrated per model.
 - **Model family matters.** Use a different family from the agent's (`agent.yaml`
   `model_family`), and for pairwise grading a different family from both sides, judging both
-  orders (docs/statistics.md §3.5). 2.0 does not check this yet.
+  orders (docs/statistics.md §3.5). aot-evals does not check this yet.
 
 ## `command`
 

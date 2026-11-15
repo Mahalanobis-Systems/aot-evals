@@ -67,11 +67,9 @@ def checks(evals: str | None, agent: str | None) -> list[tuple[str, str, str]]:
         return rows
     eval_list = ev.evals()
     rows.append(("ok", "agent", f"{ev.root} (agent {ev.agent_name})"))
-    if ev.has_v1_suite and not eval_list:
-        rows.append(("FAIL", "evals", "a 1.x suite; `aot-evals migrate --to 2` converts it"))
     for e in eval_list:
         rows.append(("ok", f"eval {e.id}", f"{len(e.case_paths())} cases"))
-    if not eval_list and not ev.has_v1_suite:
+    if not eval_list:
         rows.append(("warn", "evals", "none yet (`aot-evals --eval end-to-end init`)"))
     inside = _version(["git", "-C", str(ev.repo_root), "rev-parse", "--is-inside-work-tree"]) == "true"
     rows.append(("ok" if inside else "warn", "repository",

@@ -1,6 +1,6 @@
 ---
 name: report
-description: The report for any phase of aot-evals - regenerate an eval's <eval>/report/report.json (schema aot-evals/report@2) and write one self-contained local HTML diagnostic from it, organized by the four parts (estimand, sampling design, measurement model, decision rule) and shaped around the user's question (should we ship this change? why did the candidate regress? is this eval any good? what does it cost?). Use when someone asks for an eval report, dashboard, scorecard or diagnostic for an agent that has an evals/ directory.
+description: The report for anyone working with aot-evals - the owner, engineering or the graders - regenerate an eval's <eval>/report/report.json (schema aot-evals/report@2) and write one self-contained local HTML diagnostic from it, organized by the four parts (estimand, sampling design, measurement model, decision rule) and shaped around the user's question (should we ship this change? why did the candidate regress? is this eval any good? what does it cost?). Use when someone asks for an eval report, dashboard, scorecard or diagnostic for an agent that has an evals/ directory.
 user-invocable: false
 ---
 
@@ -25,6 +25,12 @@ differently from it, never round it before display, and never fill in a `null`; 
 beside it (`null_reason`, `reason`, `corrected_reason`, `floor.reason`). When `refused` is set, the
 report leads with it: those runs measured a different quantity, and the next step is a baseline
 under the current spec. Terms mean what `${CLAUDE_PLUGIN_ROOT}/docs/estimators.md#terms` says.
+
+**Consequences first.** The panels carry the full numbers; the prose around them says what they
+mean for the reader's next step ("not yet: about 40 more refund cases would show it", "this judge
+needs about 80 more labeled failures before it counts"), and who takes that step (the owner,
+engineering or the graders). Explain an estimator or a test only when the reader asks, and then
+link `docs/estimators.md` or `docs/statistics.md`.
 
 ## 2. Ask what the report is for
 
@@ -88,7 +94,7 @@ line saying so.
 | `comparison` | Gains and losses as separate bars, each case listed; flips (b, c, flip rate) next to the net; Δθ̂ with its interval and the sign-flip p; the verdict and its reasons; per-use-case rows with adjusted p-values; bug-finding flips apart; new budget breaches. No net-only view. When `refused`, the refusal instead | `comparison` |
 | `operational` | Per use case: cost per success, latency p50 and p90, tokens, cache hits, errors by outcome code, against the constraints. **Next to the correctness panels, never merged with them** | `use_cases[].operational`, `decision.constraints` |
 | `gates` | The evidence gates by part (agent contract, design, measurement), pass, fail or n/a, with each failure's detail and what it means for the number | `gates`, `measurement.gates` |
-| `next` | Next steps, each with the command that clears it, built from `spec.missing`, failed gates, `measurement.gates`, and the decision's reasons and `cases_needed` | those keys |
+| `next` | Next steps, grouped by who takes them (the owner, engineering, the graders), each with what it would settle and the command that clears it, built from `spec.missing`, failed gates, `measurement.gates`, and the decision's reasons and `cases_needed` | those keys |
 
 ### Rules
 
@@ -115,5 +121,5 @@ the "waiting for you" banner, and stop:
 aot-evals log "Report ready: <eval>/report/report-<date>.html" --kind question
 ```
 
-Give the user the path, the headline in two sentences (θ̂ with its interval, and the decision), and
-the first next step.
+Give the user the path, the headline in two plain sentences (the number with its range, and what
+the decision rule says to do), and the first next step with who takes it.

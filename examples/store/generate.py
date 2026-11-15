@@ -6,8 +6,8 @@ judges' labels. Run it from the repository root when the example changes:
 Everything is seeded, so a run writes the same files. What it writes:
 
 - `traces.jsonl`: an export of the support agent's October traces, as a team would export it
-  from its observability stack after review (each row carries the case fields, v2-design §3).
-  Refund traces record the handoff to the refund subagent in stage 7's format, `handoffs: [{to,
+  from its observability stack after review (each row carries the case fields, docs/method.md).
+  Refund traces record the handoff to the refund subagent as `handoffs: [{to,
   use_case, order_template, trigger, inputs, start_state, expected_end_state}]`, which is what
   `aot-evals --eval refund-subagent handoffs` extracts the subagent's frame from. The export holds
   a random sample of each kind of request (refunds, and gift-card refunds among them, sampled more
@@ -17,7 +17,7 @@ Everything is seeded, so a run writes the same files. What it writes:
   a cluster key, including the policy corners (the 30th and 31st day, partial refunds, gift cards,
   a missing order number).
 - `refund-subagent/checks/judge/<judge>.labels.jsonl`: a person's verdicts on past refund runs,
-  about 100 failures and 500 passes per judge (v2-design §9), chosen so the toy judges' error rates
+  about 100 failures and 500 passes per judge (examples/store/README.md), chosen so the toy judges' error rates
   on them are exactly catch 0.95 / clean 0.99 and catch 0.80 / clean 0.90.
 """
 

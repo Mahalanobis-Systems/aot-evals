@@ -13,7 +13,7 @@ handoff across a context boundary in a `handoffs` list:
 ```
 
 `to` names the component as agent.yaml's `components` does. The other fields are what the
-component receives and how its case is graded, the fields a frame row carries (v2-design §3), plus
+component receives and how its case is graded, the fields a frame row carries (docs/method.md), plus
 the component's `use_case` and whatever field its eval's `cluster_key` names. A handoff may nest
 them under `input` instead.
 

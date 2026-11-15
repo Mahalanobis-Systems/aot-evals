@@ -1,4 +1,4 @@
-"""Judges (docs/v2-design.md §4): labels, calibration in catch and clean pass rates, backends
+"""Judges (docs/method.md): labels, calibration in catch and clean pass rates, backends
 compared on the same labels, judges applied to past runs, and the backends' wire contracts.
 
 The fixture is the store (conftest `store_repo`), whose refund-subagent eval gets a judge of the
@@ -219,7 +219,7 @@ def test_always_pass_judge_is_caught_by_its_catch_rate_and_does_not_count(store_
     assert m["clean"] == 1.0 and m["catch"] == 0.0 and m["j"] == 0.0
     assert m["labels_per_kind"] == {"fail": 34, "pass": 50}
     # labels of both kinds and a verdict on each: calibrated; the floor is what refuses it
-    assert cal["status"] == "calibrated" and "min_tpr" not in cal
+    assert cal["status"] == "calibrated"
     assert cal["recommendation"] is None  # its lower bounds give no finite inflation
 
     s.commit("calibration")
@@ -248,7 +248,7 @@ def test_system_one_and_generative_compared_on_the_same_labels(store_repo, fake_
     assert not llm["probabilistic"] and llm["threshold"] is None
     for b in (so, llm):
         assert b["catch"] >= 0.75 and b["clean"] >= 0.75 and b["labels_per_kind"] == {"fail": 34, "pass": 50}
-        assert b["catch"] == b["tnr"] and b["clean"] == b["tpr"]  # the 1.x names kept beside them
+        assert "tpr" not in b and "tnr" not in b
     assert so["cost_per_judgement"] < llm["cost_per_judgement"]
     # the backend whose lower bounds cost the fewest cases at 3%; never the rubber stamp
     rec = cal["recommendation"]["backend"]
@@ -294,13 +294,13 @@ def test_reliability_reports_cross_family_agreement_next_to_validity(store_repo,
     assert rel["backends"]["so"]["self_consistency"] == 1.0  # the fake is deterministic
     assert abs(sum(rel["three_level"].values()) - 1.0) < 1e-9
     assert rel["cross_family"][0]["agreement"] is not None
-    assert rel["backends"]["llm"]["majority_vs_labels"]["tpr"] is not None
+    assert rel["backends"]["llm"]["majority_vs_labels"]["clean"] is not None
 
     from aot_evals.reliability import measure
 
     spec = load_spec(judge_path(s))
     sub = measure(s.ev(EVAL), spec, ["so", "llm"], m=1, n=20)
-    assert sub["backends"]["so"]["majority_vs_labels"]["tnr"] is not None  # both kinds kept
+    assert sub["backends"]["so"]["majority_vs_labels"]["catch"] is not None  # both kinds kept
     spec.meta["backends"]["llm"]["family"] = "typesafe"
     with pytest.raises(ValueError, match="one model family"):
         measure(s.ev(EVAL), spec, ["so", "llm"], m=1)

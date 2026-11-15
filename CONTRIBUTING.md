@@ -95,10 +95,10 @@ The release also attaches the method as published files, built by `scripts/build
 `evals.json` (schema `aot-evals/site@2`: the method, the three guiding documents with their terms
 and rules, the online-store example, practice findings, benchmark catalog, situations and
 templates as data, which mahalsystems.ai imports) and `aot-evals-method-<version>.zip` (the same
-as plain files, to download and read without the plugin). The four parts, the three phases, the
+as plain files, to download and read without the plugin). The four parts, the three roles, the
 commands, the spec's fields, report.json's keys and the gates are parsed from the tables in
-docs/method.md, so keep their columns as they are; `tests/test_build_site.py` fails if a table no
-longer parses or the commands table misses a CLI command, and `tests/test_docs_links.py` fails on
+docs/method.md, so keep their columns as they are; `tests/test_build_site.py` fails if a table doesn't
+parse or the commands table misses a CLI command, and `tests/test_docs_links.py` fails on
 any relative link or `#anchor` that doesn't resolve. To see what a release
 will publish:
 

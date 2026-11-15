@@ -1,16 +1,17 @@
 # The aot-evals method
 
-This is the reference for what aot-evals 2.0 does: the principles, the four parts of an eval and
-the three phases that settle them, where evals go, the files kept in your repository, the eval
-spec, cases, checks and runs, every command, `report.json`, the gates, and what `status` reports.
-Terms mean what [estimators.md](estimators.md#terms) says. Why each rule holds is derived in
+This is the reference for what aot-evals does: the principles, the four parts of an eval and
+the three roles that settle them, where evals go, the files kept in your repository, the eval
+spec with every field, cases, checks and runs, which runs can be compared, every command,
+`report.json`, the run manifest, the gates, and what `status` reports. Terms mean what
+[estimators.md](estimators.md#terms) says. Why each rule holds is derived in
 [statistics.md](statistics.md) and shown by worked example in [problems.md](problems.md); this page
 links to those sections instead of repeating them.
 
 ## Contents
 
 1. [Principles](#1-principles)
-2. [The four parts and the three phases](#2-the-four-parts-and-the-three-phases)
+2. [The four parts and the three roles](#2-the-four-parts-and-the-three-roles)
 3. [Where evals go](#3-where-evals-go)
 4. [Files](#4-files)
 5. [The eval spec](#5-the-eval-spec)
@@ -20,8 +21,8 @@ links to those sections instead of repeating them.
 9. [Commands](#9-commands)
 10. [report.json](#10-reportjson)
 11. [Gates](#11-gates)
-12. [Status: phase and trust](#12-status-phase-and-trust)
-13. [Not in 2.0](#13-not-in-20)
+12. [Status: trust and what's next](#12-status-trust-and-whats-next)
+13. [Not computed yet](#13-not-computed-yet)
 14. [Lineage](#14-lineage)
 15. [References](#15-references)
 
@@ -39,8 +40,8 @@ never enter git.
 **The example.** Every section below uses the online store in
 [examples/store/](../examples/store/README.md): a support agent whose orchestrator answers order,
 return and address requests and hands refunds to a refund subagent owned by another team. It has
-two evals, `end-to-end` and `refund-subagent`. `aot-evals demo` copies it into a new repository and
-runs it.
+two evals, `end-to-end` and `refund-subagent`, and its README says what each file shows.
+`aot-evals demo` copies it into a new repository and runs it.
 
 ---
 
@@ -76,7 +77,7 @@ runs it.
 
 ---
 
-## 2. The four parts and the three phases
+## 2. The four parts and the three roles
 
 An eval's number means something only when its four parts are written down
 ([estimators.md](estimators.md)). Each part has its own problems, rules and derivations:
@@ -88,18 +89,20 @@ An eval's number means something only when its four parts are written down
 | Measurement model | How wrong is the grader? | `measurement:` (one counted check per failure mode, trials, the correction, `max_inflation`, the floors against people) | [6](problems.md#6-your-grader-is-wrong-sometimes), [7](problems.md#7-hold-the-whole-eval-to-a-person), [8](problems.md#8-run-it-more-than-once) | [statistics §3](statistics.md#3-the-measurement-model) |
 | Decision rule | When do we act? | `decision_rule:` (the test, bar or margin, α, power, looks, gates, `also_requires`, constraints) | [9](problems.md#9-a-clean-run-isnt-a-clean-bill-of-health), [10](problems.md#10-compare-case-by-case), [11](problems.md#11-no-difference-isnt-no-worse), [12](problems.md#12-stop-peeking) | [statistics §4](statistics.md#4-the-decision-rule) |
 
-People meet the method as **three phases**, Assess, Build and Judge. Each settles some of the
-parts, and the skills and `status` speak in phases:
+People settle the parts in **three roles**: the owner, engineering, and the people who know what
+good looks like. They usually work at the same time, not one after another: graders can label the first
+runs while engineering is still writing checks, and the owner states a cost or a margin whenever it
+comes up.
 
-| Phase | Who | Settles | Skill | Commands |
+| Role | Who | Settles | Skill | Commands |
 |---|---|---|---|---|
-| Assess | Claude with the agent's owner, about 5 minutes | the estimand: what the agent is for, its context boundaries (where its evals go), its use cases with their shares and the cost of a failure in each, the decision each eval drives | `start` | `start`, `benchmarks`, `discovery-page` |
-| Build | engineering, about half a day for a first pass | the agent contract and sandbox; the sampling design (frames, the drawn quality set, the bug-finding set and its coverage list, cluster keys); the measurement model's checks and trials; the decision rule; a baseline under the current spec | `build` | `build`, `init`, `import`, `handoffs`, `plan`, `draw`, `screen`, `run`, `compare`, `coverage`, `ops`, `replay`, `snapshot` |
-| Judge | the people who know what good looks like, and whoever facilitates them | the measurement model's error rates: whole-run labels, the eval held to people, each judge's catch and clean pass rates | `judge` | `serve`, `agreement`, `label`, `calibrate`, `reliability`, `judge apply` |
+| The owner | a product owner or team lead, with Claude; the first run takes about 5 minutes | the estimand: what the agent is for, which mistakes cost most, what a change must show before it ships; from discovery, its context boundaries (where its evals go) and its use cases with their shares | `start` | `start`, `benchmarks`, `discovery-page` |
+| Engineering | developers; about half a day for a first pass | the agent contract and sandbox; the sampling design (frames, the drawn quality set, the bug-finding set and its coverage list, cluster keys); the measurement model's checks and trials; the decision rule written down; baselines and candidate runs | `build` | `build`, `init`, `import`, `handoffs`, `plan`, `draw`, `screen`, `run`, `compare`, `coverage`, `ops`, `replay`, `snapshot` |
+| Graders | the people who know what good looks like (experts, support staff, end users), and whoever facilitates them | the measurement model's error rates: whole-run labels, rulings on disagreements, the rules of the labeling standard, the eval held to people, each judge's catch and clean pass rates | `judge` | `serve`, `agreement`, `label`, `calibrate`, `reliability`, `judge apply` |
 
-The `report` skill writes an HTML diagnostic from report.json in any phase. The phases overlap in
-practice: the owner states costs and the margin during Build, and a change to the agent sends an
-eval back to Build for a candidate run. `status` says which phase each eval is in (§12).
+`start` asks the owner its three questions on the first run and, after that, says where every eval
+stands and who has the next step. The `report` skill writes an HTML diagnostic from report.json for
+anyone who asks. Below, **graders** is short for the people who know what good looks like.
 
 ---
 
@@ -155,7 +158,7 @@ An agent system has one folder, and each eval of it has a folder inside it:
 ```
 evals/agents/<agent>/            the agent system
   agent.yaml                     the system's inventory (its components) and how to invoke it end to end
-  discovery.md, discovery.html   the Assess report and its page
+  discovery.md, discovery.html   the discovery report from the first run of `start`, and its page
   env/                           sandbox fakes and the seed and observe hooks, shared, hashed into every run
   data/                          imported traces (the frames), ignored by git; export.manifest.json records each
   labels/standard.md             the labeling standard, shared
@@ -176,7 +179,7 @@ evals/agents/<agent>/            the agent system
 | File | Part | Written by | Holds |
 |---|---|---|---|
 | `agent.yaml` | agent contract, estimand | `build`, then people | `invoke` (command, cwd, timeout, hooks, env, `isolate`), models per call site, tools, `components` |
-| `discovery.md` | estimand | the `start` skill (Assess) | front matter (overview, `boundaries`, `components`, the case grid, next steps) and the report |
+| `discovery.md` | estimand | the `start` skill, on the first run | front matter (overview, `boundaries`, `components`, the case grid, next steps) and the report |
 | `env/` | agent contract | engineering | the sandbox; its hash is every manifest's `fakes_sha256`, and a resume refuses changed fakes |
 | `data/export.manifest.json` | sampling design | `import`, `handoffs` | each import's source, query, window, hash and, for a handoff frame, where its handoffs came from |
 | `labels/standard.md` | measurement | people, through `serve` | the rules a person applies when failing a run; accepted rules carry their `use_cases` |
@@ -200,49 +203,107 @@ its definition, not its calibration.
 
 ## 5. The eval spec
 
-`eval.yaml` is the four parts written down, plus `invoke` for a component eval. The store's refund
-eval, abridged ([the full file](../examples/store/evals/agents/store/refund-subagent/eval.yaml)):
+`eval.yaml` is the four parts written down, plus `invoke` for a component eval. Every field traces
+to one of the four parts or to the agent contract. The store's refund eval
+([the file](../examples/store/evals/agents/store/refund-subagent/eval.yaml)):
 
 ```yaml
 eval: refund-subagent
-version: 1.0                       # major: estimand, weights, use cases, design or checks changed
+version: 1.0                       # major.minor; see estimators §9 for which changes are major
+
 estimand:
-  unit: {kind: component, component: refund-subagent, boundary: handoff from the orchestrator's refund route}
+  unit:
+    kind: component                # system | component
+    component: refund-subagent     # for a component: what it is, named in agent.yaml
+    boundary: handoff from the orchestrator's refund route
   quantity: failure_rate:breaks-policy   # pass_rate | failure_rate:<failure mode id>
-  population: {frame: refund-handoffs-2026-10, window: 2026-10-01/2026-10-31, environment: env/}
+  population:
+    frame: refund-handoffs-2026-10 # an import id in data/export.manifest.json
+    window: 2026-10-01/2026-10-31
+    environment: env/              # the sandbox; its hash goes in every manifest
   use_cases:
-    - {id: full-refund, definition: ..., example: tr_8812, share: 0.80, cost: 50}
-    - {id: partial-refund, definition: ..., example: tr_9017, share: 0.15, cost: 50}
-    - {id: gift-card, definition: ..., example: tr_9230, share: 0.05, cost: 20}
-  share_source: refund-handoffs-2026-10
+    - id: full-refund
+      definition: Refund of a whole order inside the policy window.
+      example: tr_8812             # a trace id from the frame
+      share: 0.80
+      cost: 50                     # what one failure costs, in any unit, relative to the others
+    - id: partial-refund
+      definition: Refund of some items, or a partial amount.
+      example: tr_9017
+      share: 0.15
+      cost: 50
+    - id: gift-card
+      definition: Refund to a gift card instead of the original payment.
+      example: tr_9230
+      share: 0.05
+      cost: 20
+  share_source: refund-handoffs-2026-10   # where the shares were measured
   weights: cost                    # traffic (w = share) | cost (w ∝ share × cost) | {use_case: w}
-  decision: {action: ship a change to the refund subagent, owner: refunds team, cadence: weekly}
+  decision:
+    action: ship a change to the refund subagent
+    owner: refunds team
+    cadence: weekly
+
 design:
-  quality_set: {selection: stratified_random, seed: 1234, oversample: {gift-card: 4}}
-  bug_finding_set: {coverage: coverage.yaml}
-  cluster_key: order_template
+  quality_set:
+    selection: stratified_random   # the only selection allowed for the quality set
+    seed: 1234
+    oversample: {gift-card: 4}     # draw a use case at k times its share; π records it
+  bug_finding_set:
+    coverage: coverage.yaml        # the external list it is checked against
+  cluster_key: order_template      # case field that marks related cases (estimators rule 9)
+
 measurement:
   failure_modes:
-    - {id: breaks-policy, use_cases: "*", check: policy-judge, diagnostics: [policy-judge-weak]}
-    - {id: wrong-amount, use_cases: "*", check: amount-matches}
-    - {id: unrequested-change, use_cases: "*", check: no-side-effects, side_effect: true}
-    - {id: wrong-reply, use_cases: "*", check: reply-matches-refund}
-  trials: 3                        # or auto
-  correction: rogan_gladen         # none | rogan_gladen | ppi
-  max_inflation: 2.0
-  people: {floors: {catch: null, clean: null}, margin: 0.10, labels_per_kind: auto}
+    - id: breaks-policy
+      description: Refunds an order the policy does not allow, or refuses one it does.
+      use_cases: "*"
+      check: policy-judge          # the one check that counts (rule 12)
+      diagnostics: [policy-judge-weak]   # other checks on this mode, reported, never counted
+    - id: wrong-amount
+      use_cases: "*"
+      check: amount-matches
+    - id: unrequested-change
+      use_cases: "*"
+      check: no-side-effects
+      side_effect: true            # at least one counted side-effect check is required
+    - id: wrong-reply
+      use_cases: "*"
+      check: reply-matches-refund
+  trials: 3                        # or: auto (from the measured variance split, rule 16)
+  correction: rogan_gladen         # none | rogan_gladen | ppi; the judge's labels are on past runs
+  max_inflation: 2.0               # how many times more cases a judge may cost (statistics §3.3)
+  people:
+    floors: {catch: null, clean: null}   # the eval against people; null: from max_inflation, as for a judge
+    margin: 0.10                   # floors are shown with this non-inferiority margin (statistics §4.2)
+    labels_per_kind: auto          # or a number; auto sizes from the margin
+
 decision_rule:
   test: threshold                  # superiority | non_inferiority | threshold
-  bar: 0.05
+  quantity: failure_rate:breaks-policy   # defaults to estimand.quantity; must match it
+  bar: 0.05                        # threshold only
+  margin: null                     # non_inferiority and superiority: the smallest change that matters
   alpha: 0.05
   power: 0.80
   looks: fixed                     # fixed | sequential | optimizer_holdout
-  combine: all                     # all: every gate must pass | any: one gate alone acts
-  multiplicity: none               # none | holm | benjamini_hochberg
-  also_requires: [{eval: end-to-end, test: non_inferiority, margin: 0.02}]
-  constraints: {default: {cost_per_success_usd: 0.05, latency_p90_ms: 8000}}
+  combine: all                     # all: every gate must pass | any: one gate alone triggers the action
+  multiplicity: none               # none | holm | benjamini_hochberg; needed only with combine: any
+  use_case_gates: []               # use cases with their own rule (rule 20); each: {use_case, test, ...}
+  also_requires:                   # other evals that must pass for this decision (rule 27)
+    - eval: end-to-end
+      test: non_inferiority
+      margin: 0.02
+  constraints:                     # budgets; limits, not part of θ (rule 24)
+    default: {cost_per_success_usd: 0.05, latency_p90_ms: 8000}
+    use_cases: {}
+
 invoke:                            # component evals only; the end-to-end eval uses agent.yaml's
   command: [python3, agent/refunds.py, --handoff]
+  cwd: .
+  timeout: 20
+  seed: python3 evals/agents/store/env/seed.py     # the sandbox's hooks, as in agent.yaml
+  observe: python3 evals/agents/store/env/observe.py
+  env: {AGENT_VARIANT: good, STORE_WORLD: world.json, STORE_ENV: evals/agents/store/env}
 ```
 
 **Complete, missing, invalid.** The loader (`spec.py`) sorts what it finds into four lists, each
@@ -251,22 +312,24 @@ needed for (`run`, `draw`, `plan`, `estimate`, `use_cases`, `measurement`, `deci
 `comparison`):
 
 - **missing**: a required field left out or empty, or a reference to something not there yet (a
-  frame with no import, a check with no file, an `also_requires` eval that doesn't exist);
-- **invalid**: a field that is there but cannot mean anything (shares that don't sum to 1, two
-  counted checks on one mode, a decision rule on another quantity);
+  frame with no import in `data/export.manifest.json`, a check with no file, an eval named in
+  `also_requires` that doesn't exist);
+- **invalid**: a field that is there but cannot mean anything (shares that don't sum to 1, an
+  unknown test, two counted checks on one mode, a decision rule on another quantity);
 - **notes**: block nothing (an unknown key with the field it probably meant, a `bar` a
-  non-inferiority test ignores);
-- **defaults**: each stated default the loader filled.
+  non-inferiority test ignores, a correction where every gate must pass);
+- **defaults**: each stated default the loader filled, so the report can say "α 0.05 by default".
 
 An eval is **complete** when `missing` and `invalid` are both empty. An incomplete eval still
-runs; its report lists the fields under `spec.missing` and nulls the numbers that depend on them.
-`validate` prints every field; `status` summarizes.
+runs; its report lists the fields under `spec.missing` and nulls the numbers that depend on them,
+with the reason. Nothing refuses to run because a field is missing: the question is always "what
+is missing from the spec". `validate` prints every field; `status` summarizes.
 
 | Field | Part | Required | Rule |
 |---|---|---|---|
-| `estimand.unit` | Estimand | yes | `system` once per agent; `component` needs `component` and `boundary`, and the component in agent.yaml's `components`, placed at an eval of its own (§3) |
+| `estimand.unit` | Estimand | yes | `system` once per agent; `component` needs `component` and `boundary`, and the component in agent.yaml's `components`, placed at an eval of its own (§3): missing when it isn't listed or its context or `ships_separately` isn't stated; invalid for a shared context, a step, a route or a part that ships only with the system |
 | `estimand.quantity` | Estimand | yes | `pass_rate`, or `failure_rate:<mode>` |
-| `estimand.population.frame` | Estimand | yes | an import id; a component's frame must be an import of handoffs into it (rule 4); one from an older end-to-end frame is a note (rule 26) |
+| `estimand.population.frame` | Estimand | yes | an import id; a component's frame is an import whose `handoffs.component` is the component (rule 4), else missing; one extracted from another frame than the end-to-end eval's current one is a note (rule 26) |
 | `estimand.use_cases[]` | Estimand | yes | `id`, `definition`, `example`, `share`; shares sum to 1 ± 0.02 |
 | `use_cases[].cost` | Estimand | with `weights: cost` | a positive number in any unit; null means not stated |
 | `estimand.weights` | Estimand | yes | an unstated weight is unknown, never 1 ([statistics §1.1](statistics.md#11-weights-what-a-failure-costs)) |
@@ -279,19 +342,23 @@ runs; its report lists the fields under `spec.missing` and nulls the numbers tha
 | `measurement.trials` | Measurement | yes | ≥ 3, or `auto` (§8) |
 | `measurement.correction` | Measurement | when any counted check is a judge | `rogan_gladen` or `ppi` (§10) |
 | `measurement.max_inflation` | Measurement | when any counted check is a judge | default 2.0: a judge may cost at most twice the cases a code check would ([statistics §3.3](statistics.md#33-what-a-graders-error-costs-you)) |
-| `measurement.people` | Measurement | no | `floors: {catch, clean}` (null: from `max_inflation`), `margin` (default 0.10), `labels_per_kind` (default `auto`) |
+| `measurement.people` | Measurement | no | `floors: {catch, clean}`, each a rate or null (null: from `max_inflation`, as for a judge), `margin` (default 0.10), `labels_per_kind` (default `auto`) |
 | `decision_rule.test` | Decision rule | yes | `superiority`, `non_inferiority` or `threshold` |
 | `decision_rule.margin` or `bar` | Decision rule | yes | whichever the test needs |
 | `decision_rule.quantity` | Decision rule | no | defaults to `estimand.quantity`; any other value is invalid |
 | `decision_rule.alpha` | Decision rule | yes | one-sided, above 0 and below 0.5; default 0.05; 0.025 where a bad change is costly or hard to reverse ([statistics §4.5](statistics.md#45-no-difference-isnt-no-worse)) |
 | `decision_rule.power` | Decision rule | yes | default 0.80 |
 | `decision_rule.looks` | Decision rule | yes | default `fixed` |
-| `decision_rule.combine` | Decision rule | yes | `all` (default) or `any`; `also_requires` always must pass |
-| `decision_rule.multiplicity` | Decision rule | with `combine: any` and several gates | `holm` or `benjamini_hochberg`, and `none` is then invalid; otherwise `none` ([statistics §4.6](statistics.md#46-many-gates)) |
-| `decision_rule.use_case_gates` | Decision rule | per separately shipped route | each `{use_case, test, margin or bar, ...}` (rule 20, [statistics §1.2](statistics.md#12-the-blind-spot-a-use-case-the-headline-cant-see)) |
-| `decision_rule.also_requires` | Decision rule | for a component eval | must name the end-to-end eval with a paired test; a threshold there is invalid (rules 19, 27) |
+| `decision_rule.combine` | Decision rule | yes | `all` (default): the action needs every gate (the headline and each use case gate) to pass; `any`: one gate alone triggers it. `also_requires` always must pass |
+| `decision_rule.multiplicity` | Decision rule | with `combine: any` and several gates | `holm` or `benjamini_hochberg`, and `none` is then invalid; otherwise `none`, the intersection–union case ([statistics §4.6](statistics.md#46-many-gates)) |
+| `decision_rule.use_case_gates` | Decision rule | per separately shipped route | each `{use_case, test, margin or bar, ...}`; the end-to-end eval needs a gate on the use case of each route in agent.yaml whose model ships on its own, and a route with no `use_case`, or one this eval lacks, is missing (rule 20, [statistics §1.2](statistics.md#12-the-blind-spot-a-use-case-the-headline-cant-see)) |
+| `decision_rule.also_requires` | Decision rule | for a component eval | must name the agent's end-to-end eval with a paired test (`non_inferiority` or `superiority`); a threshold there is invalid (rules 19, 27) |
 | `decision_rule.constraints` | Decision rule | no | `default` and `use_cases`, with `cost_per_success_usd`, `latency_p90_ms` and the other budget keys (rule 24) |
-| `invoke` | Agent contract | for a component eval | `command` as argv, and the hooks; the end-to-end eval has none |
+| `invoke` | Agent contract | for a component eval | `command` as argv, and the hooks; the end-to-end eval has none (it uses agent.yaml's) |
+
+The judges' measured error rates are not in the spec. The spec states the requirement
+(`max_inflation`), and each judge's calibration file holds the measurement, so recalibrating a
+judge doesn't change the spec.
 
 **Defaults stated as defaults.** α 0.05 one-sided, power 0.80, `looks: fixed`, `combine: all`,
 `max_inflation` 2.0 when a judge counts, the eval-vs-people margin 0.10 and `labels_per_kind:
@@ -339,6 +406,9 @@ A case is one request with what is needed to run it and grade the result. Its fi
 | `provenance` | the source trace (`source_trace` for a handoff), `synthetic`, and who confirmed the expected state |
 | `screen` | the screens' verdicts and who read the case |
 
+For a component eval, `trigger` and `inputs` hold the handoff as the component receives it, and
+`provenance.source_trace` names the end-to-end trace it came from.
+
 **Quality cases come from `draw`, never by hand** (rules 5, 6;
 [statistics §2.1](statistics.md#21-two-pools-because-there-are-two-questions),
 [§2.2](statistics.md#22-drawing-the-quality-set)). `draw` takes each use case's rows from the
@@ -347,23 +417,32 @@ plan.yaml's target, else the last draw), records each case's inclusion probabili
 only the case fields from each row, with `provenance` pointing at the trace. Drawing more later
 extends the same draw and rewrites the earlier cases' π (an expansion); resizing one use case never
 changes another. `draw --skip ID --reason R` takes a row out of the frame and the next row of the
-same order replaces it. A quality case the draw no longer holds is removed only with `--prune`. A
+same order replaces it. A quality case the draw doesn't hold any more is removed only with `--prune`. A
 quality case without a `draw`, or with one from another frame or seed than the spec's, is refused
 from the estimate. Bug-finding cases carry no `draw` and never enter θ̂.
 
 **Frames.** A frame is an import in `data/export.manifest.json`: one JSON row per trace, with an
-`id`, a `use_case` and the case fields. Rows with no use case, or one the spec doesn't name, are
-counted in the draw log and never drawn.
+`id` (or `trace_id`), a `use_case`, and the fields a case needs (`trigger`, `inputs`,
+`start_state`, `followups`, `expected_end_state`, `requirements`, `rules_not_applicable`,
+`failure_modes`, `coverage_entries`, and the `cluster_key` field). Only those are copied into a
+drawn case. Rows with no use case, or one the spec doesn't name, are counted in the draw log and
+never drawn.
+
+**The draw log.** `<eval>/draw.json` holds the frame, its hash, the seed, the rows per use case
+and every skip with its reason. A skipped row leaves the frame and π counts the rows that remain.
+A new frame or seed starts a new log.
 
 **Frames of handoffs** (rule 4). A component eval's frame is the handoffs its component receives
 in production, never written by hand. Each row of an end-to-end frame records its handoffs as
-`handoffs: [{to, use_case, <cluster key>, trigger, inputs, start_state, expected_end_state, ...}]`,
-with `to` naming the component as agent.yaml does. `aot-evals --eval <component eval> handoffs`
-imports one row per handoff, with id `<trace>.h<k>`, `source_trace` and `source_use_case`, as a new
+`handoffs: [{to, use_case, <cluster key>, trigger, inputs, start_state, expected_end_state, ...}]`
+(or the case fields under `input`), with `to` naming the component as agent.yaml does.
+`aot-evals --eval <component eval> handoffs [--from ID] [--id ID]` reads the end-to-end eval's
+frame (or `--from`) and imports one row per handoff (default id: the spec's `population.frame`), with id `<trace>.h<k>`, `source_trace` and `source_use_case`, as a new
 frame, and records `handoffs: {component, from, from_sha256, traces, traces_with_handoff, multi,
 source_use_cases}`. Handoffs from one trace are related, so `cluster_key: source_trace` counts them
-once (rule 9). `import FILE --handoffs-of COMPONENT` records handoffs a team's tracing captured as
-they happened. `handoffs --scan` counts the handoffs into each component in a frame, beside
+once (rule 9); when a trace hands off more than once, the command says so.
+`import FILE --handoffs-of COMPONENT` records handoffs a team's tracing captured as they happened
+(`handoffs: {component, from: null, captured: true}`). `handoffs --scan` counts the handoffs into each component in a frame, beside
 agent.yaml's `components`. A routing change makes a new end-to-end frame, so the handoffs are
 extracted again: a revision of the component eval (rule 26).
 
@@ -408,24 +487,34 @@ never a verdict from another model.
 `calibrate` measures, per backend, on the judge's labels: the **catch rate** and the **clean pass
 rate**, each with its Wilson interval, its one-sided lower bound at the decision rule's α and its
 count of labels per kind (`labels_per_kind: {fail, pass}`), plus J and the inflation factor its
-lower bounds imply at 50%, 20%, 10% and 3% (`inflation_at_lower_bounds`). The 1.x `tpr`/`tnr` keys
-stay beside them. A probabilistic backend's threshold is chosen on the dev labels by maximizing
+lower bounds imply at 50%, 20%, 10% and 3% (`inflation_at_lower_bounds`). A probabilistic backend's threshold is chosen on the dev labels by maximizing
 catch + clean, and the reported rates come from 5-fold out-of-fold predictions; a hash-assigned 20%
 of labels is a holdout, reported apart. A calibration's `status` is `calibrated` when it has
-labels of both kinds and a verdict on each. A changed prompt, model or inputs (a new `version`) is
-a new instrument with unknown error rates (rule 13).
+labels of both kinds and a verdict on each; whether the judge may count is the floor below, read
+by `report`, since it depends on the eval's rate. A changed prompt, model or inputs (a new
+`version`) is a new instrument with unknown error rates (rule 13). A judge belongs to one eval:
+copying it into another eval copies its definition, not its calibration.
 
 **The judge floor** (`measurement.judge_floor`; [statistics §3.3](statistics.md#33-what-a-graders-error-costs-you)).
 A judge counts when its inflation factor q(1 − q)/(J²·p(1 − p)), at its lower bounds on catch and
-clean and at the eval's current failure rate on its mode, is at or under `max_inflation`. The
-current rate is the mode's design-weighted rate in the report's runs, corrected with the judge's
-point rates and kept half a failure away from 0 and 1. A candidate's judges are read at the
-baseline runs' rate, never their own (`floor.read_on`), so whether a judge counts is fixed before
-the candidate is looked at, and failing less can't cost a candidate its judge. A judge with no current calibration (none,
-stale, or labels of one kind only) does not count. A counted judge that feeds the quantity and does
-not count leaves θ̂ null and every gate `unknown`, never a pass. With no scored run yet the floor is
-`unknown`, and `plan` counts the judge at `max_inflation`. A 2.0 judge that still sets `min_tpr` or
-`min_tnr` gets a note; the floor ignores them.
+clean and at the eval's current failure rate on its mode, is at or under `max_inflation`.
+
+- **The bounds** are one-sided Wilson lower bounds at the decision rule's α.
+- **The current rate** is the mode's failure rate in the report's runs (the weighted Hájek mean
+  over the counted quality cases of the use cases the mode applies to), corrected with the judge's
+  point rates and kept half a failure away from 0 and 1 over the trials it rests on.
+- **A candidate is read at its reference's rate.** On `report --candidate`, `compare` and an
+  `also_requires` check, the candidate's judges are held to the floor at the baseline runs' rate,
+  never their own. Whether the measurement counts is then fixed before the candidate is looked at,
+  and a candidate that fails less can't lose its judge by doing so (a judge that clears the floor
+  at 3.3% can cost 10× at 0.3%). The floor records `read_on` (`these runs` or `reference runs`)
+  and `rate_on_these_runs`.
+- **A judge with no current calibration** (none, stale, or labels of one kind only) has unknown
+  error rates and does not count either (rule 13). With no scored run yet the floor is `unknown`,
+  and `plan` counts the judge at `max_inflation`.
+- **A judge that feeds the quantity** (its mode's check, for `failure_rate:<mode>`; every counted
+  judge, for `pass_rate`) and does not count leaves θ̂ null and every gate `unknown`, never a
+  pass.
 
 **How many labels** ([statistics §3.4](statistics.md#34-how-many-labels-and-which-ones)). Labels
 count per kind: the catch rate rests only on runs a person failed, the clean pass rate only on runs
@@ -441,7 +530,8 @@ place.
 or fail with a note, blind to the checks, the expected state and each other (`labels/runs.jsonl`,
 one line per run and labeler). Where labelers differ the run has no verdict until someone rules
 (`labels/rulings.jsonl`). Each run is assigned to dev or holdout by a hash of its id. `agreement`
-compares the eval's verdicts with people's on the same runs and writes `report/agreement.json`:
+compares the eval's verdicts with people's on the same runs and writes `report/agreement.json`, which
+the measurement gates read:
 the eval's catch and clean pass rates (dev, holdout, all), labels per kind against the count fixed
 before looking, agreement between labelers (share agreed, Cohen's κ, Gwet's AC1, agreement on
 fails and on passes), the person-anchored pass rate (PPI++), and its gates (§11). Every dev
@@ -456,12 +546,12 @@ disagreement needs a cause in `labels/triage.yaml`: `wrong-expectation`, `missin
   ±margin size at the stated floor, or at 50% where the floor is null
   ([statistics §4.7](statistics.md#47-looks-stop-peeking)).
 - **Re-grading is offline.** `agreement regrade --run ID` re-grades labeled runs from their raw
-  records with the checks as they are now: no agent runs, and no judge calls unless
+  records with the checks as they stand: no agent runs, and no judge calls unless
   `--call-judges`.
 - **The label queue draws**, it doesn't pick: labels stand for the runs they were drawn from. After
   a change, `agreement label queue --changed` limits the queue to the cases whose verdict moved.
 
-**The grader application** (`serve`) is the Judge phase's local web page for one eval, bound to
+**The grader application** (`serve`) is the graders' local web page for one eval, bound to
 127.0.0.1 with a session token in its link; `&labeller=NAME` gives each grader their own.
 Everything it does writes the eval's files above:
 
@@ -515,22 +605,38 @@ search) can read the repository, cases included. `invoke.isolate: true` runs the
 eval files; the `manifest` gate fails a run whose eval files changed during it or whose output
 names them.
 
-**Which runs can be compared** (`spec_sha`). The `estimand`, `design`, `measurement` and
-`decision_rule` hashes are taken over each part of `eval.yaml`; the `measurement` hash also covers
-the check files and judge prompts, not their calibration. `report` and `compare`:
+**Which runs can be compared** (`spec_sha`). The spec says what a run's number means, so two runs
+compare only when they measured the same thing. `spec_sha` holds one hash per part, `{estimand,
+design, measurement, decision_rule}`, each taken over that part of `eval.yaml`; the `measurement`
+hash also covers the eval's check files and judge prompts, but not their calibration files.
+`compare`, and any report that sets a candidate against a baseline:
 
-- **refuse** when the estimand, design or measurement hash differs from the current spec's: a
-  revision, so the two scores are different quantities. The message names the part and says to
-  re-run the baseline;
+- **refuse** when the estimand, design or measurement hash differs from the current spec's. That is
+  a revision ([estimators §9](estimators.md#9-changing-an-eval)): the two scores are different
+  quantities. The message names the part that changed and says to re-run the baseline under the
+  current spec.
 - **refuse** when only the decision rule's hash differs, unless the change was on record before the
-  first run decided on (rule 21, [problem 12](problems.md#12-stop-peeking)). A record is a commit of
-  eval.yaml holding the current rule that is an ancestor of the decided runs' agent or evals commit
-  (or, when the evals live in a repository of their own, dated no later than the first decided
-  run), or a journal entry `aot-evals --eval <id> log --kind decision "why"`, which records the
-  eval's `spec_sha`;
+  first run decided on (the candidate's, or the reported runs' for a threshold rule with no
+  candidate). Moving the bar or the margin after seeing results is
+  [problem 12](problems.md#12-stop-peeking) (rule 21). Either record counts:
+  - **a commit of `eval.yaml`.** The record is the oldest commit in the newest unbroken stretch of
+    eval.yaml's history whose `decision_rule` hash is the current one; an uncommitted edit is no
+    record. When the evals live in the agent's repository, it counts when it is an ancestor of
+    each decided run's agent commit or of the evals commit the run recorded (both are stamped when
+    the run starts; the agent commit ignores evals/, so a rule committed after the agent change is
+    an ancestor only of the evals commit). When the evals live in a repository of their own, the
+    agent's commits can't order it, so it counts when its commit date is no later than the first
+    decided run's start.
+  - **a journal entry**, `aot-evals --eval <id> log --kind decision "why"`, which records the eval
+    and its current `spec_sha`; it counts when its `decision_rule` hash is the current one and its
+    time is no later than the first run decided on. The journal is not committed, so the entry
+    lives where the decision was made, which is why a commit counts too.
 - **refuse** when the two sides are not one build apart: they may differ only on the manifest fields
-  the candidate's declared variable covers (`--variable KIND=VALUE`, or `--model ID`);
-- **compare** when only the cases or the calibrations changed.
+  the candidate's declared variable covers (`--variable KIND=VALUE`, or `--model ID`).
+- **compare** when nothing but the cases or the calibrations changed. Adding cases drawn from the
+  same frame and seed, or bug-finding cases, is an expansion. Recalibrating a judge refines its
+  measured error rates without changing what it measures. A new judge, or a changed judge prompt,
+  is a new instrument (rule 13) and changes the `measurement` hash.
 
 ---
 
@@ -540,73 +646,61 @@ the check files and judge prompts, not their calibration. `report` and `compare`
 Global options: `--agent NAME` (needed when the repository has several agents), `--eval ID` (needed
 when the agent has several evals), and `--evals PATH`. Every command logs itself to the journal.
 
-| Command | Part | Phase | What it does |
+| Command | Part | Who | What it does |
 |---|---|---|---|
-| `start` | | Assess | prints the banner and the three phases |
-| `doctor` | agent contract | any | checks the environment, each eval's cases and `invoke.cwd`; paste it into bug reports |
-| `demo [DIR]` | | any | copies the online store into a new repository and runs both baselines and a refund-subagent change |
-| `benchmarks --workload TAG --task TEXT` | sampling design | Assess | matches the agent to the local catalog of public benchmarks and prints the situations to cover; `--validate` checks the catalog |
-| `discovery-page FILE --agent NAME` | estimand | Assess | renders discovery.md as a page, with "Where the evals go" and the components |
-| `init [--component NAME]` | all | Build | creates an eval folder with its `eval.yaml` (default: `end-to-end`) and the system's shared files if missing; refuses a second system eval |
-| `build [--run]` | all | Build | creates the end-to-end eval and one per component that earns one, drafts agent.yaml's `components`, the use cases (costs null), the coverage list and one generic code check, and prints each eval's checklist by part; `--run` runs each eval that can run (smoke, baseline, report) |
-| `status [--json]` | all | any | the phase, each eval's spec, trust and changes since its baseline, and the next step (§12) |
-| `validate [--warnings] [--all]` | all | any | every missing and invalid field of each spec, the cases' problems, and with `--warnings` the notes and defaults |
-| `import FILE --source S --query Q --window W` | sampling design | Build | copies an export into `data/` with its provenance; `--handoffs-of COMPONENT` imports handoffs captured as they happened |
-| `handoffs [--from ID] [--id ID] [--scan]` | sampling design | Build | extracts a component eval's frame from the end-to-end traces; `--scan` counts the handoffs into each component |
-| `plan [--assumed-rate R] [--flip-rate D] [--total N] [--write]` | sampling design, decision rule | Build | case targets per use case and pool from the decision rule's power, by optimum allocation |
-| `draw [--n UC=N] [--skip ID --reason R] [--prune] [--dry-run]` | sampling design | Build | the seeded stratified draw of the quality set from the frame, with π |
-| `screen [--judges] [--read-by NAME] [--drop ID --reason R]` | sampling design, measurement | Build | the reference, do-nothing, non-answer and liar screens per case, and who read it |
-| `run --purpose P [--k N] [--variable V] [--model ID]` | all | Build | runs the agent over the cases; `--use-case`, `--case`, `--resume`, `--no-judges`, `--pause-every` |
-| `replay run\|seed\|observe RECORDS` | agent contract | Build | acts as the agent and its hooks from recorded runs, for agents that can't run safely |
-| `snapshot [--exclude GLOB]` | agent contract | Build | a hash per file of the working tree, for an `observe` hook |
-| `compare [--baseline ID] [--candidate ID]` | decision rule | Build | the paired comparison and the decision on the candidate, saved under `report/comparisons/` |
-| `coverage [--json]` | sampling design | Build | coverage entries × failure modes over the bug-finding set, against `coverage.yaml` |
-| `ops [--run ID \| --export ID --field K=V]` | decision rule | Build | the operational sweep (cost per success, latency p50/p90, errors) against the spec's constraints per use case |
-| `components [--json]` | all | any | the optimization loop's components grouped by part, each with its phase and state |
-| `serve [--open] [--host H] [--port P]` | measurement | Judge | the grader application for one eval |
-| `agreement [label queue\|page\|import\|add\|status] [rule] [regrade]` | measurement | Judge | whole-run labels, rulings, re-grading, and the eval held to people (`report/agreement.json`) |
-| `label queue\|page\|import\|add\|status --judge ID` | measurement | Judge | labels per judge |
-| `calibrate --judge ID [--dry-run] [--cached-only]` | measurement | Judge | catch and clean pass rates per backend, on the judge's labels |
-| `reliability --judge ID --backend A --backend B` | measurement | Judge | self-consistency and cross-family agreement |
-| `judge apply --judge ID --run ID` | measurement | Judge | judges a past run with a judge |
-| `report [--run ID ...] [--candidate ID ...]` | all | any | writes `report/report.json` (§10) |
-| `migrate --to 2 [--dry-run]` | all | | converts a 1.x suite into a 2.0 agent folder with one eval, `end-to-end`, and writes MIGRATION.md |
-| `log TEXT [--kind K] [--detail D] [--by NAME]` | | any | adds to the activity log; `--kind decision` on an eval records its `spec_sha` |
-| `activity [--open]` | | any | renders the activity page, `journal/activity.html` |
-| `telemetry [status\|show\|off\|on]` | | any | pseudonymous usage telemetry ([SECURITY.md](../SECURITY.md#telemetry)) |
-
-**`migrate --to 2`** reads a 1.x suite in `evals/`, `evals/<agent>/` or `evals/agents/<agent>/`
-and writes `evals/agents/<agent>/` with one eval, `end-to-end`. It moves files with `git mv` where
-git tracks them, renames case fields (`category` → `use_case`, `set` → `pool`, `taxonomy_entries`
-→ `coverage_entries`), writes `eval.yaml` from categories, failure modes, budgets and floors
-(traffic weights, costs null, superiority at α 0.05 and 80% power, `max_inflation` 2.0, correction
-none, seed 1, cluster key `id`), keeps the 1.x files it read in `migrated-from-1x/`, and writes
-`MIGRATION.md` in the agent folder with every decision it made and every line to check by hand.
-The decision and the margin are left missing for the owner. A migrated eval reports nothing until
-its quality set is drawn and run again: hand-picked cases carry no `draw`, and 1.x runs are not
-2.0 runs.
+| `start` | | anyone | prints the AOT EVALS banner and who does what; the `start` skill runs it first |
+| `doctor` | agent contract | anyone | checks the environment, each eval's cases and `invoke.cwd`; paste it into bug reports |
+| `demo [DIR]` | | anyone | copies the online store into a new repository and runs both baselines and a refund-subagent change |
+| `benchmarks --workload TAG --task TEXT` | sampling design | the owner, first run | matches the agent to the local catalog of public benchmarks and prints the situations to cover; `--validate` checks the catalog |
+| `discovery-page FILE --agent NAME` | estimand | the owner, first run | renders discovery.md as a page, with "Where the evals go" and the components |
+| `init [--component NAME]` | all | engineering | creates an eval folder with its `eval.yaml` (default: `end-to-end`) and the system's shared files if missing; refuses a second system eval |
+| `build [--run]` | all | engineering | creates the end-to-end eval and one per component that earns one, drafts agent.yaml's `components`, the use cases (costs null), the coverage list and one generic code check, and prints each eval's checklist by part; `--run` runs each eval that can run (smoke, baseline, report) |
+| `status [--json]` | all | anyone | per eval: its spec, how far its number can be trusted, what changed since its baseline, and the next step with who takes it (§12) |
+| `validate [--warnings] [--all]` | all | anyone | every missing and invalid field of each spec, the cases' problems, and with `--warnings` the notes and defaults |
+| `import FILE --source S --query Q --window W` | sampling design | engineering | copies an export into `data/` with its provenance; `--handoffs-of COMPONENT` imports handoffs captured as they happened |
+| `handoffs [--from ID] [--id ID] [--scan]` | sampling design | engineering | extracts a component eval's frame from the end-to-end traces; `--scan` counts the handoffs into each component |
+| `plan [--assumed-rate R] [--flip-rate D] [--total N] [--write]` | sampling design, decision rule | engineering | case targets per use case and pool from the decision rule's power, by optimum allocation |
+| `draw [--n UC=N] [--skip ID --reason R] [--prune] [--dry-run]` | sampling design | engineering | the seeded stratified draw of the quality set from the frame, with π |
+| `screen [--judges] [--read-by NAME] [--drop ID --reason R]` | sampling design, measurement | engineering | the reference, do-nothing, non-answer and liar screens per case, and who read it |
+| `run --purpose P [--k N] [--variable V] [--model ID]` | all | engineering | runs the agent over the cases; `--use-case`, `--case`, `--resume`, `--no-judges`, `--pause-every` |
+| `replay run\|seed\|observe RECORDS` | agent contract | engineering | acts as the agent and its hooks from recorded runs, for agents that can't run safely |
+| `snapshot [--exclude GLOB]` | agent contract | engineering | a hash per file of the working tree, for an `observe` hook |
+| `compare [--baseline ID] [--candidate ID]` | decision rule | engineering | the paired comparison and the decision on the candidate, saved under `report/comparisons/` |
+| `coverage [--json]` | sampling design | engineering | coverage entries × failure modes over the bug-finding set, against `coverage.yaml` |
+| `ops [--run ID \| --export ID --field K=V]` | decision rule | engineering | the operational sweep (cost per success, latency p50/p90, errors) against the spec's constraints per use case |
+| `components [--json]` | all | anyone | the optimization loop's components grouped by part, each with its state and who builds it |
+| `serve [--open] [--host H] [--port P]` | measurement | graders | the grader application for one eval |
+| `agreement [label queue\|page\|import\|add\|status] [rule] [regrade]` | measurement | graders | whole-run labels, rulings, re-grading, and the eval held to people (`report/agreement.json`) |
+| `label queue\|page\|import\|add\|status --judge ID` | measurement | graders | labels per judge |
+| `calibrate --judge ID [--dry-run] [--cached-only]` | measurement | graders | catch and clean pass rates per backend, on the judge's labels |
+| `reliability --judge ID --backend A --backend B` | measurement | graders | self-consistency and cross-family agreement |
+| `judge apply --judge ID --run ID` | measurement | graders | judges a past run with a judge |
+| `report [--run ID ...] [--candidate ID ...]` | all | anyone | writes `report/report.json` (§10) |
+| `log TEXT [--kind K] [--detail D] [--by NAME]` | | anyone | adds to the activity log; `--kind decision` on an eval records its `spec_sha` |
+| `activity [--open]` | | anyone | renders the activity page, `journal/activity.html` |
+| `telemetry [status\|show\|off\|on]` | | anyone | pseudonymous usage telemetry ([SECURITY.md](../SECURITY.md#telemetry)) |
 
 ---
 
 ## 10. report.json
 
 `report` writes `<eval>/report/report.json`, schema `aot-evals/report@2`. Keys may be added within
-v2, never removed or renamed. Unknown values are `null` with a reason, never 0, and nothing is
-pre-rounded. The `report` skill writes its HTML from this file and nothing else.
+a schema version, never removed or renamed. Unknown values are `null` with a reason, never 0,
+and nothing is pre-rounded. The `report` skill writes its HTML from this file and nothing else.
 
 | Key | Holds | Part |
 |---|---|---|
 | `schema`, `generated`, `runs`, `refused` | the runs reported; `refused` says why they can't stand for the current spec | |
 | `eval` | `{id, version, unit, quantity, decision}` | Estimand |
-| `spec` | `{complete, missing[], invalid[], notes[], defaults[], sha{estimand, design, measurement, decision_rule}}` | all |
+| `spec` | `{complete, missing[{field, why, blocks[]}], invalid[…], notes[…], defaults[{field, value}], sha{estimand, design, measurement, decision_rule}}` (§5) | all |
 | `estimate` | the headline: `{theta, ci, ci_method, se, quantity, weights, weights_source, estimator, corrected, correction, corrected_reason, uncorrected, n_cases, n_clusters, n_effective, k, null_reason}` | Estimand, design |
 | `use_cases[]` | one row per use case and pool: `share`, `cost`, `weight`, `inclusion_prob_range`, `n_cases`, `estimate` (quality pool only), `estimate_corrected`, `pass_rate`, `pass_pow_k`, `flaky`, `variance_band`, `zero_failure_bound`, `clusters`, `variance_components`, `operational`, `excluded` | Estimand, design |
-| `design` | `{quality{n, drawn, frame, seed, oversample, strata, skips, refused}, bug_finding{n, coverage}, clusters{n, cluster_key, design_effect, icc, largest, mean_size, shared_with_bug_finding}, cases_without_pool}` | Design |
-| `measurement` | `{failure_modes[{id, check, type, use_cases, observed_rate, catch, clean, j, labels, inflation, inflation_at_lower_bounds, floor, corrected_rate, feeds_estimate}], eval_vs_people, person_anchored, variance, people, trials, max_inflation, correction, gates[]}` | Measurement |
-| `decision` | `{test, quantity, bar, margin, alpha, power, looks, combine, multiplicity, subject, result, reasons, null_reason, interval, detectable_effect, cases_needed, headline, gates[], also_requires[], constraints, look, refused}` | Decision rule |
+| `design` | `{quality{n, drawn, frame, seed, oversample, strata, skips[], refused[]}, bug_finding{n, coverage}, clusters{n, n_bug_finding, cluster_key, design_effect, icc, largest, mean_size, shared_with_bug_finding}, cases_without_pool[]}` | Design |
+| `measurement` | `{failure_modes[{id, check, type, use_cases, observed_rate, catch, clean, j, labels{fail, pass}, inflation, inflation_at_lower_bounds, floor{status, reason, rate, max_inflation, read_on, rate_on_these_runs}, floor_rate, corrected_rate, feeds_estimate}], eval_vs_people{catch, clean, all, labels{fail, pass}, labels_needed, floor, failure_rate, stale}, person_anchored{ppi}, variance{icc, between, within, k_recommended}, people{pairs[{ac1, kappa, pass_agreement, fail_agreement}]}, trials, max_inflation, correction, gates[{id, detail}]}` | Measurement |
+| `decision` | `{test, quantity, bar, margin, alpha, power, looks, combine, multiplicity, subject, result: "pass" \| "fail" \| "insufficient" \| "unknown" \| "trade", reasons[], null_reason, interval, detectable_effect, cases_needed, headline{…}, gates[{gate, use_case, result, p, p_adjusted, …}], also_requires[{eval, result, reason, runs, gate}], constraints{status, breaches[]}, look{n, prior[], recorded}, refused}` | Decision rule |
 | `comparison` | with `--candidate`: Δθ̂ design-weighted, gains and losses, flips, the verdict from the paired sign-flip test per cluster, per-use-case rows with adjusted p-values, bug-finding flips apart, new budget breaches; else null | Decision rule |
 | `checks` | per check, with `catch` and `clean` | Measurement |
-| `gates` | the evidence gates, keyed by part: `{agent_contract[], design[], measurement[]}` (§11) | Agent contract, design, measurement |
+| `gates` | the evidence gates, keyed by part: `{agent_contract[], design[], measurement[]}`, each entry `{id, status: "pass" \| "fail" \| null, detail}` (§11) | Agent contract, design, measurement |
 
 **The estimate** ([estimators §7](estimators.md#7-the-estimate),
 [statistics §2.1](statistics.md#21-two-pools-because-there-are-two-questions)). A trial scores 1
@@ -618,7 +712,11 @@ is normal, with each use case's linearized variance summed over clusters and flo
 Agresti–Caffo-adjusted binomial variance ([statistics §2.3](statistics.md#23-allocation-how-many-cases-per-use-case)).
 `theta` is null with `null_reason` when the spec blocks the estimate, a weight is unstated, there
 is no run, a use case with weight has no scored case, the runs are refused, a counted judge that
-feeds the quantity does not count, or the correction lacks its measurement.
+feeds the quantity does not count, or the correction lacks its measurement. `refused` is set when
+a run's manifest is not `aot-evals/run-manifest@2`, or its estimand, design or measurement hash
+differs from the current spec's: those numbers are a different quantity (§8). `corrected` says
+whether the correction was applied, and `corrected_reason` says why not (`correction: none`, or a
+code check that has nothing to correct).
 
 **The correction** applies after the uncorrected θ̂, which stays in `estimate.uncorrected`.
 `rogan_gladen` corrects θ̂ and each use case's μ̂ for the grader's catch and clean pass rates, with
@@ -648,10 +746,14 @@ paired rule with no candidate is `unknown`.
   a non-inferiority margin is read on the grader's scale at J's lower bound, and with J unknown the
   gate is unknown.
 - **A gate's result** is `pass` when its test rejects at α; `fail` when the two-sided 1 − 2α
-  interval sits at or beyond the null on the wrong side; `insufficient` otherwise, with
-  `cases_needed` (the cases like these that power 1 − β at the measured spread would take), and a
-  reason that says first when the point estimate is already past the null; and `unknown`, with its
-  reason, when there is nothing to test.
+  interval sits at or beyond the null on the wrong side (shown worse than the margin, shown no
+  better, shown on the wrong side of the bar); `insufficient` otherwise, with `cases_needed`, the
+  cases like these that power 1 − β at the measured spread would take (for an exactly tested rate,
+  the larger of the cases its bound needs to clear at the measured rate and `stats.threshold_n`);
+  and `unknown`, with its reason, when there is nothing to test. When the point estimate is already
+  past the null, the reason says so first: "the refund pass rate dropped 33 points, past the margin
+  of 5; too few cases to show it at α 0.05". `detectable_effect` is (z₁₋α + z_power)·se on the true
+  scale.
 - **Gates combine** by `combine`: `all` is the worst of fail, unknown, insufficient and pass, with
   no correction (an intersection–union test; Berger 1982); `any` adjusts the p-values by
   `multiplicity` and passes when one gate passes at its adjusted p. `also_requires` must pass
@@ -674,9 +776,8 @@ paired rule with no candidate is `unknown`.
 
 ## 11. Gates
 
-A 2.0 eval has no numbered command gates. What 1.x checked as gates is now one of three things,
-each with a stable id so a fixture can trigger exactly one (`tests/test_fixtures.py`,
-`tests/test_judges.py`):
+Three kinds of check say whether an eval's numbers can stand, each entry with a stable id so a
+fixture can trigger exactly one (`tests/test_fixtures.py`, `tests/test_judges.py`):
 
 1. **Spec fields** (`spec.missing`, `spec.invalid`, §5): what the spec lacks, with what each blocks.
 2. **Evidence gates** (`gates` in report.json, `evidence.py`): whether the runs can carry the
@@ -709,16 +810,19 @@ counterpart.
 
 ---
 
-## 12. Status: phase and trust
+## 12. Status: trust and what's next
 
-`status` reads each eval's report the way a team does (`trust.py`). For the agent, it prints the
-phase of its earliest eval; for each eval, its phase, its trust, what changed since its baseline,
-and the next step. `status --json` carries the same, with each eval's spec lists.
+`status` reads each eval's report the way a team does (`trust.py`). For each eval it says how far
+its number can be trusted, what changed since its baseline, and the next step, with who takes it:
+the owner, engineering or the graders. Several next steps can be open at once, one per role, and
+none waits for another. `status --json` carries the same, with each eval's spec lists.
 
-**Phase.** No eval and no discovery report: **Assess**. A discovery report and no eval yet, or an
-eval with no number under its current spec (no baseline, a refused run, θ̂ null): **Build**, with
-its next step in order (the first field blocking a run, draw or estimate; the draw; the screens;
-the baseline). A baseline with θ̂ under the current spec: **Judge**.
+**What's next.** With no eval and no discovery report, the next step is the first run of
+`/aot-evals:start` with the owner. While an eval has no number under its current spec (no
+baseline, a refused run, θ̂ null), engineering's next step comes in order: the first field
+blocking a run, draw or estimate; the draw; the screens; the baseline. A spec field only the owner
+can fill (the decision, a cost, the margin) is the owner's step. Once runs exist, graders can label
+them; once a baseline has θ̂, the open trust conditions below say what each role has left.
 
 **Trust**, per eval:
 
@@ -741,28 +845,15 @@ until one exists says the plan can't size the rule yet.
 | the agent changed | the baseline's `agent_commit` against the working tree's | a candidate run with one declared variable, then `compare` |
 | a candidate has run and not been compared | runs and `report/comparisons/` | `compare`, then label what moved |
 
-`components` gives each component of the loop a phase as well: the estimand's components belong to
-Assess, the judges and the labeling components (the grader application, the calibration set, two
-blind labels per run, the grader pool, the eval held to people) to Judge, and the rest to Build.
+`components` says who builds each component of the loop: the owner settles the estimand's, the
+graders the judges and the labeling components (the grader application, the calibration set, two
+blind labels per run, the grader pool, the eval held to people), and engineering the rest.
 
 ---
 
-## 13. Not in 2.0
+## 13. Not computed yet
 
-**Removed without a 2.0 replacement:**
-
-- `checkpoint` (the checkpoint pages): the skills write their summary in the conversation and log a
-  question to the activity page instead.
-- `redundancy` (the prune proposal): pruning is by hand, under rule 25.
-- `report --html` (the branded HTML shell): the `report` skill writes the HTML itself from
-  report.json v2.
-- `status --gates` (the C0–C19 gate table): `status` and `validate` list spec fields, and report.json
-  the evidence and measurement gates.
-- G4, the refusal of a same-family generative judge for pairwise grading. A pairwise judge should
-  still come from a different family than both sides and judge both orders
-  ([statistics §3.5](statistics.md#35-reliability-is-not-validity)); nothing checks it yet.
-
-**Not computed yet:**
+These are described by the method and not computed by the tool:
 
 - `looks: sequential` and `looks: optimizer_holdout` leave the decision `unknown`, with a validate
   note: no always-valid interval or reusable holdout is built yet
@@ -773,8 +864,11 @@ blind labels per run, the grader pool, the eval held to people) to Judge, and th
   of [statistics §3.2](statistics.md#32-a-judge-is-a-diagnostic-test).
 - Shares are measured again by hand on a schedule; nothing detects a population shift (rule 26),
   and drift has no control chart yet ([statistics §1.4](statistics.md#14-when-the-population-moves)).
-- report.json v2 has no `coverage`, `redundancy`, `cases`, `conditions` or `next_actions` keys yet;
+- report.json has no `coverage`, `redundancy`, `cases`, `conditions` or `next_actions` keys yet;
   `aot-evals coverage` prints the coverage grid.
+- Pruning is by hand, under rule 25: nothing proposes which bug-finding cases to remove.
+- A pairwise judge should come from a different family than both sides and judge both orders
+  ([statistics §3.5](statistics.md#35-reliability-is-not-validity)); nothing checks it yet.
 
 **Out of scope:** simulated users, and whether a pass in the sandbox means a pass in production
 ([estimators §11](estimators.md#11-out-of-scope-and-open-problems)).

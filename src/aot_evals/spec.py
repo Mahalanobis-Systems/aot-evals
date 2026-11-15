@@ -1,4 +1,4 @@
-"""The eval spec, `eval.yaml` (docs/v2-design.md §2): load it, fill its stated defaults, and say what
+"""The eval spec, `eval.yaml` (docs/method.md): load it, fill its stated defaults, and say what
 is missing.
 
 An eval with a missing field still runs; the report lists the field under `spec.missing`, with why
@@ -8,7 +8,7 @@ numbers. `spec.notes` are observations that block nothing (an unknown key, a bar
 ignores). `spec.defaults` lists every default the loader filled, so a report can say "α 0.05 by
 default" instead of presenting it as a choice someone made.
 
-Each issue names the blocks it affects, from BLOCKS: the report v2 keys (`estimate`, `use_cases`,
+Each issue names the blocks it affects, from BLOCKS: the report.json keys (`estimate`, `use_cases`,
 `measurement`, `decision`, `comparison`) and the commands that need the field (`run`, `draw`,
 `plan`).
 """
@@ -54,7 +54,7 @@ DEFAULT_ALPHA = 0.05            # one-sided (statistics §4.5)
 DEFAULT_POWER = 0.80
 DEFAULT_LOOKS = "fixed"
 DEFAULT_COMBINE = "all"         # every gate must pass: an intersection-union test (statistics §4.6)
-DEFAULT_MAX_INFLATION = 2.0     # a judge may cost at most twice the cases (v2-design §10.3)
+DEFAULT_MAX_INFLATION = 2.0     # a judge may cost at most twice the cases (docs/method.md)
 DEFAULT_PEOPLE_MARGIN = 0.10    # floors shown with a 10-point non-inferiority margin (statistics §4.2)
 
 KEYS = {
@@ -111,7 +111,7 @@ class Spec:
 
     @property
     def complete(self) -> bool:
-        """Every required field is filled and means something (v2-design §2)."""
+        """Every required field is filled and means something (docs/method.md)."""
         return not self.missing and not self.invalid
 
     def blocked(self, block: str) -> list[Issue]:
@@ -123,7 +123,7 @@ class Spec:
         return v if isinstance(v, dict) else {}
 
     def as_dict(self) -> dict:
-        """The report's `spec` key (v2-design §6)."""
+        """The report's `spec` key (docs/method.md)."""
         return {"complete": self.complete,
                 "missing": [i.as_dict() for i in self.missing],
                 "invalid": [i.as_dict() for i in self.invalid],
@@ -507,16 +507,6 @@ def _measurement(c: _Check, spec: dict, ids: list[str]) -> tuple[list[str], dict
         c.bad("measurement.trials", "must be a whole number of at least 3, or auto (rule 16)", ["run", "plan"])
 
     judges = [ck for ck in counted.values() if ck and c.ev is not None and c.ev.check_type(ck) == "judge"]
-    for ck in judges:  # 2.0 judges have no fixed floors (docs/v2-design.md §4)
-        try:
-            front = c.ev.judge_check_path(ck).read_text().split("---")
-            meta = load_yaml_text(front[1]) if len(front) > 2 else {}
-        except (OSError, ContractError):
-            meta = {}
-        old = [k for k in ("min_tpr", "min_tnr") if isinstance(meta, dict) and k in meta]
-        if old:
-            c.note(f"checks/judge/{ck}.md", f"{' and '.join(old)} are 1.x floors and are ignored: a 2.0 judge "
-                   "counts when its inflation at the eval's failure rate is within measurement.max_inflation")
     corr = m.get("correction")
     if corr is not None and corr not in CORRECTIONS:
         c.bad("measurement.correction", f"must be one of {', '.join(CORRECTIONS)}", ["estimate"])
@@ -549,9 +539,7 @@ def _measurement(c: _Check, spec: dict, ids: list[str]) -> tuple[list[str], dict
     else:
         for k in floors:
             if k not in KEYS["measurement.people.floors"]:
-                hint = (f"; 2.0 calls it `{k.removeprefix('min_')}`"
-                        if k in ("min_catch", "min_clean") else "")
-                c.bad(f"measurement.people.floors.{k}", f"not a floor of the eval against people{hint}",
+                c.bad(f"measurement.people.floors.{k}", "not a floor of the eval against people (catch, clean)",
                       ["measurement"])
         for k in ("catch", "clean"):
             v = floors.get(k)
@@ -677,7 +665,7 @@ def _decision_rule(c: _Check, spec: dict, ids: list[str], quantity: Any) -> None
 
     con = c.mapping(r, "constraints", "decision_rule.constraints", ["decision"], required=False)
     if con is not None:
-        from .report import BUDGET_KEYS
+        from .results import BUDGET_KEYS
 
         c.unknown_keys(con, "decision_rule.constraints", "decision_rule.constraints")
         sets = [("decision_rule.constraints.default", con.get("default"))]
@@ -836,7 +824,7 @@ def _component(c: _Check, ev: Eval, spec: dict, systems: list[str]) -> None:
 
 def _routes(c: _Check, ev: Eval, spec: dict) -> None:
     """Behind a router, each route is a use case of the end-to-end eval; one whose model ships on its
-    own gets a use case gate (rule 20, v2-design §10.1). A subagent at a context boundary that ships
+    own gets a use case gate (rule 20, docs/method.md). A subagent at a context boundary that ships
     on its own is told it can have an eval of its own (rule 3)."""
     from . import boundaries
 
@@ -1036,7 +1024,7 @@ def check_ids(spec: Spec) -> list[str]:
 
 
 def part_hashes(spec: Spec, ev: Eval | None = None) -> dict[str, str | None]:
-    """`spec_sha`: one hash per part of the eval (v2-design §5), over that part as resolved (so
+    """`spec_sha`: one hash per part of the eval (docs/method.md), over that part as resolved (so
     writing a default out changes nothing). The measurement hash also covers the files of the
     checks it names, code and judge prompts, but not their calibration: a changed check is a new
     instrument (rule 13), a recalibration is not. A part that is absent hashes to None."""

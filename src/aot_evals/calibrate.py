@@ -1,16 +1,15 @@
-"""`calibrate` (estimators §5, docs/v2-design.md §4): is each judge right, measured on human labels?
+"""`calibrate` (estimators §5, docs/method.md): is each judge right, measured on human labels?
 
 For every backend of a judge, on the same labels:
-- the **catch rate** (of the labels a person failed, the share the judge failed; 1.x TNR) and the
-  **clean pass rate** (of the labels a person passed, the share the judge passed; 1.x TPR), each
-  with its Wilson interval, its one-sided lower bound and its count of labels of that kind, J, and
-  the inflation factor the lower bounds imply at a few failure rates. The 1.x `tpr`/`tnr` keys stay
-  beside them. Raw agreement is never reported: an always-pass judge agrees 95% of the time at a
-  95% base rate (M8).
+- the **catch rate** (of the labels a person failed, the share the judge failed) and the **clean
+  pass rate** (of the labels a person passed, the share the judge passed), each with its Wilson
+  interval, its one-sided lower bound and its count of labels of that kind, J, and the inflation
+  factor the lower bounds imply at a few failure rates. Raw agreement is never reported: an
+  always-pass judge agrees 95% of the time at a 95% base rate (M8).
 - Cohen's kappa, the confusion matrix, cost and latency per judgement, errors.
 - For a backend that returns a probability (System One), the decision threshold is chosen on the
-  labels, maximising TPR + TNR. The reported rates use out-of-fold predictions (5-fold,
-  stratified), so the threshold is never scored on the labels it was fitted to. ECE and Brier
+  labels, maximising catch + clean (Youden's J). The reported rates use out-of-fold predictions
+  (5-fold, stratified), so the threshold is never scored on the labels it was fitted to. ECE and Brier
   score measure whether its probabilities mean anything; it is not trusted until they do.
 - The holdout split is reported separately.
 
@@ -135,14 +134,14 @@ def confusion(pairs: list[tuple[bool, bool]]) -> dict:
 def rates(cm: dict) -> dict:
     pos, neg = cm["tp"] + cm["fn"], cm["tn"] + cm["fp"]
     n = pos + neg
-    tpr = cm["tp"] / pos if pos else None
-    tnr = cm["tn"] / neg if neg else None
+    clean = cm["tp"] / pos if pos else None
+    catch = cm["tn"] / neg if neg else None
     kappa = None
     if n:
         po = (cm["tp"] + cm["tn"]) / n
         pe = ((cm["tp"] + cm["fp"]) * pos + (cm["fn"] + cm["tn"]) * neg) / (n * n)
         kappa = (po - pe) / (1 - pe) if pe < 1 else None
-    return {"tpr": tpr, "tpr_ci": _ci(cm["tp"], pos), "tnr": tnr, "tnr_ci": _ci(cm["tn"], neg),
+    return {"catch": catch, "catch_ci": _ci(cm["tn"], neg), "clean": clean, "clean_ci": _ci(cm["tp"], pos),
             "kappa": kappa, "n": n, "n_pass": pos, "n_fail": neg}
 
 
@@ -152,7 +151,7 @@ def _ci(k, n):
 
 
 def best_threshold(scored: list[tuple[float, bool]]) -> float:
-    """Threshold maximising TPR + TNR (Youden's J); ties go to the one nearest 0.5."""
+    """Threshold maximising catch + clean (Youden's J); ties go to the one nearest 0.5."""
     cands = sorted({s for s, _ in scored} | {0.5})
     best, best_key = 0.5, None
     pos = sum(1 for _, h in scored if h)
@@ -211,7 +210,7 @@ def measure_backend(spec: JudgeSpec, backend: str, labels: list[dict], judged: d
             for r in fold:
                 oof[r["item_id"]] = score_of(r) >= t
         threshold = best_threshold([(score_of(r), r["label"]) for r in dev])
-        method = f"threshold chosen on dev labels; TPR/TNR from {FOLDS}-fold out-of-fold predictions"
+        method = f"threshold chosen on dev labels; catch and clean from {FOLDS}-fold out-of-fold predictions"
     else:
         threshold = 0.5 if not probabilistic else best_threshold([(score_of(r), r["label"]) for r in dev])
         oof = {r["item_id"]: score_of(r) >= threshold for r in dev}
@@ -244,7 +243,7 @@ INFLATION_RATES = (0.5, 0.2, 0.1, 0.03)
 
 
 def catch_clean(cm: dict, alpha: float = 0.05) -> dict:
-    """A confusion matrix (positive class = pass, as 1.x keeps it) in 2.0's terms: the catch rate
+    """A confusion matrix (positive class = pass) as the catch rate
     (tn of the runs a person failed) and the clean pass rate (tp of the runs a person passed),
     each with a two-sided 95% Wilson interval and a one-sided lower bound at `alpha`, the count
     of labels of each kind, J = catch + clean - 1, and the inflation factor the lower bounds
@@ -299,7 +298,7 @@ def calibrate(ev: Eval, spec: JudgeSpec, backends: list[str] | None = None, *, c
         "labels_sha": labels_sha(ev, spec), "labels": len(labels), "measured_at": now_iso(),
         "primary": primary, "status": st, "status_reasons": why, "backends": results,
         "floor": ("measurement.max_inflation at the eval's failure rate, from the lower bounds on "
-                  "catch and clean (docs/v2-design.md §4)"),
+                  "catch and clean (docs/method.md)"),
         "recommendation": recommend(results),
     }
     write_json(calibration_path(ev, spec), record)

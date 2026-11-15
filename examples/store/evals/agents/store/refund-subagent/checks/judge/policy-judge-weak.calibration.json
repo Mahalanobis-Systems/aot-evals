@@ -4,7 +4,7 @@
   "judge_sha": "6d18441885429f8a",
   "labels_sha": "0e95131b46aa3543",
   "labels": 600,
-  "measured_at": "2026-11-14T19:58:42Z",
+  "measured_at": "2026-11-15T21:50:32Z",
   "primary": "local",
   "status": "calibrated",
   "status_reasons": [],
@@ -49,16 +49,6 @@
       "error_messages": [],
       "threshold": null,
       "method": "fixed verdicts (no threshold to fit)",
-      "tpr": 0.9,
-      "tpr_ci": [
-        0.87057809036806,
-        0.9233224372626984
-      ],
-      "tnr": 0.8,
-      "tnr_ci": [
-        0.7111708344068411,
-        0.8666330666689674
-      ],
       "kappa": 0.6249999999999999,
       "n": 600,
       "n_pass": 500,
@@ -70,10 +60,10 @@
         "tn": 80
       },
       "holdout": {
-        "tpr": null,
-        "tpr_ci": null,
-        "tnr": null,
-        "tnr_ci": null,
+        "catch": null,
+        "catch_ci": null,
+        "clean": null,
+        "clean_ci": null,
         "kappa": null,
         "n": 0,
         "n_pass": 0,
@@ -85,39 +75,17 @@
           "tn": 0
         }
       },
-      "evidence": {
-        "tpr": {
-          "point": 0.9,
-          "lower": 0.87057809036806,
-          "n": 500,
-          "floor": 0.75,
-          "margin": 0.1,
-          "meets_point": true,
-          "meets_margin": true,
-          "n_needed": 500
-        },
-        "tnr": {
-          "point": 0.8,
-          "lower": 0.7111708344068411,
-          "n": 100,
-          "floor": 0.75,
-          "margin": 0.1,
-          "meets_point": true,
-          "meets_margin": true,
-          "n_needed": 100
-        }
-      },
       "confidence_calibration": {
         "ece": null,
         "brier": null
       },
       "cost_per_judgement": null,
-      "latency_ms_mean": 27.037166666666664
+      "latency_ms_mean": 27.03716666666666
     }
   },
+  "floor": "measurement.max_inflation at the eval's failure rate, from the lower bounds on catch and clean (docs/method.md)",
   "recommendation": {
     "backend": "local",
     "why": "costs the fewest cases at a 3% failure rate (11.56x a code check, from its lower bounds)"
-  },
-  "floor": "measurement.max_inflation at the eval's failure rate, from the lower bounds on catch and clean (docs/v2-design.md §4)"
+  }
 }

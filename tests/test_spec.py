@@ -1,4 +1,4 @@
-"""The 2.0 eval spec (docs/v2-design.md §2) and the eval layout (§1): spec.py, repo.Eval, init --eval.
+"""The eval spec (docs/method.md) and the eval layout: spec.py, repo.Eval, init --eval.
 
 The store's two specs (examples/store) are the fixture. With their frames imported and their check
 files in place both are complete, so each mutation below must produce exactly the issue it targets.
@@ -241,7 +241,7 @@ def test_each_mutation_triggers_exactly_its_issue(store, eval_id, mutate, kind, 
     assert all(b in spec.BLOCKS for i in (*s.missing, *s.invalid) for b in i.blocks)
 
 
-# ---- the four fields from #21 --------------------------------------------------------------------
+# ---- the decision's quantity, the population, the cluster key and the oversample ----------------
 
 def test_decision_quantity_must_match_the_estimand(store):
     data = _spec(store, "refund-subagent")
@@ -397,18 +397,6 @@ def test_validate_and_status(store, capsys):
     assert "missing: decision_rule.test" in capsys.readouterr().out
 
 
-def test_a_1x_suite_is_refused_with_the_way_to_migrate(tmp_path, monkeypatch):
-    """1.x is gone: a folder that still holds a 1.x suite and no eval is refused, except by migrate."""
-    monkeypatch.chdir(tmp_path)
-    agent = tmp_path / "evals" / "agents" / "old"
-    agent.mkdir(parents=True)
-    (agent / "agent.yaml").write_text("id: old\n")
-    (agent / "categories.yaml").write_text("categories: []\n")
-    for cmd in (["status"], ["validate"], ["run", "--purpose", "smoke"], ["report"]):
-        with pytest.raises(SystemExit, match="migrate --to 2"):
-            cli.main(["--agent", "old", *cmd])
-
-
 def test_init_eval(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     assert cli.main(["--agent", "shop", "--eval", "end-to-end", "init"]) == 0
@@ -418,8 +406,6 @@ def test_init_eval(tmp_path, monkeypatch, capsys):
               "end-to-end/eval.yaml", "end-to-end/coverage.yaml", "end-to-end/cases", "end-to-end/runs",
               "refund-subagent/eval.yaml", "refund-subagent/checks/judge"):
         assert (agent / p).exists(), p
-    for p in ("categories.yaml", "failure_modes.yaml", "taxonomy.yaml"):
-        assert not (agent / p).exists()  # no 1.x suite files beside 2.0 evals
     assert "*/runs/*/raw/" in (agent / ".gitignore").read_text()
 
     ev = Evals(agent)

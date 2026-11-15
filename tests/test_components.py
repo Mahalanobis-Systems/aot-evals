@@ -1,4 +1,4 @@
-"""Several evals per agent (estimators §1, rules 3, 4, 26, 27; docs/v2-design.md §1, §5): where a
+"""Several evals per agent (estimators §1, rules 3, 4, 26, 27; docs/method.md): where a
 component's eval goes, frames of handoffs, the end-to-end gate on a component change, the
 do-nothing screen through judges, and `build` and `components` around the four parts.
 
@@ -262,7 +262,7 @@ def _decision(s, rc: str) -> dict:
 
 
 def test_also_requires_refuses_an_end_to_end_run_with_uncommitted_changes(two_evals):
-    """The same commit is the same change only when the tree was clean (comparability, #26)."""
+    """The same commit is the same change only when the tree was clean (comparability)."""
     s = two_evals
     rc = _refunds_candidate(s, "--variable", "prompt=v2")
     (s.root / "agent" / "store.py").write_text((s.root / "agent" / "store.py").read_text() + "# edited\n")
@@ -293,7 +293,7 @@ def test_also_requires_needs_end_to_end_runs_that_reach_the_component(two_evals)
     assert _results(d)["also_requires:end-to-end"] == "pass" and d["result"] == "pass"
 
 
-# ---- the do-nothing screen reads judges (carried from stage 5) ------------------------------------
+# ---- the do-nothing screen reads judges --------------------------------------------------------
 
 ONLY_OK_JUDGE = '''import json, sys
 payload = json.load(sys.stdin)
@@ -342,7 +342,7 @@ def test_a_judge_that_passes_doing_nothing_still_fails_the_screen(tmp_path, monk
 
 # ---- build and components, around the four parts -------------------------------------------------
 
-# The store's discovery report (examples/store), as the Assess phase would write it: its task types
+# The store's discovery report (examples/store), as discovery would write it: its task types
 # with their shares, the situations to cover, and the context boundaries it found.
 DISCOVERY = """---
 minutes: 4
@@ -373,7 +373,7 @@ def test_build_drafts_a_2_0_agent_from_the_discovery_report(tmp_path, capsys):
     assert cli.main(["--evals", str(agent), "build"]) == 0
     out = capsys.readouterr().out
     ev = Evals(agent)
-    assert not ev.has_v1_suite and [e.id for e in ev.evals()] == ["end-to-end", "refund-subagent"]
+    assert [e.id for e in ev.evals()] == ["end-to-end", "refund-subagent"]
     e2e = ev.eval("end-to-end").spec()
     ucs = e2e.part("estimand")["use_cases"]
     assert [(u["id"], u["share"], u["cost"]) for u in ucs] == [
@@ -440,7 +440,7 @@ def test_the_discovery_page_shows_where_the_evals_go():
 
 
 def test_the_component_eval_runs_its_own_invoke(two_evals):
-    """A component eval invokes the component, never the system (v2-design §2)."""
+    """A component eval invokes the component, never the system (docs/method.md)."""
     m = Evals(two_evals.agent).eval("refund-subagent").runs("baseline")[-1]
     assert m["invoke"]["command"][-1] == "agent/refunds.py"
     e2e = Evals(two_evals.agent).eval("end-to-end").runs("baseline")[-1]

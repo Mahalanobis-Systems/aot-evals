@@ -8,161 +8,62 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## 2.0.0 — 2026-11-14
 
-aot-evals 2.0 organizes everything around the four parts of an eval: the **estimand** (what
-number, about what, drives which decision), the **sampling design** (which cases, drawn how), the
-**measurement model** (how wrong the grader is) and the **decision rule** (when to act). Each eval
-writes them down in one file, `eval.yaml`, and the rules for building a suite follow from them
-([docs/estimators.md](docs/estimators.md)). The README now starts from the workflow, who does what (the
-owner, engineering, and the people who know what good looks like) and the traps evals fall into, with
-the four parts underneath for anyone who wants them. [docs/method.md](docs/method.md) is rewritten as the reference for
-2.0; [docs/problems.md](docs/problems.md) shows why each part matters and
+Suites from earlier versions of aot-evals aren't read; `/aot-evals:start` offers to rebuild the evals from one.
+
+aot-evals 2.0.0 writes each eval down in one file, `eval.yaml`, as four parts: the **estimand**
+(what number, about what, drives which decision), the **sampling design** (which cases, drawn how),
+the **measurement model** (how wrong the grader is) and the **decision rule** (when to act). The
+rules for building an eval follow from them ([docs/estimators.md](docs/estimators.md)).
+[docs/method.md](docs/method.md) is the reference for every command, file, field and gate;
+[docs/problems.md](docs/problems.md) shows why each part matters, and
 [docs/statistics.md](docs/statistics.md) derives the numbers.
 
-### Upgrading from 1.x
-
-The agent contract is unchanged: the stdin and stdout fields, the hooks, the outcome codes and the
-per-result field names are as in 1.x, so an agent that runs under 1.x runs under 2.0. The suite
-around it changes, and 2.0 refuses a folder that still holds a 1.x suite.
-
-1. **Convert the suite:** `aot-evals migrate --to 2 --dry-run`, then `aot-evals migrate --to 2`.
-   It turns a 1.x suite (in `evals/`, `evals/<agent>/` or `evals/agents/<agent>/`) into
-   `evals/agents/<agent>/` with one eval, `end-to-end/`, moving files with `git mv` where git tracks
-   them, and writes **MIGRATION.md** in the agent folder: every default it chose, the check it
-   chose per failure mode, each dropped field with its value, the files it left in place, and the
-   lines to check by hand. The 1.x files it read are kept in `migrated-from-1x/` to check against.
-2. **Fill what only the owner knows**, as MIGRATION.md lists: `estimand.decision` (the action and
-   its owner), `decision_rule.margin`, and the cost of a failure per use case (1.x never put a
-   number on it; the migrated eval uses traffic weights until the owner states costs).
-   `aot-evals validate` lists every field still missing.
-3. **Draw the quality set and run a new baseline.** Hand-picked 1.x quality cases carry no draw
-   and do not count toward the estimate, and 1.x runs are not 2.0 runs, so a migrated eval reports
-   nothing until `aot-evals plan --write`, `aot-evals draw`, the screens, a commit and a baseline.
-4. **Check by hand** what MIGRATION.md names: code checks that find files from their own path
-   (`Path(__file__).parents[k]`) sit one folder deeper, and scripts that name a moved folder.
-5. **Readers of report.json** move to `aot-evals/report@2` (docs/method.md §10): `sets` and
-   `categories` become `estimate`, `design` and `use_cases`; the G1–G14 list becomes `spec`
-   (missing and invalid fields) and `gates` (evidence, keyed by part); judges report `catch` and
-   `clean`, with `tpr` and `tnr` kept beside them. The run manifest is `aot-evals/run-manifest@2`.
-6. **Judges** drop `min_tpr` and `min_tnr`: a judge counts when its errors cost no more cases than
-   the eval's `measurement.max_inflation` allows (default 2.0).
-7. **Renamed:** `category` → `use_case`, `set` → `pool` (`quality`, `bug_finding`), `taxonomy.yaml`
-   → `coverage.yaml`, `allocate` → `plan`, `run --category` → `run --use-case`, TPR and TNR → clean
-   pass rate and catch rate.
-
-### Removed without a 2.0 replacement
-
-- **Commands:** `checkpoint` (the skills summarize in the conversation and log a question to the
-  activity page), `redundancy` (prune bug-finding cases by hand, never quality cases), `report
-  --html` (the `report` skill writes the HTML from report.json v2), and `status --gates` (`status`
-  and `validate` list the spec's fields; report.json carries the evidence and measurement gates).
-- **Gates:** G4, the refusal of a same-family generative judge for pairwise grading (nothing checks
-  the judge's family yet), and G9, the fidelity of simulators and fakes (simulated users are out of
-  scope; the `env/` fakes stay, hashed into every run).
-- **Flags and fields:** `run --force`; agent.yaml `simulator` and `validity` (compounded validity:
-  the eval held to people measures it); the category `simple` flag and its 3-case target; the "Other
-  under 10%" rule; report keys `online`, `regime`, `validity` and `conditions.simulator`; the
-  variance band as part of the compare verdict (it is reported as data for drift).
-- **The `assess` skill** is folded into `start`, which runs Assess when there is no discovery
-  report. **references/process/**, the 1.x step-by-step process organized by category, is removed:
-  its sizing rules (10 cases per category, 3 for a simple one) are replaced by counts from each
-  eval's decision rule.
-
-Everything else in 1.x has a 2.0 counterpart: the C0–C19 command gates and the G1–G14 report gates
-become the spec's missing and invalid fields plus the evidence and measurement gates
-(docs/method.md §11).
-
-### Not computed yet
-
-- `looks: sequential` and `looks: optimizer_holdout` leave the decision `unknown`, with a validate
-  note: no always-valid interval or reusable holdout is built yet.
-- Budgets are compared as point values, not as medians and p90 with intervals.
-- A probabilistic judge's threshold maximizes catch + clean pass rate, not the cost-based threshold
-  of docs/statistics.md §3.2.
-- Nothing detects a population shift or drift yet; shares are measured again by hand.
-- report.json v2 has no `coverage`, `redundancy`, `cases`, `conditions` or `next_actions` keys
-  yet; `aot-evals coverage` prints the coverage grid.
-
-### New
-
-- **The eval spec** (`eval.yaml`, `spec.py`). `aot-evals --eval ID init [--component NAME]`
-  creates an eval in `evals/agents/<agent>/<eval>/` beside the agent system's shared `env/`,
-  `data/`, labeling standard and journal. The loader lists every missing and invalid field with the
-  numbers it blocks, plus notes and the defaults it filled (one-sided α 0.05, power 0.80, fixed
-  looks, `max_inflation` 2.0, the eval-vs-people margin 0.10 and labels per kind). An incomplete
-  eval still runs; its report nulls what depends on the missing fields. The global `--eval` option
-  selects an eval.
+- **Three roles, working at the same time.** `/aot-evals:start` asks the owner three questions on
+  the first run (what decision the tests drive, which mistakes cost most, what a change must show)
+  and writes a discovery report; after that it says where each eval stands and who has the next
+  step. `/aot-evals:build` is engineering's: wiring, cases, checks, baselines and changes.
+  `/aot-evals:judge` and the grader application (`aot-evals serve`) are for the people who know
+  what good looks like: whole-run labels, rulings, rules for the labeling standard, AI judges. The
+  skills report what the statistics mean for the next step, not how they were computed.
+- **The eval spec.** `aot-evals --eval ID init [--component NAME]` creates an eval in
+  `evals/agents/<agent>/<eval>/`, beside the agent's shared sandbox, frames, labeling standard and
+  journal. `aot-evals validate` lists every missing and invalid field with the numbers it blocks;
+  an incomplete eval still runs, and its report nulls what depends on the missing fields.
 - **Estimand.** Use cases with shares and the cost of a failure, and weights (`traffic`, `cost` or
-  stated). report.json v2's headline is the weighted θ̂ (a Hájek estimate with a cluster-aware
-  interval), with the per-use-case table beside it.
-- **Sampling design.** `aot-evals --eval ID plan [--write]` sizes each use case's quality set from
-  the decision rule's power (with each judge's error counted), around use case gates and
-  oversampling, by optimum allocation; what it can't know before a baseline it asks for
-  (`--assumed-rate`, `--flip-rate`, `--total`). `aot-evals --eval ID draw` draws the quality set
-  from the frame, seeded and stratified, with each case's inclusion probability; skips are logged
-  with their reason, and drawn cases are removed only with `--prune`. Cases carry `use_case`,
-  `pool`, `draw` and `cluster`.
-- **Measurement model.** Catch rate and clean pass rate everywhere, each with its interval, lower
-  bound and labels per kind. A judge counts when its inflation factor at its lower bounds is within
-  `max_inflation`, read at the baseline's failure rate for a candidate (so a candidate that fails
-  less never loses its judge); a judge that doesn't count and feeds the quantity leaves θ̂ null. Corrections feed
-  the estimate (`rogan_gladen`, `ppi`). The eval is held to people with floors read through a
-  non-inferiority margin and a label count fixed before looking. `trials: auto` takes k from the
-  baseline's variance split.
+  stated). The headline is the weighted θ̂, a Hájek estimate with a cluster-aware interval, with the
+  per-use-case table beside it.
+- **Sampling design.** `aot-evals plan` sizes each use case's quality set from the decision rule's
+  power, with each judge's error counted. `aot-evals draw` draws the quality set from a frame of
+  real traces, seeded and stratified, with each case's inclusion probability. The bug-finding set
+  is written by hand against a coverage list and never enters a rate.
+- **Measurement model.** Catch rate and clean pass rate, each with its interval, lower bound and
+  labels per kind. A judge counts when its errors cost no more cases than `max_inflation` allows,
+  read at the baseline's failure rate for a candidate. Rogan–Gladen and prediction-powered
+  corrections feed the estimate. The eval is held to people's labels, with floors read through a
+  margin and a label count fixed before looking. `trials: auto` takes k from the baseline's
+  variance split.
 - **Decision rules.** Superiority, non-inferiority and threshold tests per gate (the headline and
-  each use case gate): the threshold on an exact Clopper–Pearson bound at Kish's effective size,
-  the paired tests by sign flips per cluster on design-weighted deltas. Each gate is `pass`, `fail`,
-  `insufficient` (with the cases that would decide it) or `unknown` with its reason. Gates combine
-  with no correction when all must pass, or by Holm or Benjamini–Hochberg when any one acts;
-  constraints make a passing change a `trade`; under fixed looks a change is decided once.
-  `compare` and `report --candidate` refuse runs made under another estimand, design or
-  measurement, and a decision-rule change not on record (a commit of eval.yaml, or `log --kind
-  decision`) before the first run decided on.
-- **Several evals per agent.** agent.yaml's `components` lists each subagent, route and step with
-  its context and whether it ships on its own; a component gets an eval of its own only at a context
-  boundary and when decided on separately. `aot-evals --eval ID handoffs` extracts a component
-  eval's frame from the end-to-end traces, and `import --handoffs-of COMPONENT` imports handoffs
-  captured as they happened. A component eval must also require the end-to-end eval
-  (`also_requires`, non-inferiority), tested on the end-to-end runs of the same change.
-- **The online store** (`examples/store/`) is the example, `aot-evals demo` and the test fixture: a
-  support agent and its refund subagent, fakes for the order system and payments, a trace export
-  whose refund traces record their handoffs, both evals with drawn quality sets and bug-finding sets,
-  a policy judge calibrated on 100 failure and 500 pass labels beside a weaker one the floor refuses,
-  and variants for the problems' scenarios. The demo runs both baselines, then a refund-subagent
-  change that improves its own eval and breaks refunds end to end.
-- **Phases and trust in `status`.** `status` names the agent's phase (Assess, Build or Judge, its
-  earliest eval's), then for each eval its phase, its trust (untested, provisional or trusted: every
-  spec field filled, every counted judge counting, the eval held to people at its floors, and the
-  quality set its decision rule needs), what changed since its baseline (a revision, a decision-rule
-  change, the agent, an uncompared candidate) with the way back, and the next step. `status --json`
-  carries the same beside each spec's lists. `components` rows carry `phase` again.
-- **The skills** (`start`, `build`, `judge`, `report`) are rewritten around the four parts and the
-  terms of docs/estimators.md. `start` runs Assess itself, with questions that settle the estimand
-  (the decision and its owner, the cost of a failure, what a change must show). The `report` skill
-  writes its HTML from report.json v2, organized by part.
-- **The grader application** serves one eval (`serve --eval`): its spec, its baseline and latest
-  candidate, the eval against people, and per use case its cases, labeled runs and catch and clean
-  pass rates. Labels, rulings, triage, proposals and drafts are the eval's own; accepted rules join
-  the agent system's shared standard with their `use_cases`.
-- **Evidence gates** in report.json v2, keyed by part: `manifest`, `trials_complete`, `screened`,
-  `committed`, `coverage_list`, `independent_reference` and `k`.
-- **The statistics library** (`aot_evals.stats`) adds, among others, `hajek_mean`,
-  `stratified_hajek`, `optimum_allocation`, `judge_inflation`, `cases_needed`, `threshold_test`,
-  `threshold_n`, `rate_bound_test`, `kish_n`, `superiority_test`, `non_inferiority_test`, `holm`,
-  `rogan_gladen_rate`, `ppi_weighted`, `trials_for_split` and `draw_order`.
+  each use case gate), with an exact bound for rates and sign-flip tests per cluster for paired
+  comparisons. Each gate is `pass`, `fail`, `insufficient` (with the cases that would decide it) or
+  `unknown` with its reason; budgets make a passing change a `trade`, and under fixed looks a change
+  is decided once. `compare` refuses runs made under another estimand, design or measurement, and a
+  decision-rule change that wasn't on record first.
+- **Several evals per agent.** agent.yaml's `components` lists each subagent, route and step; a
+  component gets an eval of its own only at a context boundary and when it ships on its own.
+  `aot-evals --eval ID handoffs` extracts a component eval's frame from the end-to-end traces, and
+  a component change also has to pass the end-to-end eval (`also_requires`).
+- **Files.** `report.json` has schema `aot-evals/report@2`, with evidence and measurement gates
+  keyed by part; runs write `aot-evals/run-manifest@2`. `aot-evals status` gives each eval's trust
+  (untested, provisional, trusted), what changed since its baseline and the next step.
+- **The online store** (`examples/store/`, `aot-evals demo`): a support agent and its refund
+  subagent with an eval each. The demo runs both baselines, then a subagent change that improves
+  its own eval and breaks refunds end to end.
 - **The published method** (`evals.json`, schema `aot-evals/site@2`, and the method zip) is built
-  from docs/method.md, the three guiding documents and the store example; see CONTRIBUTING.md.
+  from docs/method.md, the three guiding documents and the store example.
 
-### Fixed
-
-- `stats.floor_evidence` rounded the count at each candidate size, so 13 of 15 was sized as 42 of 48
-  and reported 48 labels where 53 are needed. The "about N labels" hint in `calibrate` and
-  `agreement` changes with it.
-- A threshold rule on a rate passed a 5% failure-rate bar at 0 failures in 32 cases, and at 3 of 150
-  and 5 of 200, on a normal bound; it now uses the exact bound.
-- The committed-cases check missed an edited case file whose status line came first, and git
-  status's first path lost a character; Python's bytecode caches no longer count as eval files
-  changed during a run.
-- Command judges in an eval run from the repository root, as agent.yaml's paths do.
+Not computed yet: sequential looks and the reusable holdout, interval estimates for budgets, a
+cost-based judge threshold, drift detection, and a family check on pairwise judges
+([docs/method.md §13](docs/method.md#13-not-computed-yet)).
 
 ## 1.1.0 — 2026-11-11
 

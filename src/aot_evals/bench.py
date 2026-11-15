@@ -1,7 +1,8 @@
-"""The bench of graders (docs/method.md §7): what people do in the Judge phase, without an engineer.
+"""The bench of graders (docs/method.md): what the people who know what good looks
+like do, without an engineer.
 
 The grader application (`aot-evals serve`) and the CLI share this module. It works on one eval
-(docs/v2-design.md §1). Everything it writes is a plain file in that eval's folder, or in the
+(docs/method.md). Everything it writes is a plain file in that eval's folder, or in the
 agent system's shared labelling standard, committed like any other:
 
 - `labels/runs.jsonl`: whole-run labels, one line per (run, labeller); several people may label the
@@ -177,7 +178,7 @@ def suite_disagreements(ev: Eval) -> dict:
     stale = bool(res) and agreement.is_stale(ev, res)
     return {"measured_at": res.get("measured_at"), "stale": stale, "items": rows,
             "dev": res.get("dev"), "holdout": res.get("holdout"),
-            "use_cases": res.get("use_cases") or res.get("categories") or {}}
+            "use_cases": res.get("use_cases") or {}}
 
 
 def set_triage(ev: Eval, item: str, cause: str, note: str, by: str) -> dict:
@@ -354,7 +355,7 @@ def drafts(ev: Eval) -> list[dict]:
 # ---- the engineering inbox --------------------------------------------------------------------------
 
 def inbox(ev: Eval) -> list[dict]:
-    """What the Judge phase needs from engineering: triaged disagreements whose cause is a fix to
+    """What the graders need from engineering: triaged disagreements whose cause is a fix to
     the eval, and drafted cases."""
     out = []
     for d in suite_disagreements(ev)["items"]:

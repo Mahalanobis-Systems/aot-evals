@@ -34,10 +34,11 @@ def built(tmp_path_factory):
     return out, doc
 
 
-def test_the_parts_phases_commands_fields_keys_and_gates_are_parsed(built):
+def test_the_parts_roles_commands_fields_keys_and_gates_are_parsed(built):
     _, doc = built
     assert [p["part"] for p in doc["parts"]] == ["Estimand", "Sampling design", "Measurement model", "Decision rule"]
-    assert [p["phase"] for p in doc["phases"]] == ["Assess", "Build", "Judge"]
+    assert [r["role"] for r in doc["roles"]] == ["The owner", "Engineering", "Graders"]
+    assert "phases" not in doc
     assert len(doc["principles"]) == 9 and all(p["title"] for p in doc["principles"])
     for rows, fields in [(doc["commands"], ("command", "what_it_does")), (doc["gates"], ("part", "id", "fails_when")),
                          (doc["spec_fields"], ("field", "part", "required")), (doc["report_keys"], ("key", "holds"))]:

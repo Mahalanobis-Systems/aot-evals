@@ -1,4 +1,4 @@
-"""The sampling design of a 2.0 eval (docs/v2-design.md §3; estimators §4; statistics §2): the
+"""The sampling design of an eval (docs/method.md; estimators §4; statistics §2): the
 case fields that say how a case was chosen, `aot-evals draw`, and the clusters.
 
 **Cases.** Every case names its `use_case` (the folder it is in) and its `pool`: `quality`, drawn
@@ -29,10 +29,9 @@ from .util import ContractError, load_json, now_iso, sha256_file, write_json
 DRAW_FILE = "draw.json"
 DRAW_SCHEMA = "aot-evals/draw@1"
 # Fields of a frame row that become the case, as the agent and the checks receive them
-# (v2-design §3). Everything else in the row stays in the frame.
+# (docs/method.md). Everything else in the row stays in the frame.
 CASE_FIELDS = ("trigger", "inputs", "start_state", "followups", "expected_end_state", "requirements",
                "rules_not_applicable", "failure_modes", "coverage_entries")
-V1_CASE_FIELDS = {"category": "use_case", "set": "pool", "taxonomy_entries": "coverage_entries"}
 
 
 # ---- case fields -------------------------------------------------------------------------------
@@ -60,9 +59,6 @@ def case_status(ev: Eval, case: dict) -> dict:
     cid = case.get("id")
     folder = case.get("_dir_use_case")
     uc = case.get("use_case")
-    for old, new in V1_CASE_FIELDS.items():
-        if old in case:
-            problems.append(f"`{old}` is a 1.x field; 2.0 calls it `{new}` (aot-evals migrate --to 2)")
     if uc is None:
         problems.append("no `use_case`: it is required and names the case's folder")
     elif folder is not None and uc != folder:

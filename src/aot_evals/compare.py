@@ -1,4 +1,4 @@
-"""What the paired comparison of a 2.0 eval (decision.py) needs to know about the runs on each
+"""What the paired comparison of an eval (decision.py) needs to know about the runs on each
 side: the candidate's declared independent variable and the manifest fields it may change, whether
 the two sides are one build apart (otherwise the comparison is refused), and where comparisons are
 saved (`report/comparisons/`).
@@ -11,7 +11,7 @@ import json
 import re
 
 from .repo import Evals
-from .report import BUILD_FIELDS, Context, manifest_view
+from .results import BUILD_FIELDS, Context, manifest_view
 from .util import write_json
 
 # Declared variable (the part before "=" in `run --variable`) -> manifest fields it may change.
@@ -44,7 +44,7 @@ def allowed_fields(variable: str | None) -> set[str]:
     return VARIABLES.get(variable.split("=", 1)[0].strip().lower(), set())
 
 
-# Per-item fields: a side's runs may each cover some of the items (runs split by category), so
+# Per-item fields: a side's runs may each cover some of the items (runs split by use case), so
 # they are merged by key and differ only where the same key has a different value.
 MERGED = ("case_set", "checks", "judges", "model_ids_observed")
 
@@ -59,7 +59,7 @@ def _keyed(field: str, v) -> dict:
 
 def side_view(side: str, manifests: list[dict]) -> tuple[dict, list[str]]:
     """One view of a side's runs, and what stops them being one measurement of one build. Runs
-    of one build over different cases (split by category, to pace a rate-limited runtime) are
+    of one build over different cases (split by use case, to pace a rate-limited runtime) are
     one side; runs of different builds, or that measured a case or check differently, are not."""
     views = [view(m) for m in manifests]
     problems = []

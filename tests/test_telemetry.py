@@ -60,20 +60,20 @@ def test_off_command_sends_nothing_and_on_restores_it(sent, capsys):
 
 
 def test_an_event_carries_only_the_allowlist(sent):
-    telemetry.emit("checkpoint", gate="C3")
-    telemetry.emit("checkpoint", gate="../../etc/passwd")  # anything but a gate id is dropped
+    telemetry.emit("report_built")
+    telemetry.emit("demo_run")
     first, second = sent
     assert set(first) == {"api_key", "event", "distinct_id", "properties", "timestamp"}
-    assert first["event"] == "aot_evals_checkpoint"
-    assert set(first["properties"]) == {"version", "os", "gate", "$ip", "$geoip_disable",
+    assert first["event"] == "aot_evals_report_built"
+    assert set(first["properties"]) == {"version", "os", "$ip", "$geoip_disable",
                                         "$process_person_profile"}
-    assert first["properties"]["gate"] == "C3" and first["properties"]["$ip"] is None
-    assert "gate" not in second["properties"]
+    assert first["properties"]["$ip"] is None
     assert first["distinct_id"] == second["distinct_id"]  # one install id, kept
 
 
 def test_unknown_events_are_never_sent(sent):
     telemetry.emit("prompt_text")
+    telemetry.emit("checkpoint")
     assert sent == []
 
 
@@ -100,5 +100,5 @@ def test_a_broken_sender_never_breaks_a_command(sent, monkeypatch, capsys):
 def test_show_prints_the_event_and_sends_nothing(sent, capsys):
     assert cli.main(["telemetry", "show"]) == 0
     shown = json.loads(capsys.readouterr().out)
-    assert shown["event"] == "aot_evals_checkpoint" and sent == []
+    assert shown["event"] == "aot_evals_report_built" and sent == []
     assert not telemetry._id_path().exists()  # showing creates no id

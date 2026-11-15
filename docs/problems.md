@@ -1,6 +1,6 @@
 # Twelve problems every agent eval has to solve
 
-*Why each part of an aot-evals 2.0 eval matters, by worked example. [method.md](method.md) is the
+*Why each part of an aot-evals eval matters, by worked example. [method.md](method.md) is the
 reference for what the tool does.*
 
 You don't need statistics to build trustworthy evals. You need to recognize twelve problems, because
@@ -50,7 +50,7 @@ Each problem carries a **Picture** line: the diagram that would make it obvious 
 91.0% to 90.8%. Nobody will notice 0.2 points. But each of those mistakes sends money out the door,
 while a wrong delivery date costs one follow-up message. Say what each kind of mistake costs ($1 for
 a wrong order status, $5 for a botched return, $20 for a wrong address, $50 for a bad refund) and
-weight the score by share × cost: refunds now carry 23% of the score instead of 2%, and the same bug
+weight the score by share × cost: refunds carry 23% of the score instead of 2%, and the same bug
 moves it 2.3 points.
 
 **The fix.** Before you measure, say how much each kind of mistake costs compared with the others

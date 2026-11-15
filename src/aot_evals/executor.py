@@ -11,7 +11,7 @@ stdout: `answer`, optional `usage.tokens_input` / `usage.tokens_output` /
 Beside `setup`/`reset`, two optional hooks make state-diff grading possible:
 `seed` (per case, case JSON on stdin) puts the world into the case's start state, and
 `observe` prints the world as JSON. Checks grade what `observe` returns, never what the agent
-says it did (G10).
+says it did (`independent_reference`).
 """
 
 from __future__ import annotations

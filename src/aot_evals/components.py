@@ -1,12 +1,12 @@
 """The components of an agent's optimization loop, as a checklist, grouped by the part of an eval
-each serves (estimators §1–§6; docs/v2-design.md §7).
+each serves (estimators §1–§6; docs/method.md).
 
 An eval is an estimator with four parts: the estimand, the sampling design, the measurement model
 and the decision rule. Around them sits what lets the agent run at all: the agent contract and a
 sandbox. Every component of the loop serves one of those, so the list is grouped by them, each
 component with the command that builds it and a status read from the agent's evals.
 
-The Assess report may set a component's state before any eval exists (`components:` in
+The discovery report may set a component's state before any eval exists (`components:` in
 discovery.md's front matter, keyed by id); once the evals hold evidence, their own reading wins
 wherever it says more than the report did. `aot-evals components` prints the list; the grader
 application (`aot-evals serve`) shows it.
@@ -69,14 +69,15 @@ COMPONENTS = [
 ]
 STATES = ("done", "partial", "todo", "later", "n/a")
 
-# The phase that builds each component (trust.py): Assess settles the estimand, Build the agent
-# contract, the sampling design, the checks and the decision rule, Judge the error rates.
-PART_PHASE = {CONTRACT: "build", ESTIMAND: "assess", DESIGN: "build", MEASUREMENT: "build", DECISION: "build"}
-JUDGE_PHASE = {"judges", "grader-ui", "calibration-set", "two-blind", "pool", "misclassification"}
+# Whose work each component is (trust.ROLES): the owner's the estimand, the graders' the error
+# rates, engineering's everything else.
+GRADER_COMPONENTS = {"judges", "grader-ui", "calibration-set", "two-blind", "pool", "misclassification"}
 
 
-def phase_of(part: str, cid: str) -> str:
-    return "judge" if cid in JUDGE_PHASE else PART_PHASE[part]
+def role_of(part: str, cid: str) -> str:
+    if cid in GRADER_COMPONENTS:
+        return "graders"
+    return "owner" if part == ESTIMAND else "engineering"
 
 
 def _boundaries(agent_dir: Evals, units: dict[str, str]) -> tuple[str, str, str]:
@@ -104,7 +105,7 @@ def _boundaries(agent_dir: Evals, units: dict[str, str]) -> tuple[str, str, str]
 
 
 def _from_evals(ev: Evals) -> dict[str, tuple[str, str]]:
-    """id -> (state, evidence), read from a 2.0 agent's evals (docs/v2-design.md §1)."""
+    """id -> (state, evidence), read from the agent's evals (docs/method.md)."""
     from . import agreement
     from .calibrate import is_current, load_calibration
     from .design import case_status
@@ -277,7 +278,7 @@ def checklist(ev: Evals) -> list[dict]:
         r = report.get(cid)
         if isinstance(r, dict) and r.get("state") in STATES and rank[r["state"]] > rank.get(st, 0):
             st, why = r["state"], r.get("note") or why
-        out.append({"group": part, "part": part, "phase": phase_of(part, cid), "id": cid, "name": name,
+        out.append({"group": part, "part": part, "role": role_of(part, cid), "id": cid, "name": name,
                     "how": how, "state": st, "why": why})
     return out
 

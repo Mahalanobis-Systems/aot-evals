@@ -1,4 +1,4 @@
-"""The `evals/` directory (docs/v2-design.md §1): where each file lives and how it is read.
+"""The `evals/` directory (docs/method.md): where each file lives and how it is read.
 
 Readers are lenient (a missing file reads as empty) so that `status` can describe a half-built
 directory; `validate` and the gates are where strictness lives.
@@ -11,8 +11,7 @@ from pathlib import Path
 
 from .util import ContractError, load_json, load_yaml, read_jsonl
 
-ALL_CATEGORIES = "*"  # a failure mode that applies to every use case
-ALL_USE_CASES = ALL_CATEGORIES
+ALL_USE_CASES = "*"  # a failure mode that applies to every use case
 
 
 def _is_suite_dir(d: Path) -> bool:
@@ -31,7 +30,7 @@ def is_evals_root(d: Path) -> bool:
 
 
 class _Runs:
-    """Reading runs/: each 2.0 eval has its own runs/ folder."""
+    """Reading runs/: each eval has its own runs/ folder."""
 
     def p(self, *parts: str) -> Path:  # pragma: no cover - Eval defines it
         raise NotImplementedError
@@ -89,10 +88,9 @@ class _Runs:
 
 @dataclass
 class Evals:
-    """An agent system's folder, evals/agents/<agent>/ (docs/v2-design.md §1): agent.yaml, the
+    """An agent system's folder, evals/agents/<agent>/ (docs/method.md): agent.yaml, the
     discovery report, and what its evals share (env/, data/, labels/standard.md, journal/), with
-    one folder per eval. A folder still holding 1.x suite files (`has_v1_suite`) is refused by the
-    CLI until `aot-evals migrate --to 2` converts it."""
+    one folder per eval."""
 
     root: Path
 
@@ -125,9 +123,6 @@ class Evals:
         if suites:
             names = ", ".join(s.name for s in suites)
             raise ContractError(f"{evals_dir} holds several agents ({names}); pass --agent NAME")
-        if (evals_dir / "agent.yaml").exists():
-            raise ContractError(f"{evals_dir} holds a 1.x suite (agent.yaml directly in evals/); "
-                                "`aot-evals migrate --to 2` moves it to evals/agents/<agent>/")
         raise ContractError(f"no agent under {evals_dir}; run /aot-evals:start first, or "
                             "`aot-evals --agent NAME --eval end-to-end init` to create one")
 
@@ -176,10 +171,10 @@ class Evals:
             return list(data.get("exports") or [])
         return list(data)
 
-    # ---- 2.0 evals (docs/v2-design.md §1) --------------------------------------------------
+    # ---- evals ------------------------------------------------------------------------------
 
     def eval_dirs(self) -> list[Path]:
-        """The agent's 2.0 evals: each folder inside it that holds an eval.yaml."""
+        """The agent's evals: each folder inside it that holds an eval.yaml."""
         if not self.root.is_dir():
             return []
         return sorted(p.parent for p in self.root.glob(f"*/{EVAL_FILE}")
@@ -188,11 +183,6 @@ class Evals:
     @property
     def has_evals(self) -> bool:
         return bool(self.eval_dirs())
-
-    @property
-    def has_v1_suite(self) -> bool:
-        """1.x suite files in the agent's folder: a suite `migrate --to 2` has not converted yet."""
-        return any(self.p(f).exists() for f in V1_FILES)
 
     def eval(self, eval_id: str | None = None) -> Eval:
         """One eval of this agent. With one eval the id is optional; with several, the eval whose
@@ -222,11 +212,10 @@ class Evals:
 
 
 EVAL_FILE = "eval.yaml"
-# Folders of the agent system that its evals share (docs/v2-design.md §1); never an eval id.
+# Folders of the agent system that its evals share (docs/method.md); never an eval id.
 SHARED_DIRS = ("env", "data", "labels", "journal")
-# Also reserved: the 1.x suite's folders, so an eval never collides with one before `migrate`.
+# Also reserved: the names of an eval's own folders, and pulled/, which .gitignore leaves out.
 RESERVED_EVAL_IDS = (*SHARED_DIRS, "cases", "checks", "runs", "report", "pulled")
-V1_FILES = ("categories.yaml", "failure_modes.yaml", "taxonomy.yaml", "allocation.yaml")
 
 
 POOLS = ("quality", "bug_finding")
@@ -234,14 +223,14 @@ POOLS = ("quality", "bug_finding")
 
 @dataclass
 class Eval(_Runs):
-    """One eval of an agent system: evals/agents/<agent>/<eval>/ (docs/v2-design.md §1).
+    """One eval of an agent system: evals/agents/<agent>/<eval>/ (docs/method.md).
 
     Its cases, checks, judges, labels, runs and report are its own; the sandbox (`env/`), the
     frames (`data/`), the labeling standard and the journal belong to the agent system.
 
-    It reads like a 1.x suite where the runner, the judges and isolation need it to (`cases`,
-    `checks_for_case`, `agent`, the runs), with the 2.0 meaning: the failure modes come from the
-    spec's measurement model, and a mode applies to a case through the case's use case."""
+    The runner, the judges and isolation read it through `cases`, `checks_for_case`, `agent` and
+    the runs: the failure modes come from the spec's measurement model, and a mode applies to a
+    case through the case's use case."""
 
     agent_system: Evals
     root: Path
@@ -252,7 +241,7 @@ class Eval(_Runs):
         return self.agent_system
 
     def agent(self) -> dict:
-        """agent.yaml, with a component eval's own `invoke` in place of the system's (v2-design §2)."""
+        """agent.yaml, with a component eval's own `invoke` in place of the system's (docs/method.md)."""
         data = dict(self.agent_system.agent())
         unit = (self.spec().part("estimand").get("unit") or {})
         own = self.spec().resolved.get("invoke")
@@ -339,12 +328,12 @@ class Eval(_Runs):
 
     def failure_modes_for_case(self, case: dict) -> list[dict]:
         """The modes that apply to a case: those whose use cases include its use case. Every
-        case of a use case is graded the same way, drawn or written (v2-design §3)."""
+        case of a use case is graded the same way, drawn or written (docs/method.md)."""
         uc = case.get("use_case")
         out = []
         for fm in self.failure_modes():
             ucs = fm.get("use_cases")
-            if ucs == ALL_CATEGORIES or (isinstance(ucs, list) and uc in ucs):
+            if ucs == ALL_USE_CASES or (isinstance(ucs, list) and uc in ucs):
                 out.append(fm)
         return out
 

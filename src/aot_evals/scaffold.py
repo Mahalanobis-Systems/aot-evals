@@ -1,5 +1,5 @@
 """`init`: one eval folder with its commented eval.yaml, and the agent system's shared files when
-they are missing (docs/v2-design.md §1)."""
+they are missing (docs/method.md)."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ AGENT_DIRS = ("env", "data")
 # Each eval's own.
 EVAL_DIRS = ("cases", "checks/code", "checks/judge", "labels", "runs", "report")
 # The eval folders sit one level down, so the agent-level patterns need a leading */ to reach them.
-GITIGNORE_V2 = "*/runs/*/raw/\n*/checks/judge/*.queue.csv\n*/data/\n"
+GITIGNORE_EVALS = "*/runs/*/raw/\n*/checks/judge/*.queue.csv\n*/data/\n"
 
 _UNIT_SYSTEM = "    kind: system                   # the whole agent, through agent.yaml's invoke"
 _UNIT_COMPONENT = """    kind: component
@@ -87,7 +87,7 @@ def init_eval(ev: Evals, eval_id: str, component: str | None = None) -> list[str
             created.append(dest)
     gi = ev.p(".gitignore")
     if not gi.exists():
-        gi.write_text((TEMPLATES / "gitignore").read_text() + GITIGNORE_V2)
+        gi.write_text((TEMPLATES / "gitignore").read_text() + GITIGNORE_EVALS)
         created.append(".gitignore")
     for d in EVAL_DIRS:
         mkdir(d, e.root)

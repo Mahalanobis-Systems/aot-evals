@@ -1,4 +1,4 @@
-# The whole support agent (estimators §1, Eval 0; docs/v2-design.md §9).
+# The whole support agent (estimators §1, Eval 0; examples/store/README.md).
 eval: end-to-end
 version: 1.0
 

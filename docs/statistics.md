@@ -1,6 +1,6 @@
 # The statistics behind aot-evals
 
-*The derivations behind aot-evals 2.0. [method.md](method.md) is the reference for what the tool
+*The derivations behind aot-evals. [method.md](method.md) is the reference for what the tool
 does; this page says why.*
 
 An eval is an estimator with four parts: an estimand, a sampling design, a measurement model and a

@@ -1,4 +1,4 @@
-# C1 inventory: the agent under test. Fill every field; `aot-evals status` names what is missing.
+# The agent under test. Fill every field; `aot-evals status` names what is missing.
 # Record each claim as confirmed or inferred, with its source. When config and runtime disagree,
 # trust the traces.
 
@@ -11,7 +11,7 @@ tools: []               # - {name: create_ticket, kind: write, credentials: [TIC
 harness:                # {name: <framework or runtime>, version: <version>}
 models: {}              # model actually used per call site, e.g. {main: claude-sonnet-5-5, router: claude-haiku-4-5}
 models_evidence:        # how `models` was observed (trace field, log line), not just what config says
-model_family:           # family of the main model, e.g. anthropic; judges must differ (G4)
+model_family:           # family of the main model, e.g. anthropic; judges must differ
 version_history: []     # - {date: 2026-08-01, change: "prompt: added refund policy", kind: prompt, source: <commit|ticket>}
 stable_window:
   since:                # date of the last behaviour-changing edit

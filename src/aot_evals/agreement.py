@@ -407,7 +407,7 @@ class Grader:
 
     def __init__(self, ev: Eval, call_judges: bool = False, log=print):
         from .judging import JudgeRunner
-        from .report import judge_states
+        from .results import judge_states
 
         self.ev = ev
         self.call_judges = call_judges
@@ -563,8 +563,7 @@ def measure(ev: Eval, call_judges: bool = False, log=print) -> dict:
                     for uc, rs in sorted(by_uc.items(), key=lambda kv: str(kv[0]))}
     result = {"measured_at": now_iso(), "suite_sha": suite_sha(ev), "labels_sha": labels_sha(labels),
               "dev": _rates(dev), "holdout": _rates(hold), "all": _rates(rows),
-              # `categories` is the 1.x name, kept beside `use_cases` for readers of agreement.json
-              "use_cases": per_use_case, "categories": per_use_case,
+              "use_cases": per_use_case,
               "judge_calls": g.calls, "labels_without_a_run": missing,
               "disagreements": sorted(disagreements, key=lambda d: (d["split"], d["human"], d["case_id"]))}
     result["human_anchored"] = human_anchored(ev, g, rows, labels)
@@ -578,7 +577,7 @@ def people(ev: Eval, result: dict, labels: list[dict]) -> dict:
     """agreement.json's floors from the spec, labels per kind against the count
     each kind needs, and the margin-based evidence the gate reads (measurement.people_floor)."""
     from . import measurement as ms
-    from .report_v2 import Scored, default_runs
+    from .report import Scored, default_runs
     from .spec import use_case_weights
 
     spec = ev.spec()

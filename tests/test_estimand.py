@@ -1,5 +1,5 @@
-"""2.0 estimand and design (docs/v2-design.md §3, §5, §6): `draw`, `plan`, the case fields, the v2
-run manifest and report.json v2's `eval`, `spec`, `estimate`, `use_cases` and `design`.
+"""The estimand and the sampling design (docs/method.md): `draw`, `plan`, the case fields, the
+run manifest and report.json's `eval`, `spec`, `estimate`, `use_cases` and `design`.
 
 The fixture is the store's end-to-end eval (examples/store) on a small agent that answers "ok",
 with a frame of 70 traces. AGENT_VARIANT=refund-bug fails a known third of refund cases, so θ̂
@@ -188,7 +188,7 @@ def test_draw_refuses_an_incomplete_design(store):
     assert _draw(store) == 2
 
 
-# ---- case fields (v2-design §3) ------------------------------------------------------------------
+# ---- case fields ------------------------------------------------------------------
 
 def test_case_fields_decide_what_may_count(store):
     assert _draw(store) == 0
@@ -196,15 +196,15 @@ def test_case_fields_decide_what_may_count(store):
     drawn = next(c for c in ev.cases() if c.get("use_case") == "refund")
     assert case_status(ev, drawn)["counts"]
     hand = {"id": "q-hand", "use_case": "refund", "pool": "quality", "trigger": {"text": "x"}}
-    old = {"id": "old", "category": "refund", "set": "quality_estimate"}
+    loose = {"id": "loose", "trigger": {"text": "x"}}
     reseeded = {**{k: v for k, v in drawn.items() if not k.startswith("_")}, "id": "reseeded",
                 "draw": {**drawn["draw"], "seed": 1}}
     bf = {"id": "bf-x", "use_case": "refund", "pool": "bug_finding", "draw": drawn["draw"]}
-    for c in (hand, old, reseeded, bf):
+    for c in (hand, loose, reseeded, bf):
         store.write_case("refund", c)
     st = {c["id"]: case_status(ev, c) for c in ev.cases()}
     assert not st["q-hand"]["counts"] and "never by hand" in st["q-hand"]["problems"][0]
-    assert any("`category` is a 1.x field" in p for p in st["old"]["problems"])
+    assert any("no `use_case`" in p for p in st["loose"]["problems"])
     assert any("seed 1" in p for p in st["reseeded"]["problems"])
     assert st["bf-x"]["problems"] == [] and not st["bf-x"]["counts"] and st["bf-x"]["notes"]
     assert st["bf-x"]["cluster"] == "bf-x"  # no cluster key value: its own cluster
@@ -227,7 +227,7 @@ def _baseline(store: Store) -> dict:
     return store.ev().runs("baseline")[-1]
 
 
-def test_run_writes_a_v2_manifest_and_v2_attempt_lines(store):
+def test_run_writes_the_manifest_and_attempt_lines(store):
     m = _baseline(store)
     assert m["schema"] == "aot-evals/run-manifest@2" and m["k"] == 3  # k from measurement.trials
     assert m["eval"] == {"id": "end-to-end", "version": "1.0"}
@@ -244,7 +244,7 @@ def test_run_writes_a_v2_manifest_and_v2_attempt_lines(store):
     assert checks and all(c["counted"] for c in checks)
 
 
-def test_report_v2_estimate_is_the_weighted_hajek_mean(store):
+def test_report_estimate_is_the_weighted_hajek_mean(store):
     _baseline(store)
     assert store.cli("report") == 0
     r = store.report()

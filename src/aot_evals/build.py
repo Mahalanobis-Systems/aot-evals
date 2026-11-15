@@ -1,7 +1,7 @@
 """`aot-evals build`: from the discovery report to a baseline, with the fewest decisions.
 
-For an agent folder with 2.0 evals or a new one (docs/v2-design.md §1, §7; estimators §1), it
-does the mechanical part and lists, eval by eval and part by part, what the spec still
+For an agent's folder, with its evals or none yet (docs/method.md; estimators §1), it does the
+mechanical part and lists, eval by eval and part by part, what the spec still
 lacks:
 
 1. creates the end-to-end eval (`init --eval end-to-end`) and the agent's shared files;
@@ -85,7 +85,7 @@ def situations(ev: Evals) -> list[dict]:
 
 
 def _draft_coverage(ev: Evals, path, has_cases: bool) -> bool:
-    """The coverage list (1.x taxonomy.yaml, 2.0 coverage.yaml) from the discovery report's grid
+    """The coverage list (coverage.yaml) from the discovery report's grid
     columns, when it has no entries and no case was written yet."""
     tax = load_yaml(path) or {}
     cols = situations(ev)
@@ -105,11 +105,6 @@ def _draft_coverage(ev: Evals, path, has_cases: bool) -> bool:
         "# Commit this before the first case: coverage is measured only against a list that came first.\n"
         + yaml.safe_dump(tax, sort_keys=False))
     return True
-
-
-def is_v2(ev: Evals) -> bool:
-    """Whether build can work on the folder: 2.0 evals, or a new agent (no 1.x suite files)."""
-    return ev.has_evals or not ev.has_v1_suite
 
 
 def _q(v) -> str:
@@ -178,7 +173,7 @@ def _draft_measurement(e: Eval) -> bool:
     return True
 
 
-def prepare_v2(ev: Evals) -> list[str]:
+def prepare(ev: Evals) -> list[str]:
     """Steps 1-4. Returns what it did, in plain words. Never overwrites what someone wrote."""
     from . import boundaries
     from .scaffold import init_eval
@@ -314,7 +309,7 @@ def boundary_items(ev: Evals) -> list[dict]:
     return out
 
 
-def render_v2(done: list[str], ev: Evals) -> str:
+def render(done: list[str], ev: Evals) -> str:
     lines = [f"- {d}" for d in done]
     if lines:
         lines.append("")
@@ -332,7 +327,7 @@ def render_v2(done: list[str], ev: Evals) -> str:
     return "\n".join(lines)
 
 
-def ready_v2(e: Eval) -> list[str]:
+def ready(e: Eval) -> list[str]:
     """What still stands in the way of running an eval: the agent contract, a blocked run, cases."""
     out = [it["detail"] for it in eval_checklist(e)[:1] if not it["done"]]
     out += [f"{i.field}: {i.why}" for i in e.spec().blocked("run")]
@@ -341,11 +336,11 @@ def ready_v2(e: Eval) -> list[str]:
     return out
 
 
-def run_v2(ev: Evals, cli_main, log=print) -> int:
+def run(ev: Evals, cli_main, log=print) -> int:
     base = ["--evals", str(ev.root)]
     ran, rc = 0, 0
     for e in ev.evals():
-        missing = ready_v2(e)
+        missing = ready(e)
         if missing:
             log(f"{e.id}: not ready to run yet: " + "; ".join(dict.fromkeys(missing)))
             rc = 1
