@@ -35,8 +35,6 @@ It can read orders and change addresses. Refunds go to a **refund subagent**, wi
 and model, owned by a separate team. So the store has two evals: one for the whole support agent,
 and one for the refund subagent on its own.
 
-Each problem carries a **Picture** line: the diagram that would make it obvious at a glance.
-
 ---
 
 ## The estimand: what number, for which decision
@@ -56,10 +54,6 @@ moves it 2.3 points.
 **The fix.** Before you measure, say how much each kind of mistake costs compared with the others
 (equal is a fine answer, if it's true). Weight the score by it. A kind of request that matters but
 is too rare to move the score, even weighted, gets a decision rule of its own.
-
-**Picture.** 1,000 dots, one per request, colored by kind. The 2 new bad refunds are circled. Beside
-them, two gauges: the plain pass rate, which hasn't visibly moved, and the cost-weighted one, which
-has.
 
 > **Under the hood.** A weighted estimand, θ = Σ weight × pass rate, with weights from share × cost,
 > so 1 − θ tracks the expected cost of failures. Decision theory for the cost of each kind of
@@ -84,10 +78,6 @@ problem 1, it drops 3.7.
 subagent with its own context when a team changes it separately. Draw the subagent's cases from the
 requests it actually receives in production, not from requests someone imagined. And a change to a
 part ships only when the whole agent is no worse too.
-
-**Picture.** The agent diagram with its context boundaries: one eval around the whole system and one
-around the refund subagent. The subagent's gauge goes up (95% → 98%) while the whole agent's refund
-row goes down (90% → 74%).
 
 > **Under the hood.** One estimand per eval: one unit, one population, one decision (validity as an
 > interpretation for a use). Evals sit at context boundaries, where the input is a defined handoff
@@ -114,9 +104,6 @@ score under the new mix. Re-measure a grader whenever it changes, against a smal
 labeled runs. Watch reruns of the same build for drift. Prune bug-finding cases that never tell
 versions apart, but only when the comparison can still see the same size of change afterward, and
 never prune the randomly drawn cases.
-
-**Picture.** Two stacked bars of traffic mix, before and after the holidays, each with the score it
-implies, beside the one score the frozen eval keeps printing.
 
 > **Under the hood.** Post-stratification reweighting. Control charts for drift, with limits from
 > the variance components. Anchor-set equating across judge versions. The table of which change
@@ -147,9 +134,6 @@ and weight them back down when you compute the score. Check what's covered again
 the help center's topics, the agent's tools, and situations like "not found", "ambiguous" and "not
 allowed".
 
-**Picture.** Two jars. One is filled by hand with the dark, hard marbles. The other is scooped at
-random from the traffic stream. Each jar has its own pass rate printed on it.
-
 > **Under the hood.** Elicitation vs estimation. Stratified random sampling with inclusion probabilities and the Horvitz–Thompson (Hájek)
 > estimator; optimum allocation (Neyman's, with cost: weight × spread ÷ √cost) around each gated
 > use case's minimum; a beta-posterior interval for small use cases. Quota sampling
@@ -170,9 +154,6 @@ with no real improvement. Counted honestly as 4 templates against 6 losses, it's
 **The fix.** Mark cases that share a source (a template, a trace or a fixture) so they count as one
 piece of evidence. Spread cases across sources. Keep near-copies on the same side: a template in the
 quality set can't also feed the bug-finding set.
-
-**Picture.** 30 tiles, with the 24 wins grouped into 4 bundles of 6. The caption reads "4 pieces of
-evidence, not 24".
 
 > **Under the hood.** Design effect 1 + (m − 1)ρ and effective n. Sign flips per cluster (with 5 or fewer clusters, a ±1 sign flip can't reach 5%; Webb's six-point
 > weights help, approximately); the cluster jackknife. Cochran's Q
@@ -204,9 +185,6 @@ each kind. Correct the rates it reports for its known errors. Use code checks wh
 decide. Give each check one question. A judge that agrees with itself, or with another model,
 hasn't shown that it's right.
 
-**Picture.** A 2×2 grid of the 200 runs, judge verdict against reviewer verdict. The "bad runs the
-judge passed" cell is highlighted, and an "agreement: 95%" label is crossed out.
-
 > **Under the hood.** Diagnostic-test statistics: catch rate and clean pass rate (sensitivity and
 > specificity), Wilson intervals per kind of label, and the Rogan–Gladen correction. Attenuation: a grader with J = catch + clean − 1 shrinks every real change by J, and costs about
 > 1/J² as many cases near a 50% failure rate and far more for rare failures, which is how a floor on
@@ -233,9 +211,6 @@ and fix the check or the standard. Measure how well reviewers agree *on failures
 how each disagreement was settled so the standard doesn't drift. Combine the person's labels with
 the eval's verdicts to estimate what a person would say about every run.
 
-**Picture.** Five gates in a row that a good run has to get through, with 100 good runs entering
-and 59 coming out the far end. Beside it, a reviewer's red pen on a run that every gate let through.
-
 > **Under the hood.** The eval's own catch rate and clean pass rate, with a person as the reference
 > standard: the measurement model the estimate and its power calculations use. ∏ clean pass, and
 > correlated judge errors that break it. Agreement that holds up when most runs pass (Gwet's AC1,
@@ -256,9 +231,6 @@ randomness: at 75% per try, a customer who asks three times gets a good answer a
 **The fix.** Run every case at least 3 times, and measure how much the score moves on its own
 before you compare anything. Then spend the next budget wisely: more *cases* usually narrow the
 answer faster than more *runs* of the same cases.
-
-**Picture.** Ten runs of the same build plotted as dots on a 60–90% axis, scattered across about
-15 points.
 
 > **Under the hood.** Generalizability theory: between-case vs within-case variance, ICC, design
 > effect and effective n (a G-study, then a D-study). pass^k for reliability, and the detection
@@ -285,9 +257,6 @@ sometimes flags good runs never returns a clean run, and needs far more (problem
 and let that set the number of cases. Read a clean result as an upper limit, not as zero. A rare,
 costly failure needs many cases, cases written to target it, or a check on every production run.
 
-**Picture.** A curve of "the worst failure rate a clean run can hide" falling as cases go from 3 to
-300, with 10, 30 and 100 marked.
-
 > **Under the hood.** Case counts from the decision rule's power, multiplied by the grader's inflation factor. The zero-failure bound, 1 − 0.05^(1/n) (Hanley and Lippman-Hand's rule of three); detection probability
 > 1 − (1 − p)^n per failure mode; improvement sized by flip rate (N ≈ 7.85·d/Δ²); regression guards
 > sized by a tolerated drop. Floors shown with a non-inferiority margin, not a point estimate.
@@ -311,9 +280,6 @@ Do the same with cost. "Cost per request went down" can just mean it gives up so
 **The fix.** Run both versions on the same cases, list what each one fixed and broke, and test the
 difference case by case. A gain that blows the cost budget is a trade, not a win.
 
-**Picture.** Two rows of 200 squares, A above B. Most pairs are the same color, and only the
-squares that flipped are lit: 10 green for X, and 30 green plus 20 red for Y.
-
 > **Under the hood.** Paired designs. The sign-flip permutation test on per-case deltas and its
 > inverted interval; McNemar's mid-p on flips; flip rate d with SE √((d − Δ²)/N). Cost per successful
 > task, medians and p90 with bootstrap intervals, and budgets as constraints in the decision rule.
@@ -332,9 +298,6 @@ points at that rate of churn would take about 500 cases.
 **The fix.** Every comparison should say the smallest difference it could have seen. When the claim
 is "no worse", test that claim directly: the drop has to be shown smaller than a margin you choose
 in advance.
-
-**Picture.** An interval from −11 to +11 centered on zero, with a "no worse than −5" line that the
-interval crosses.
 
 > **Under the hood.** Power and minimum detectable effect, before the run and from the observed
 > deltas after it. Non-inferiority (or equivalence) testing with a pre-set margin, the standard
@@ -357,9 +320,6 @@ false alarm, 40% of the time at least one "significantly" changes when nothing d
 **The fix.** Decide how many labels you'll collect before you look. Tune on one set and confirm on
 a held-out set you check once. Before making a new claim, get fresh labels. Adjust for the number of
 things you check before acting on one. Never let the agent see the cases.
-
-**Picture.** A running catch rate wandering around 80% as labels arrive. Every time it pokes above
-the 85% line there's a "stop here?" flag, and the true 80% is drawn as a dashed line.
 
 > **Under the hood.** Optional stopping and always-valid sequential intervals; adaptive data
 > analysis, the reusable holdout and the Ladder; overoptimization of proxy graders (Goodhart).
