@@ -6,6 +6,8 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+## 2.0.0 — 2026-11-14
+
 aot-evals 2.0 organizes everything around the four parts of an eval: the **estimand** (what
 number, about what, drives which decision), the **sampling design** (which cases, drawn how), the
 **measurement model** (how wrong the grader is) and the **decision rule** (when to act). Each eval
