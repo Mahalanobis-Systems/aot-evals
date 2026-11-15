@@ -1,4 +1,4 @@
-"""The activity log (docs/method.md §9), shared by an agent system's evals, and the markdown its
+"""The activity log (docs/method.md §4), shared by an agent system's evals, and the markdown its
 pages render."""
 
 from __future__ import annotations

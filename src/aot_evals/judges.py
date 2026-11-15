@@ -1,4 +1,4 @@
-"""Judge checks (docs/method.md §5): one failure mode, one binary typed question, any backend.
+"""Judge checks (docs/method.md §7): one failure mode, one binary typed question, any backend.
 
 A judge is `<eval>/checks/judge/<check-id>.md`: YAML frontmatter plus a human-readable body.
 

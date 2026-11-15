@@ -1,7 +1,7 @@
 # Evals as estimators
 
-*Target design for aot-evals 2.0. Draft. Until the 2.0 refactor lands, [method.md](method.md) describes
-what the tool does today.*
+*The structure of aot-evals 2.0. [method.md](method.md) is the reference for what each command,
+gate and file does.*
 
 An eval exists to make a decision: ship this prompt change, swap this model, keep this subagent. To
 make that decision you want a number, and the eval is how you estimate it. So an eval is a

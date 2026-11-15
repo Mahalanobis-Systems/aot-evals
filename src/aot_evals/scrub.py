@@ -1,4 +1,4 @@
-"""Find secrets and personal data in files that are about to be committed (C6, principle 5).
+"""Find secrets and personal data in files that are about to be committed (docs/method.md §1, principle 8).
 
 Secrets block (a case with one fails C6). Personal data warns: it is often legitimate test
 data, and a person decides. Neither list is complete; this is a backstop for a human read

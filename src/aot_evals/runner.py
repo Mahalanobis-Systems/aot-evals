@@ -1,7 +1,7 @@
 """Run the suite: k trials per case, every attempt recorded (C12 baseline; also smoke and
 candidate runs).
 
-`runs/<run-id>/outcomes.jsonl` is never aggregated at write time (docs/method.md §3). It holds two kinds
+`runs/<run-id>/outcomes.jsonl` is never aggregated at write time (docs/method.md §8). It holds two kinds
 of line:
 
 - `"kind": "attempt"`: one per (case, trial, attempt), with the outcome code and the plane-B

@@ -1,6 +1,7 @@
 # The statistics behind aot-evals
 
-*Target design for aot-evals 2.0. Draft.*
+*The derivations behind aot-evals 2.0. [method.md](method.md) is the reference for what the tool
+does; this page says why.*
 
 An eval is an estimator with four parts: an estimand, a sampling design, a measurement model and a
 decision rule ([estimators.md](estimators.md)). This document derives the rules for each part: how

@@ -115,10 +115,11 @@ can only be monitored, not scored: when two experts can't agree pass/fail
 after seeing each other's critiques, track pairwise trends and edit distance
 instead [Hamel judge, Validators].
 
-**How these thresholds hold up.** [docs/statistics.md](../docs/statistics.md) checks each rule of
-thumb above (10 cases per category, 100–200 labels, the 60-label minimum, point-estimate floors)
-against the sampling, diagnostic-test and psychometric literature, says which ones aot-evals keeps,
-revises or supplements, and lists the changes proposed.
+**How these thresholds hold up.** aot-evals 2.0 replaces the rules of thumb above (10 cases per
+category, 100–200 labels, the 60-label minimum, point-estimate floors) with counts derived from
+each eval's decision rule and measurement model: case counts from power, labels counted per kind
+from a stated margin, and floors shown with a non-inferiority margin
+([docs/statistics.md](../docs/statistics.md) §3.4, §4.1, §4.2).
 
 ## Sources
 

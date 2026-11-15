@@ -1,4 +1,4 @@
-"""The activity log (docs/method.md §9): what Claude and the CLI did, in order, for the person to watch.
+"""The activity log (docs/method.md §4): what Claude and the CLI did, in order, for the person to watch.
 
 The agent system's `journal/activity.jsonl` is append-only, and shared by its evals
 (docs/v2-design.md §1): an entry about one eval goes into the same log. Every CLI command logs
@@ -8,7 +8,7 @@ reloads itself, so the person can keep it open in a browser tab and watch the wo
 the terminal.
 
 The directory carries its own `.gitignore` (`*`): the log is a working record for the people in
-the session and may quote unreviewed trace text, so it never enters git (docs/method.md §1, principle 5). The
+the session and may quote unreviewed trace text, so it never enters git (docs/method.md §1, principle 8). The
 committed record of each decision is the file the decision changed.
 """
 
@@ -58,7 +58,7 @@ def _ensure_dir(ev: Evals) -> None:
     d.mkdir(parents=True, exist_ok=True)
     ignore = d / ".gitignore"
     if not ignore.exists():
-        ignore.write_text("# aot-evals activity log: a working record, never committed (docs/method.md §9)\n*\n")
+        ignore.write_text("# aot-evals activity log: a working record, never committed (docs/method.md §4)\n*\n")
 
 
 def entries(ev: Evals) -> list[dict]:
