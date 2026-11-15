@@ -6,7 +6,7 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
-## 2.0.0 — 2026-11-14
+## 2.0.0 — 2026-11-15
 
 Suites from earlier versions of aot-evals aren't read; `/aot-evals:start` offers to rebuild the evals from one.
 
