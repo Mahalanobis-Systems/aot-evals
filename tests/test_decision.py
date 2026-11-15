@@ -476,7 +476,8 @@ def _refunds(s: Store, tmp_path, *, judge: bool, frame: dict | None = None) -> N
                 "backends": {"local": {"type": "command", "command": [sys.executable, str(s.root / "judge.py")],
                                        "family": "toy", "model": "toy-judge"}}}
         (d / "checks" / "judge").mkdir(parents=True)
-        (d / "checks" / "judge" / "undersized-judge.md").write_text("---\n" + yaml.safe_dump(spec) + "---\nPass or fail.\n")
+        (d / "checks" / "judge" / "undersized-judge.md").write_text(
+            "---\n" + yaml.safe_dump(spec) + "---\nPass or fail.\n")
     else:
         data["estimand"]["quantity"] = data["decision_rule"]["quantity"] = "failure_rate:wrong-amount"
         data["measurement"]["failure_modes"] = [fm for fm in data["measurement"]["failure_modes"]

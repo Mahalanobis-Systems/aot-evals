@@ -4,13 +4,12 @@ each serves (estimators §1–§6; docs/v2-design.md §7).
 An eval is an estimator with four parts: the estimand, the sampling design, the measurement model
 and the decision rule. Around them sits what lets the agent run at all: the agent contract and a
 sandbox. Every component of the loop serves one of those, so the list is grouped by them, each
-component with the command that builds it and a status read from the agent's evals (2.0) or its
-suite (1.x).
+component with the command that builds it and a status read from the agent's evals.
 
 The Assess report may set a component's state before any eval exists (`components:` in
 discovery.md's front matter, keyed by id); once the evals hold evidence, their own reading wins
-wherever it says more than the report did. `aot-evals components` prints the list; `status
---json`, the checkpoint pages and the grader application carry it.
+wherever it says more than the report did. `aot-evals components` prints the list; the grader
+application (`aot-evals serve`) shows it.
 """
 
 from __future__ import annotations
@@ -255,19 +254,17 @@ def _from_evals(ev: Evals) -> dict[str, tuple[str, str]]:
 
 
 def checklist(ev: Evals) -> list[dict]:
+    """The components of the agent system `ev` (its folder, not one eval), each with its state."""
     report = {}
     path = ev.discovery_path()
     if path.exists():
         fm, _ = split_front_matter(path.read_text())
         report = fm.get("components") or {}
-    if not ev.exists():
-        suite = {}
-    else:
-        suite = _from_evals(ev)
+    found = _from_evals(ev) if ev.exists() else {}
     rank = {"done": 3, "partial": 2, "later": 1, "todo": 0, "n/a": 0}
     out = []
     for part, cid, name, how in COMPONENTS:
-        st, why = suite.get(cid, ("todo", ""))
+        st, why = found.get(cid, ("todo", ""))
         r = report.get(cid)
         if isinstance(r, dict) and r.get("state") in STATES and rank[r["state"]] > rank.get(st, 0):
             st, why = r["state"], r.get("note") or why

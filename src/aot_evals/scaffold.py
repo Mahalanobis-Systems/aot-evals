@@ -96,6 +96,6 @@ def init_eval(ev: Evals, eval_id: str, component: str | None = None) -> list[str
         created.append(f"{eval_id}/eval.yaml")
     cov = e.p("coverage.yaml")
     if not cov.exists():
-        shutil.copyfile(TEMPLATES / "taxonomy.yaml", cov)
+        shutil.copyfile(TEMPLATES / "coverage.yaml", cov)
         created.append(f"{eval_id}/coverage.yaml")
     return created

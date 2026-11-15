@@ -96,10 +96,7 @@ def cmd_init(args) -> int:
     if args.component and not args.eval:
         args.eval = args.component  # a component eval is named for its component by default
     args.eval = args.eval or "end-to-end"  # every agent's first eval
-    try:
-        created = init_eval(ev, args.eval, args.component)
-    except ContractError as e:
-        sys.exit(str(e))
+    created = init_eval(ev, args.eval, args.component)
     print(f"eval at {ev.p(args.eval)}")
     for c in created:
         print(f"  created {c}")
@@ -1049,7 +1046,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--dry-run", action="store_true", help="say what would move and map, and write nothing")
     s.set_defaults(fn=cmd_migrate)
 
-    s = sub.add_parser("components", help="the optimization loop's components as a checklist, read from the suite")
+    s = sub.add_parser("components", help="the optimization loop's components as a checklist, from the agent's evals")
     s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_components)
 

@@ -17,6 +17,7 @@ import yaml
 from aot_evals import cli, spec
 from aot_evals.repo import Evals
 
+RS = "refund-subagent"  # the store's component eval
 STORE = Path(__file__).parents[1] / "examples" / "store" / "evals" / "agents" / "store"
 
 
@@ -139,92 +140,92 @@ E2E_DECISION = {"action": "ship a change to the support agent (prompt, model, to
 MUTATIONS = [
     # (eval, mutation, kind, field)
     # estimand
-    ("refund-subagent", _set("estimand.unit.kind", "subagent"), "invalid", "estimand.unit.kind"),
-    ("refund-subagent", _set("estimand.unit.boundary", _DEL), "missing", "estimand.unit.boundary"),
-    ("refund-subagent", _set("estimand.population.frame", _DEL), "missing", "estimand.population.frame"),
-    ("refund-subagent", _set("estimand.population.frame", "not-imported"), "missing", "estimand.population.frame"),
-    ("refund-subagent", _set("estimand.population.window", "2026-10-31/2026-10-01"), "invalid", "estimand.population.window"),
-    ("refund-subagent", _set("estimand.use_cases.0.share", 0.70), "invalid", "estimand.use_cases"),
-    ("refund-subagent", _set("estimand.use_cases.0.share", 1.5), "invalid", "estimand.use_cases[full-refund].share"),
-    ("refund-subagent", _set("estimand.use_cases.0.example", _DEL), "missing", "estimand.use_cases[full-refund].example"),
-    ("refund-subagent", _set("estimand.use_cases.2.cost", None), "missing", "estimand.use_cases[gift-card].cost"),
-    ("refund-subagent", _set("estimand.use_cases.2.cost", -1), "invalid", "estimand.use_cases[gift-card].cost"),
-    ("refund-subagent", _set("estimand.use_cases.1.id", "full-refund"), "invalid", "estimand.use_cases[full-refund].id"),
-    ("refund-subagent", _set("estimand.weights", _DEL), "missing", "estimand.weights"),
-    ("refund-subagent", _set("estimand.weights", "equal"), "invalid", "estimand.weights"),
-    ("refund-subagent", _set("estimand.weights", {"full-refund": 0.8, "partial-refund": 0.2}), "missing",
+    (RS, _set("estimand.unit.kind", "subagent"), "invalid", "estimand.unit.kind"),
+    (RS, _set("estimand.unit.boundary", _DEL), "missing", "estimand.unit.boundary"),
+    (RS, _set("estimand.population.frame", _DEL), "missing", "estimand.population.frame"),
+    (RS, _set("estimand.population.frame", "not-imported"), "missing", "estimand.population.frame"),
+    (RS, _set("estimand.population.window", "2026-10-31/2026-10-01"), "invalid", "estimand.population.window"),
+    (RS, _set("estimand.use_cases.0.share", 0.70), "invalid", "estimand.use_cases"),
+    (RS, _set("estimand.use_cases.0.share", 1.5), "invalid", "estimand.use_cases[full-refund].share"),
+    (RS, _set("estimand.use_cases.0.example", _DEL), "missing", "estimand.use_cases[full-refund].example"),
+    (RS, _set("estimand.use_cases.2.cost", None), "missing", "estimand.use_cases[gift-card].cost"),
+    (RS, _set("estimand.use_cases.2.cost", -1), "invalid", "estimand.use_cases[gift-card].cost"),
+    (RS, _set("estimand.use_cases.1.id", "full-refund"), "invalid", "estimand.use_cases[full-refund].id"),
+    (RS, _set("estimand.weights", _DEL), "missing", "estimand.weights"),
+    (RS, _set("estimand.weights", "equal"), "invalid", "estimand.weights"),
+    (RS, _set("estimand.weights", {"full-refund": 0.8, "partial-refund": 0.2}), "missing",
      "estimand.weights[gift-card]"),
-    ("refund-subagent", _set("estimand.weights", {"full-refund": 0.8, "partial-refund": 0.1, "gift-card": 0.5}),
+    (RS, _set("estimand.weights", {"full-refund": 0.8, "partial-refund": 0.1, "gift-card": 0.5}),
      "invalid", "estimand.weights"),
-    ("refund-subagent", _set("estimand.decision.owner", _DEL), "missing", "estimand.decision.owner"),
-    ("refund-subagent", _set("estimand.quantity", "failure_rate:no-such-mode"), "invalid", "estimand.quantity"),
-    ("refund-subagent", _set("estimand.quantity", "accuracy"), "invalid", "estimand.quantity"),
+    (RS, _set("estimand.decision.owner", _DEL), "missing", "estimand.decision.owner"),
+    (RS, _set("estimand.quantity", "failure_rate:no-such-mode"), "invalid", "estimand.quantity"),
+    (RS, _set("estimand.quantity", "accuracy"), "invalid", "estimand.quantity"),
     # estimators rule 1: a component eval decides about the component (rule 3's other gates: test_components)
-    ("refund-subagent", _set("estimand.decision", E2E_DECISION), "invalid", "estimand.decision"),
+    (RS, _set("estimand.decision", E2E_DECISION), "invalid", "estimand.decision"),
     # design
-    ("refund-subagent", _set("design.quality_set.seed", _DEL), "missing", "design.quality_set.seed"),
-    ("refund-subagent", _set("design.quality_set.selection", "hand_picked"), "invalid", "design.quality_set.selection"),
-    ("refund-subagent", _set("design.quality_set.oversample", {"store-credit": 2}), "invalid",
+    (RS, _set("design.quality_set.seed", _DEL), "missing", "design.quality_set.seed"),
+    (RS, _set("design.quality_set.selection", "hand_picked"), "invalid", "design.quality_set.selection"),
+    (RS, _set("design.quality_set.oversample", {"store-credit": 2}), "invalid",
      "design.quality_set.oversample[store-credit]"),
-    ("refund-subagent", _set("design.cluster_key", _DEL), "missing", "design.cluster_key"),
+    (RS, _set("design.cluster_key", _DEL), "missing", "design.cluster_key"),
     # measurement
-    ("refund-subagent", _set("measurement.failure_modes.1.check", ["amount-matches", "policy-judge"]), "invalid",
+    (RS, _set("measurement.failure_modes.1.check", ["amount-matches", "policy-judge"]), "invalid",
      "measurement.failure_modes[wrong-amount].check"),
-    ("refund-subagent", _set("measurement.failure_modes.1.check", "no-side-effects"), "invalid",
+    (RS, _set("measurement.failure_modes.1.check", "no-side-effects"), "invalid",
      "measurement.failure_modes[unrequested-change].check"),
-    ("refund-subagent", _set("measurement.failure_modes.1.check", "no-such-check"), "missing",
+    (RS, _set("measurement.failure_modes.1.check", "no-such-check"), "missing",
      "measurement.failure_modes[wrong-amount].check"),
-    ("refund-subagent", _set("measurement.failure_modes.1.diagnostics", ["amount-matches"]), "invalid",
+    (RS, _set("measurement.failure_modes.1.diagnostics", ["amount-matches"]), "invalid",
      "measurement.failure_modes[wrong-amount].diagnostics"),
-    ("refund-subagent", _set("measurement.failure_modes.2.side_effect", _DEL), "missing", "measurement.failure_modes"),
-    ("refund-subagent", _set("measurement.failure_modes.0.use_cases", ["store-credit"]), "invalid",
+    (RS, _set("measurement.failure_modes.2.side_effect", _DEL), "missing", "measurement.failure_modes"),
+    (RS, _set("measurement.failure_modes.0.use_cases", ["store-credit"]), "invalid",
      "measurement.failure_modes[breaks-policy].use_cases"),
-    ("refund-subagent", _set("measurement.trials", 2), "invalid", "measurement.trials"),
-    ("refund-subagent", _set("measurement.trials", _DEL), "missing", "measurement.trials"),
-    ("refund-subagent", _set("measurement.correction", _DEL), "missing", "measurement.correction"),
-    ("refund-subagent", _set("measurement.correction", "bayes"), "invalid", "measurement.correction"),
-    ("refund-subagent", _set("measurement.max_inflation", 0.5), "invalid", "measurement.max_inflation"),
-    ("refund-subagent", _set("measurement.people.floors", {"min_catch": 0.85, "clean": None}), "invalid",
+    (RS, _set("measurement.trials", 2), "invalid", "measurement.trials"),
+    (RS, _set("measurement.trials", _DEL), "missing", "measurement.trials"),
+    (RS, _set("measurement.correction", _DEL), "missing", "measurement.correction"),
+    (RS, _set("measurement.correction", "bayes"), "invalid", "measurement.correction"),
+    (RS, _set("measurement.max_inflation", 0.5), "invalid", "measurement.max_inflation"),
+    (RS, _set("measurement.people.floors", {"min_catch": 0.85, "clean": None}), "invalid",
      "measurement.people.floors.min_catch"),
-    ("refund-subagent", _set("measurement.people.floors", {"catch": 1.2, "clean": None}), "invalid",
+    (RS, _set("measurement.people.floors", {"catch": 1.2, "clean": None}), "invalid",
      "measurement.people.floors.catch"),
-    ("refund-subagent", _set("measurement.people.margin", 0), "invalid", "measurement.people.margin"),
-    ("refund-subagent", _set("measurement.people.labels_per_kind", 0), "invalid", "measurement.people.labels_per_kind"),
+    (RS, _set("measurement.people.margin", 0), "invalid", "measurement.people.margin"),
+    (RS, _set("measurement.people.labels_per_kind", 0), "invalid", "measurement.people.labels_per_kind"),
     # decision rule
-    ("refund-subagent", _set("decision_rule.test", _DEL), "missing", "decision_rule.test"),
-    ("refund-subagent", _set("decision_rule.test", "bayes_factor"), "invalid", "decision_rule.test"),
-    ("refund-subagent", _set("decision_rule.bar", None), "missing", "decision_rule.bar"),
+    (RS, _set("decision_rule.test", _DEL), "missing", "decision_rule.test"),
+    (RS, _set("decision_rule.test", "bayes_factor"), "invalid", "decision_rule.test"),
+    (RS, _set("decision_rule.bar", None), "missing", "decision_rule.bar"),
     ("end-to-end", _set("decision_rule.margin", _DEL), "missing", "decision_rule.margin"),
     ("end-to-end", _set("decision_rule.margin", 2), "invalid", "decision_rule.margin"),
-    ("refund-subagent", _set("decision_rule.quantity", "pass_rate"), "invalid", "decision_rule.quantity"),
-    ("refund-subagent", _set("decision_rule.alpha", 0.5), "invalid", "decision_rule.alpha"),
-    ("refund-subagent", _set("decision_rule.alpha", 0), "invalid", "decision_rule.alpha"),
-    ("refund-subagent", _set("decision_rule.power", 1), "invalid", "decision_rule.power"),
-    ("refund-subagent", _set("decision_rule.looks", "whenever"), "invalid", "decision_rule.looks"),
+    (RS, _set("decision_rule.quantity", "pass_rate"), "invalid", "decision_rule.quantity"),
+    (RS, _set("decision_rule.alpha", 0.5), "invalid", "decision_rule.alpha"),
+    (RS, _set("decision_rule.alpha", 0), "invalid", "decision_rule.alpha"),
+    (RS, _set("decision_rule.power", 1), "invalid", "decision_rule.power"),
+    (RS, _set("decision_rule.looks", "whenever"), "invalid", "decision_rule.looks"),
     ("end-to-end", _set("decision_rule.combine", "some"), "invalid", "decision_rule.combine"),
     ("end-to-end", _set("decision_rule.multiplicity", "bonferroni"), "invalid", "decision_rule.multiplicity"),
     ("end-to-end", _set("decision_rule.use_case_gates.0.use_case", "store-credit"), "invalid",
      "decision_rule.use_case_gates[store-credit].use_case"),
     ("end-to-end", _set("decision_rule.use_case_gates.0.margin", _DEL), "missing",
      "decision_rule.use_case_gates[refund].margin"),
-    ("refund-subagent", _set("decision_rule.also_requires.1", {"eval": "checkout", "test": "non_inferiority",
+    (RS, _set("decision_rule.also_requires.1", {"eval": "checkout", "test": "non_inferiority",
                                                        "margin": 0.02}), "missing",
      "decision_rule.also_requires[checkout]"),
     # rule 27: the end-to-end eval shows no regression with a paired test, never a threshold
-    ("refund-subagent", _all(_set("decision_rule.also_requires.0.test", "threshold"),
+    (RS, _all(_set("decision_rule.also_requires.0.test", "threshold"),
                      _set("decision_rule.also_requires.0.bar", 0.9),
                      _set("decision_rule.also_requires.0.margin", _DEL)), "invalid",
      "decision_rule.also_requires[end-to-end].test"),
-    ("refund-subagent", _set("decision_rule.constraints.default", {"cost_per_turn_usd": 0.1}), "invalid",
+    (RS, _set("decision_rule.constraints.default", {"cost_per_turn_usd": 0.1}), "invalid",
      "decision_rule.constraints.default.cost_per_turn_usd"),
     # invoke
-    ("refund-subagent", _set("invoke", _DEL), "missing", "invoke"),
-    ("refund-subagent", _set("invoke.command", "python agent/refunds.py"), "invalid", "invoke.command"),
+    (RS, _set("invoke", _DEL), "missing", "invoke"),
+    (RS, _set("invoke.command", "python agent/refunds.py"), "invalid", "invoke.command"),
     ("end-to-end", _set("invoke", {"command": ["python", "agent.py"]}), "invalid", "invoke"),
     # top level
-    ("refund-subagent", _set("eval", "refunds"), "invalid", "eval"),
-    ("refund-subagent", _set("version", "one"), "invalid", "version"),
-    ("refund-subagent", _set("version", _DEL), "missing", "version"),
+    (RS, _set("eval", "refunds"), "invalid", "eval"),
+    (RS, _set("version", "one"), "invalid", "version"),
+    (RS, _set("version", _DEL), "missing", "version"),
 ]
 
 
@@ -396,10 +397,16 @@ def test_validate_and_status(store, capsys):
     assert "missing: decision_rule.test" in capsys.readouterr().out
 
 
-def test_unready_commands_refuse_2_0_evals(store):
-    evals = str(store.root.parents[1])
-    with pytest.raises(SystemExit, match="does not read 2.0 evals"):
-        cli.main(["--evals", evals, "--agent", "store", "redundancy"])
+def test_a_1x_suite_is_refused_with_the_way_to_migrate(tmp_path, monkeypatch):
+    """1.x is gone: a folder that still holds a 1.x suite and no eval is refused, except by migrate."""
+    monkeypatch.chdir(tmp_path)
+    agent = tmp_path / "evals" / "agents" / "old"
+    agent.mkdir(parents=True)
+    (agent / "agent.yaml").write_text("id: old\n")
+    (agent / "categories.yaml").write_text("categories: []\n")
+    for cmd in (["status"], ["validate"], ["run", "--purpose", "smoke"], ["report"]):
+        with pytest.raises(SystemExit, match="migrate --to 2"):
+            cli.main(["--agent", "old", *cmd])
 
 
 def test_init_eval(tmp_path, monkeypatch, capsys):
@@ -429,8 +436,7 @@ def test_init_eval(tmp_path, monkeypatch, capsys):
     assert cli.main(["--agent", "shop", "--eval", "again", "init"]) == 2  # a second system eval
     assert "already this agent's end-to-end eval" in capsys.readouterr().err
     assert cli.main(["--agent", "shop", "--eval", "data", "init"]) == 2  # a shared folder
-    with pytest.raises(SystemExit, match="holds 2.0 evals"):
-        cli.main(["--agent", "shop", "init"])
+    assert cli.main(["--agent", "shop", "init"]) == 0  # without --eval: the end-to-end eval, already there
     # re-running creates nothing and overwrites nothing
     before = (agent / "end-to-end" / "eval.yaml").read_text()
     assert cli.main(["--agent", "shop", "init", "--eval", "end-to-end"]) == 0
@@ -454,10 +460,3 @@ def test_filled_template_is_complete(tmp_path, monkeypatch):
     s = ev.eval("end-to-end").spec()
     assert s.complete, spec.render(s)
 
-
-def test_v1_suites_are_untouched(tmp_path, monkeypatch):
-    """A 1.x suite has no eval folders: --eval is the only way into the 2.0 path."""
-    monkeypatch.chdir(tmp_path)
-    assert cli.main(["--agent", "old", "init"]) == 0
-    ev = Evals(tmp_path / "evals" / "agents" / "old")
-    assert (ev.p("categories.yaml")).exists() and not ev.has_evals and ev.has_v1_suite

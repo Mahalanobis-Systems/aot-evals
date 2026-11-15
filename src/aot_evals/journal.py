@@ -1,9 +1,11 @@
 """The activity log (docs/method.md §9): what Claude and the CLI did, in order, for the person to watch.
 
-`evals/journal/activity.jsonl` is append-only. Every CLI command logs itself (cli.main); the
-skills add the steps, findings, decisions and questions between commands with `aot-evals log`.
-Every append re-renders `evals/journal/activity.html`, a branded page that reloads itself, so
-the person can keep it open in a browser tab and watch the work instead of the terminal.
+The agent system's `journal/activity.jsonl` is append-only, and shared by its evals
+(docs/v2-design.md §1): an entry about one eval goes into the same log. Every CLI command logs
+itself (cli.main); the skills add the steps, findings, decisions and questions between commands
+with `aot-evals log`. Every append re-renders `journal/activity.html`, a branded page that
+reloads itself, so the person can keep it open in a browser tab and watch the work instead of
+the terminal.
 
 The directory carries its own `.gitignore` (`*`): the log is a working record for the people in
 the session and may quote unreviewed trace text, so it never enters git (docs/method.md §1, principle 5). The
@@ -25,7 +27,7 @@ WAITING_KINDS = ("question", "milestone")
 KIND_LABEL = {"step": "doing", "finding": "found", "decision": "decided", "question": "asked you",
               "command": "ran", "progress": "progress", "milestone": "checkpoint"}
 # Which gate a CLI command works on, for commands that are about one gate.
-COMMAND_GATE = {"import": "C0", "allocate": "C5", "screen": "C7", "label": "C9", "calibrate": "C10",
+COMMAND_GATE = {"import": "C0", "screen": "C7", "label": "C9", "calibrate": "C10",
                 "reliability": "C11", "judge": "C10", "compare": "C13", "coverage": "C14",
                 "redundancy": "C15", "report": "C18", "agreement": "C19", "init": "C0"}
 RUN_GATE = {"smoke": "C1", "baseline": "C12", "candidate": "C13", "drift": "C16"}
@@ -34,16 +36,21 @@ _PROGRESS_EVERY_S = 2.0
 _last_render = 0.0
 
 
+def _system(ev) -> Evals:
+    """The agent system's folder: an eval logs to the journal its agent system shares."""
+    return getattr(ev, "agent_system", ev)
+
+
 def directory(ev: Evals) -> Path:
-    return ev.p("journal")
+    return _system(ev).p("journal")
 
 
 def log_path(ev: Evals) -> Path:
-    return ev.p("journal", "activity.jsonl")
+    return directory(ev) / "activity.jsonl"
 
 
 def html_path(ev: Evals) -> Path:
-    return ev.p("journal", "activity.html")
+    return directory(ev) / "activity.html"
 
 
 def _ensure_dir(ev: Evals) -> None:

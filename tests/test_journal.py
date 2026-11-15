@@ -1,4 +1,5 @@
-"""Checkpoints and the activity log (docs/method.md §9)."""
+"""The activity log (docs/method.md §9), shared by an agent system's evals, and the markdown its
+pages render."""
 
 from __future__ import annotations
 
@@ -6,10 +7,9 @@ import re
 import subprocess
 
 from aot_evals import journal
-from aot_evals.repo import Evals
 
 
-def kinds(ev: Evals) -> list[str]:
+def kinds(ev) -> list[str]:
     return [e["kind"] for e in journal.entries(ev)]
 
 
@@ -18,92 +18,72 @@ def no_network(html: str) -> bool:
     return not re.search(r'(src|href)="(https?:)?//(?!mahalsystems\.ai)', html) and "<link" not in html
 
 
-def test_every_command_logs_itself_and_reads_do_not(make_repo):
-    repo = make_repo()
-    ev = Evals(repo.evals)
-    logged = journal.entries(ev)
-    assert [e["text"].split()[1] for e in logged] == ["import", "screen", "allocate"]
+def test_every_command_logs_itself_and_reads_do_not(store_repo):
+    s = store_repo
+    logged = journal.entries(s.ev())
+    assert [e["text"].split()[1:4] for e in logged] == [
+        ["--eval", "end-to-end", "import"], ["--eval", "refund-subagent", "handoffs"],
+        ["--eval", "end-to-end", "screen"], ["--eval", "refund-subagent", "screen"]]
     assert all("--evals" not in e["text"] for e in logged)
-    assert logged[0]["gate"] == "C0" and logged[-1]["gate"] == "C5" and logged[-1]["exit"] == 0
+    assert logged[0]["gate"] == "C0" and logged[-1]["gate"] == "C7" and logged[-1]["exit"] == 0
+    # one log for the agent system, whichever eval a command worked on
+    assert journal.log_path(s.ev("refund-subagent")) == journal.log_path(s.ev()) == \
+        s.agent / "journal" / "activity.jsonl"
 
     n = len(logged)
-    assert repo.cli("status") == 0 and repo.cli("validate") in (0, 1)
-    assert len(journal.entries(ev)) == n  # reads leave no trace
+    assert s.cli("status") == 0 and s.cli("validate") in (0, 1)
+    assert len(journal.entries(s.ev())) == n  # reads leave no trace
 
 
-def test_unmet_gates_are_noted_not_refused(make_repo, capsys):
-    """Nothing blocks a run on an unmet gate (method §4.1): the run goes ahead, the note names the
-    gates, the manifest records them, and the command logs itself with exit 0."""
-    repo = make_repo()
-    ev = Evals(repo.evals)
-    assert repo.cli("run", "--purpose", "baseline", "--k", "3") == 0  # C1 is unmet: noted
-    assert "C1 inventory" in capsys.readouterr().err
-    assert ev.latest_run("baseline")["unmet_gates"] == ["C1"]
-    last = journal.entries(ev)[-1]
+def test_an_incomplete_spec_is_noted_not_refused(store_repo, capsys):
+    """Nothing blocks a run on a spec field it lacks (docs/v2-design.md §5): the run goes ahead,
+    the note names the field, the manifest records it, and the command logs itself with exit 0."""
+    s = store_repo
+    spec = s.agent / "end-to-end" / "eval.yaml"
+    spec.write_text(spec.read_text().replace("eval: end-to-end\n", "eval: e2e\n", 1))
+    capsys.readouterr()
+    assert s.cli("run", "--purpose", "baseline", "--use-case", "address") == 0
+    assert "note: eval: says 'e2e'" in capsys.readouterr().err
+    assert s.ev().latest_run("baseline")["spec_issues"] == ["eval"]
+    last = journal.entries(s.ev())[-1]
     assert last["kind"] == "command" and last["exit"] == 0 and last["gate"] == "C12"
 
 
-def test_a_run_streams_progress_and_collapses_it(make_repo):
-    repo = make_repo()
-    ev = Evals(repo.evals)
-    assert repo.cli("run", "--purpose", "baseline", "--k", "3", "--force") == 0
-    ks = kinds(ev)
+def test_a_run_streams_progress_and_collapses_it(store_repo):
+    s = store_repo
+    assert s.cli("run", "--purpose", "baseline", "--use-case", "address") == 0
+    ks = kinds(s.ev())
     assert ks[-1] == "command" and "progress" in ks and "step" in ks  # started, progress, finished
-    html = journal.html_path(ev).read_text()
+    html = journal.html_path(s.ev()).read_text()
     assert html.count('class="k-progress"') == 1 and "progress lines" in html
+    assert "Activity for store" in html and no_network(html)
 
 
-def test_checkpoint_renders_the_design_and_waits_for_the_owner(make_repo):
-    repo = make_repo()
-    ev = Evals(repo.evals)
-    assert repo.cli("log", "Grouping traces by request", "--gate", "C3") == 0
-    assert repo.cli("log", "book-meeting is 60% of traffic", "--kind", "decision", "--by", "owner",
-                    "--gate", "C3") == 0
-    assert repo.cli("checkpoint", "--gate", "C3", "--summary", "Sorted <b>traces</b>.\n\n- two categories",
-                    "--ask", "Is `nothing-to-do` really simple?", "--ask", "Merge any categories?") == 0
-
-    pages = sorted((repo.evals / "report" / "checkpoints").glob("*.html"))
-    assert [p.name[:7] for p in pages] == ["001-C3-"]
-    html = pages[0].read_text()
-    assert "Sort real traffic into categories" in html            # the plain-language guide
-    assert "&lt;b&gt;traces&lt;/b&gt;" in html and "<li>two categories</li>" in html  # escaped prose
-    assert "<code>nothing-to-do</code>" in html and "Merge any categories?" in html
-    for artifact in ("C0 · Imported traffic", "C1 · The agent", "C3 · Categories", "C4 · How it can fail",
-                     "C5 · How many cases", "C6–C7 · Test cases", "C8 · Checks"):
-        assert artifact in html, artifact
-    assert "60.0%" in html and "0.004" in html  # shares as percentages, budgets as written
-    assert "book-meeting is 60% of traffic" in html  # the log since the last checkpoint
-    assert no_network(html)
-
-    last = journal.entries(ev)[-1]
-    assert last["kind"] == "milestone" and last["gate"] == "C3"
-    assert last["path"] == f"report/checkpoints/{pages[0].name}"
-    assert {g["id"] for g in last["gates"]} >= {"C0", "C18"}
-    activity = journal.html_path(ev).read_text()
-    assert "waiting for" in activity and f"../report/checkpoints/{pages[0].name}" in activity
-    assert no_network(activity)
-
-    # Once Claude picks the work back up, the banner goes, and the next page only shows new entries.
-    assert repo.cli("log", "Applying the owner's answers") == 0
-    assert "waiting for" not in journal.html_path(ev).read_text()
-    assert repo.cli("checkpoint") == 0  # defaults to the next unmet gate
-    second = sorted((repo.evals / "report" / "checkpoints").glob("*.html"))[-1]
-    assert second.name.startswith("002-C1-")
-    text = second.read_text()
-    assert "Applying the owner" in text and "book-meeting is 60% of traffic" not in text
+def test_a_question_waits_for_the_person_until_the_work_resumes(store_repo):
+    s = store_repo
+    assert s.cli("log", "Is a refund on day 30 inside the window?", "--kind", "question") == 0
+    html = journal.html_path(s.ev()).read_text()
+    assert "waiting for" in html and "asked you a question" in html and no_network(html)
+    assert s.cli("log", "The owner says yes; carrying on") == 0
+    assert "waiting for" not in journal.html_path(s.ev()).read_text()
 
 
-def test_the_log_never_enters_git(make_repo):
-    repo = make_repo()
-    out = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=repo.root,
+def test_a_decision_on_an_eval_records_its_spec(store_repo):
+    s = store_repo
+    assert s.cli("log", "refunds count 50 times an order-status failure", "--kind", "decision",
+                 "--by", "owner") == 0
+    last = journal.entries(s.ev())[-1]
+    assert last["kind"] == "decision" and last["by"] == "owner" and last["eval"] == "end-to-end"
+    assert last["spec_sha"]
+    assert "by owner" in journal.html_path(s.ev()).read_text()
+
+
+def test_the_log_never_enters_git(store_repo):
+    s = store_repo
+    out = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=s.root,
                          capture_output=True, text=True, check=True).stdout
-    assert (repo.evals / "journal" / "activity.jsonl").exists()
+    assert (s.agent / "journal" / "activity.jsonl").exists()
     assert "journal/" not in out
-
-
-def test_unknown_gate_is_refused(make_repo):
-    repo = make_repo()
-    assert repo.cli("checkpoint", "--gate", "C99") == 2
 
 
 def test_summary_markdown_renders():

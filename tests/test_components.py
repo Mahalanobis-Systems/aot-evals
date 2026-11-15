@@ -15,7 +15,6 @@ import subprocess
 
 import pytest
 import yaml
-from conftest import FIXTURE
 from test_decision import AGENT as DECISION_AGENT
 from test_decision import _refunds, _results, _setup
 from test_estimand import make_store
@@ -343,40 +342,55 @@ def test_a_judge_that_passes_doing_nothing_still_fails_the_screen(tmp_path, monk
 
 # ---- build and components, around the four parts -------------------------------------------------
 
-BOUNDARIES = """boundaries:
-  - {id: invite-sender, kind: subagent, context: own, ships_separately: true, use_case: Schedule a meeting,
-     owner: mail team}
-  - {id: date-parser, kind: step, context: shared}
+# The store's discovery report (examples/store), as the Assess phase would write it: its task types
+# with their shares, the situations to cover, and the context boundaries it found.
+DISCOVERY = """---
+minutes: 4
+bottom_line: The store's support agent routes refunds to a subagent the refunds team ships on its own.
+grid:
+  columns:
+    - {id: unanswerable, from: applies to nearly every agent}
+    - {id: ambiguous, from: applies to nearly every agent}
+  rows:
+    - {task_type: Order status, share: 70%}
+    - {task_type: Return, share: 20%}
+    - {task_type: Address, share: 8%}
+    - {task_type: Refund, share: 2%}
+boundaries:
+  - {id: refund-subagent, kind: subagent, context: own, ships_separately: true, use_case: Refund,
+     owner: refunds team}
+  - {id: order-tools, kind: step, context: shared}
+---
+# The online store's support agent (store)
 """
 
 
 def test_build_drafts_a_2_0_agent_from_the_discovery_report(tmp_path, capsys):
-    agent = tmp_path / "repo" / "evals" / "agents" / "cal"
+    agent = tmp_path / "repo" / "evals" / "agents" / "store"
     agent.mkdir(parents=True)
-    text = (FIXTURE / "evals" / "discovery.md").read_text().replace("minutes: 2\n", "minutes: 2\n" + BOUNDARIES, 1)
-    (agent / "discovery.md").write_text(text)
+    (agent / "discovery.md").write_text(DISCOVERY)
     subprocess.run(["git", "init", "-q"], cwd=tmp_path / "repo", check=True)
     assert cli.main(["--evals", str(agent), "build"]) == 0
     out = capsys.readouterr().out
     ev = Evals(agent)
-    assert not ev.has_v1_suite and [e.id for e in ev.evals()] == ["end-to-end", "invite-sender"]
+    assert not ev.has_v1_suite and [e.id for e in ev.evals()] == ["end-to-end", "refund-subagent"]
     e2e = ev.eval("end-to-end").spec()
     ucs = e2e.part("estimand")["use_cases"]
     assert [(u["id"], u["share"], u["cost"]) for u in ucs] == [
-        ("schedule-a-meeting", 0.6, None), ("leave-the-calendar-alone", 0.4, None)]
+        ("order-status", 0.7, None), ("return", 0.2, None), ("address", 0.08, None), ("refund", 0.02, None)]
     assert e2e.part("estimand")["share_source"] == "discovery"
     (fm,) = e2e.part("measurement")["failure_modes"]
     assert fm["check"] == build.DEFAULT_CHECK and fm["side_effect"] is True and fm["use_cases"] == "*"
     assert ev.eval("end-to-end").code_check_path(build.DEFAULT_CHECK).exists()
     cov = yaml.safe_load(ev.p("end-to-end", "coverage.yaml").read_text())
-    assert [x["id"] for x in cov["entries"]][:2] == ["situation.unanswerable", "situation.ambiguous"]
+    assert [x["id"] for x in cov["entries"]] == ["situation.unanswerable", "situation.ambiguous"]
     comps = {c["id"]: c for c in boundaries.inventory(ev.agent())}
-    assert comps["invite-sender"]["ships_separately"] is True and comps["date-parser"]["context"] == "shared"
-    unit = ev.eval("invite-sender").spec().part("estimand")["unit"]
-    assert unit == {"kind": "component", "component": "invite-sender", "boundary": None}
-    assert "end-to-end:" in out and "invite-sender:" in out and "Context boundaries" in out
-    assert "[ ] Estimand" in out and "[x] Measurement model" not in out.split("invite-sender:")[1]
-    assert "date-parser runs inside the orchestrator's context" in out
+    assert comps["refund-subagent"]["ships_separately"] is True and comps["order-tools"]["context"] == "shared"
+    unit = ev.eval("refund-subagent").spec().part("estimand")["unit"]
+    assert unit == {"kind": "component", "component": "refund-subagent", "boundary": None}
+    assert "end-to-end:" in out and "refund-subagent:" in out and "Context boundaries" in out
+    assert "[ ] Estimand" in out and "[x] Measurement model" not in out.split("refund-subagent:")[1]
+    assert "order-tools runs inside the orchestrator's context" in out
     # running it again changes nothing
     before = {p: p.read_text() for p in agent.rglob("*.yaml")}
     assert cli.main(["--evals", str(agent), "build"]) == 0
@@ -420,9 +434,8 @@ def test_the_component_checklist_reads_the_evals(tmp_path, monkeypatch):
 def test_the_discovery_page_shows_where_the_evals_go():
     from aot_evals.start import discovery_body, split_front_matter
 
-    text = (FIXTURE / "evals" / "discovery.md").read_text().replace("minutes: 2\n", "minutes: 2\n" + BOUNDARIES, 1)
-    fm, body = split_front_matter(text)
-    html = discovery_body(fm, body, "cal")
+    fm, body = split_front_matter(DISCOVERY)
+    html = discovery_body(fm, body, "store")
     assert "Where the evals go" in html and "An eval of its own" in html and "Checks in the end-to-end eval" in html
 
 

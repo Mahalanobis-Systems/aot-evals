@@ -39,10 +39,11 @@ Run `/aot-evals:start` again whenever you want to know where things stand: it na
 (Assess, Build or Judge), how far each kind of task can be trusted, what changed since the last
 baseline, and carries on with the next step, stopping for your review at each checkpoint.
 
-**Try it on a toy agent first (about a minute).** In Claude Code, in any empty folder, ask:
-*"Run `aot-evals demo` and show me what it made."* It builds a toy calendar agent with a discovery
-report and a finished suite, runs a baseline and a candidate that breaks two cases, and compares
-them. Nothing calls a model or a network service.
+**Try it on a toy agent first (a few minutes).** In Claude Code, in any empty folder, ask:
+*"Run `aot-evals demo` and show me what it made."* It builds a toy online store's support agent
+and its refund subagent with an eval each, runs both baselines, then a change to the subagent that
+improves its own eval and breaks refunds end to end, and decides on it. Nothing calls a model or a
+network service.
 
 Judges default to a free System One model (Jev, through OpenCode Zen) that needs no key but
 allows about 250 calls a day; set `ANTHROPIC_API_KEY` to use Claude as a judge. See
@@ -124,7 +125,7 @@ The method, with every command, measurement and gate, is in [docs/method.md](doc
 | Case, code-check and judge templates | [templates/](templates/) |
 | Reference material: the eval-creation process, the agent-properties framework, sourced literature findings, the agent contract, judge backends | [references/](references/) |
 | The grader application (`aot-evals serve`) | [src/aot_evals/serve.py](src/aot_evals/serve.py) |
-| A toy agent with a finished suite (`aot-evals demo`) | [examples/calendar/](examples/calendar/) |
+| A toy agent with two finished evals (`aot-evals demo`) | [examples/store/](examples/store/) |
 | Banner mod: draws the AOT EVALS banner in the terminal when `aot-evals start` runs | [hooks/](hooks/) |
 | Brand: the AOT logo, the embedded fonts (SIL OFL 1.1), and the rules every HTML report follows | [brand/](brand/) |
 
