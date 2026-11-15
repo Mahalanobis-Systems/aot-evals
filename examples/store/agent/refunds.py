@@ -15,8 +15,8 @@ AGENT_VARIANT switches what it does wrong (docs/problems.md):
                           three times as often)
   declines-missing-order  the new prompt: the window is right, but a handoff with no order number
                           is declined instead of asking for one (problem 2)
-  cheap                   a cheaper model (problem 11): the window is right, but a partial refund
-                          of several items refunds only the first; a quarter of the cost
+  cheap                   a cheaper model (problem 11): the 30th day is right, but it refunds the
+                          31st too; a quarter of the cost
 
 Any other variant (they belong to the orchestrator) behaves as good.
 """
@@ -41,7 +41,9 @@ def last_day(variant: str) -> int:
     """The last day after delivery this version refunds."""
     if variant == "refund-bug":
         return 35
-    if variant in ("declines-missing-order", "cheap"):
+    if variant == "cheap":
+        return WINDOW + 1
+    if variant == "declines-missing-order":
         return WINDOW
     return WINDOW - 1  # good: off by one
 
@@ -63,8 +65,6 @@ def decide(world: dict, inputs: dict, variant: str) -> tuple[float | None, str]:
         return None, f"Order {oid} was delivered {days} days ago, past the {WINDOW}-day refund window."
     skus = inputs.get("items")
     items = [i for i in order["items"] if not skus or i["sku"] in skus]
-    if variant == "cheap" and skus and len(items) > 1:
-        items = items[:1]
     if not items:
         return None, f"None of those items are on order {oid}."
     amount = round(sum(i["price"] for i in items), 2)

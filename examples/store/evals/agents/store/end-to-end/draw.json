@@ -3,7 +3,7 @@
   "frame": "support-requests-2026-10",
   "seed": 2026,
   "frame_sha256": "b74f2a27e723f88599566f4e1952f33f8b2f317b8ff8983b642abda714189e3d",
-  "drawn_at": "2026-11-14T19:55:57Z",
+  "drawn_at": "2026-11-15T00:30:44Z",
   "strata": {
     "order-status": {
       "frame_size": 140,
@@ -25,8 +25,8 @@
     },
     "refund": {
       "frame_size": 160,
-      "n": 12,
-      "inclusion_prob": 0.075,
+      "n": 20,
+      "inclusion_prob": 0.125,
       "replaced": []
     }
   },

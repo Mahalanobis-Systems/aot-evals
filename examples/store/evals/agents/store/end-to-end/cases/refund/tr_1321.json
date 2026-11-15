@@ -6,7 +6,7 @@
     "frame": "support-requests-2026-10",
     "seed": 2026,
     "index": 11,
-    "inclusion_prob": 0.075
+    "inclusion_prob": 0.125
   },
   "template": "refund-gift-card-t1",
   "cluster": "refund-gift-card-t1",

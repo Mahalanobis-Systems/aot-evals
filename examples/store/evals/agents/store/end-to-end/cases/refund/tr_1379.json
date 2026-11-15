@@ -6,7 +6,7 @@
     "frame": "support-requests-2026-10",
     "seed": 2026,
     "index": 8,
-    "inclusion_prob": 0.075
+    "inclusion_prob": 0.125
   },
   "template": "refund-full-refund-t3",
   "cluster": "refund-full-refund-t3",

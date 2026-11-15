@@ -1,0 +1,114 @@
+{
+  "id": "tr_1353",
+  "use_case": "refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 16,
+    "inclusion_prob": 0.125
+  },
+  "template": "refund-full-refund-t1",
+  "cluster": "refund-full-refund-t1",
+  "trigger": {
+    "text": "I'd like a refund for order A1707.",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0354",
+    "today": "2026-10-30"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1707": {
+        "address": "93 Bay Street",
+        "customer": "c-0354",
+        "delivered": "2026-09-29",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1708": {
+        "address": "89 Oak Avenue",
+        "customer": "c-0354",
+        "delivered": "2026-08-09",
+        "eta": null,
+        "items": [
+          {
+            "name": "blender",
+            "price": 49.99,
+            "sku": "SKU-101"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Order A1707 was delivered 31 days ago, past the 30-day refund window.",
+    "world": {
+      "log": [
+        {
+          "order": "A1707",
+          "to": "refund-subagent",
+          "tool": "handoff"
+        }
+      ],
+      "orders": {
+        "A1707": {
+          "address": "93 Bay Street",
+          "customer": "c-0354",
+          "delivered": "2026-09-29",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        },
+        "A1708": {
+          "address": "89 Oak Avenue",
+          "customer": "c-0354",
+          "delivered": "2026-08-09",
+          "eta": null,
+          "items": [
+            {
+              "name": "blender",
+              "price": 49.99,
+              "sku": "SKU-101"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1353",
+    "synthetic": false
+  }
+}
