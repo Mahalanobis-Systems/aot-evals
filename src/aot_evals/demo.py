@@ -1,11 +1,13 @@
-"""`aot-evals demo [DIR]`: a toy agent with a finished suite, to try aot-evals in a few minutes.
+"""`aot-evals demo [DIR]`: the online store (examples/store; docs/v2-design.md §9), to try aot-evals
+in a few minutes.
 
-It copies examples/calendar (a toy calendar agent, its product spec, exported traces, an Assess
-discovery report and a reviewed suite) into a new git repository, renders the discovery page,
-then runs the loop a team runs on its own agent: import, screen, allocate, a smoke run, a
-k = 3 baseline, a candidate that breaks two cases, the paired comparison, and the report. Nothing
-calls a model or a network service, and nothing outside DIR is touched. Afterwards, open Claude
-Code in DIR to explore it with the skills.
+It copies the example (a support agent, its refund subagent, fakes for the order system and
+payments, a trace export, two eval specs with drawn quality sets, bug-finding sets and a calibrated
+policy judge) into a new git repository, then runs the loop a team runs on its own agent: import
+the traces, extract the refund handoffs, screen the cases, run a baseline of each eval, then a
+candidate of the refund subagent that improves its own eval and breaks refunds end to end
+(docs/problems.md, problem 2), and decide on it. Nothing calls a model or a network service, and
+nothing outside DIR is touched. Afterwards, open Claude Code in DIR to explore it with the skills.
 """
 
 from __future__ import annotations
@@ -14,10 +16,12 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
-EXAMPLE = ROOT / "examples" / "calendar"
-TEMPLATES = Path(__file__).parent / "templates" / "evals"
-SUITE = "evals/agents/calendar"
+EXAMPLE = ROOT / "examples" / "store"
+AGENT = "evals/agents/store"
+FRAME = "support-requests-2026-10"
 GIT_ID = ["-c", "user.name=aot-evals demo", "-c", "user.email=demo@example.invalid"]
 
 
@@ -25,77 +29,72 @@ def _git(repo: Path, *args: str) -> None:
     subprocess.run(["git", *GIT_ID, *args], cwd=repo, check=True, capture_output=True)
 
 
-def _agent_yaml(repo: Path, broken: str = "") -> None:
-    path = repo / SUITE / "agent.yaml"
-    text = path.read_text()
-    head, _, _ = text.partition("  env:")
-    path.write_text(head + f'  env: {{AGENT_VARIANT: good, WORLD_FILE: world.json, AGENT_BREAK: "{broken}"}}\n')
+def _variant(dest: Path, variant: str) -> None:
+    """Set AGENT_VARIANT for the whole agent and for the refund subagent's own eval."""
+    for rel in (f"{AGENT}/agent.yaml", f"{AGENT}/refund-subagent/eval.yaml"):
+        path = dest / rel
+        data = yaml.safe_load(path.read_text())
+        data["invoke"]["env"]["AGENT_VARIANT"] = variant
+        path.write_text(yaml.safe_dump(data, sort_keys=False))
 
 
 def make(dest: Path) -> Path:
-    """Copy the example into `dest` as a fresh git repository; return the suite directory."""
+    """Copy the example into `dest` as a fresh git repository; return the agent's folder."""
     if dest.exists() and any(dest.iterdir()):
         raise FileExistsError(f"{dest} already exists and is not empty; pass another directory")
-    shutil.copytree(EXAMPLE, dest, dirs_exist_ok=True)
-    suite = dest / SUITE
-    suite.parent.mkdir(parents=True)
-    shutil.move(dest / "evals", dest / "_suite")
-    shutil.move(dest / "_suite", suite)
-    text = (suite / "agent.yaml").read_text()
-    (suite / "agent.yaml").write_text(text.replace("{PYTHON}", "python3").replace("{VARIANT}", "good")
-                                      .replace("timeout: 3", "timeout: 20"))
-    _agent_yaml(dest)
-    (dest / ".gitignore").write_text("world.json\n")
-    shutil.copyfile(TEMPLATES / "gitignore", suite / ".gitignore")
+    shutil.copytree(EXAMPLE, dest, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
+    (dest / ".gitignore").write_text("world.json\n__pycache__/\n")
     _git(dest, "init", "-q")
-    _git(dest, "add", f"{SUITE}/taxonomy.yaml", "docs")  # the coverage list predates the cases (G5)
-    _git(dest, "commit", "-q", "-m", "Coverage list from the product spec")
+    # the coverage lists come from the help center, before any case (rule 10)
+    _git(dest, "add", "docs", f"{AGENT}/end-to-end/coverage.yaml", f"{AGENT}/refund-subagent/coverage.yaml")
+    _git(dest, "commit", "-q", "-m", "Coverage lists from the help center and the refund policy")
     _git(dest, "add", "-A")
-    _git(dest, "commit", "-q", "-m", "The toy calendar agent and its eval suite")
-    return suite
+    _git(dest, "commit", "-q", "-m", "The store's support agent, its refund subagent and their evals")
+    return dest / AGENT
 
 
 def run(dest: Path, cli_main, log=print) -> int:
-    suite = make(dest)
-    base = ["--evals", str(suite)]
+    agent = make(dest)
 
-    def step(text: str, *args: str) -> None:
-        log(f"\n== {text}\n$ aot-evals {' '.join(args)}")
-        code = cli_main([*base, *args])
-        if code not in (0, None):
-            raise RuntimeError(f"`aot-evals {' '.join(args)}` exited {code}")
+    def step(text: str, *args: str, eval_id: str | None = None, ok=(0,)) -> None:
+        argv = ["--evals", str(agent), *(["--eval", eval_id] if eval_id else []), *args]
+        log(f"\n== {text}\n$ aot-evals {' '.join(argv[2:])}")
+        code = cli_main(argv)
+        if code not in (*ok, None):
+            raise RuntimeError(f"`aot-evals {' '.join(argv[2:])}` exited {code}")
 
-    step("Assess: the discovery report, as a page", "discovery-page", str(suite / "discovery.md"),
-         "--agent", "Meeting scheduler (toy-calendar)")
-    step("C0: import the exported traces, with their provenance",
-         "import", str(dest / "traces.jsonl"), "--id", "traces", "--source", "toy calendar traces",
-         "--query", "all", "--window", "2026-09-01..2026-09-30")
-    step("C1: the agent runs end to end", "run", "--purpose", "smoke", "--case", "book-001")
-    step("C5: size both case sets", "allocate", "--write", "--mark-short", "out_of_scope",
-         "--reason", "the demo suite is deliberately small")
-    step("C7: screen every case (a person has read them)", "screen", "--read-by", "demo", "--all")
+    step("Import the exported traces, with their provenance", "import", str(dest / "traces.jsonl"),
+         "--id", FRAME, "--source", "the store's support traces", "--query", "all",
+         "--window", "2026-10-01..2026-10-31", eval_id="end-to-end")
+    step("The refund subagent's frame: the handoffs in those traces (rule 4)", "handoffs",
+         eval_id="refund-subagent")
+    step("Both specs are complete", "validate")
+    for e in ("end-to-end", "refund-subagent"):
+        step(f"Screen every case of {e} (a person has read them)", "screen", "--read-by", "demo", "--all",
+             eval_id=e)
     _git(dest, "add", "-A")
-    _git(dest, "commit", "-q", "-m", "Screened and allocated")
-    step("C12: the baseline, k = 3", "run", "--purpose", "baseline", "--k", "3", "--label", "demo")
-    _agent_yaml(dest, broken="book-002,book-003")
-    _git(dest, "commit", "-q", "-am", "Candidate: a config change that books two meetings at the wrong time")
-    step("C13: a candidate with one declared change", "run", "--purpose", "candidate", "--k", "3",
-         "--variable", "config=break-two", "--label", "demo")
-    log("\n== C13: the paired comparison")
-    cli_main([*base, "compare"])  # exits 1 only when refused; the verdict is the point here
-    step("C18: report.json", "report")
-    step("A checkpoint page for the owner", "checkpoint", "--gate", "C13", "--title", "The aot-evals demo",
-         "--summary", "A toy calendar agent, a k = 3 baseline, and a candidate that books two meetings at "
-         "the wrong time. The paired comparison lists the two losses; with so few cases it cannot call "
-         "the change significant, and says so.")
+    _git(dest, "commit", "-q", "-m", "Screened")
+    for e in ("end-to-end", "refund-subagent"):
+        step(f"The baseline of {e}, k = 3", "run", "--purpose", "baseline", "--label", "demo", eval_id=e)
+        step(f"{e}'s report", "report", eval_id=e)
+    _variant(dest, "declines-missing-order")
+    _git(dest, "commit", "-q", "-am", "Refund subagent: the new prompt (declines handoffs with no order number)")
+    for e in ("refund-subagent", "end-to-end"):
+        step(f"The candidate on {e}, one declared change", "run", "--purpose", "candidate", "--variable",
+             "prompt=refunds-v2", "--label", "demo", eval_id=e)
+    step("The end-to-end comparison", "compare", eval_id="end-to-end", ok=(0, 1))
+    step("The decision on the refund subagent's change (rule 27: the whole agent has the last word)",
+         "compare", eval_id="refund-subagent", ok=(0, 1))
     log(f"""
 Demo ready in {dest}
 
-  discovery     {suite / 'discovery.html'}
-  activity log  {suite / 'journal' / 'activity.html'}
-  checkpoint    {suite / 'report' / 'checkpoints'}
-  report data   {suite / 'report' / 'report.json'}
+  activity log   {agent / 'journal' / 'activity.html'}
+  reports        {agent / 'end-to-end' / 'report' / 'report.json'}
+                 {agent / 'refund-subagent' / 'report' / 'report.json'}
+  comparisons    {agent / 'refund-subagent' / 'report' / 'comparisons'}
 
-Next: open Claude Code in {dest} with the plugin enabled and ask "where are we with our evals?",
-or "write a report on why the candidate regressed". Delete the folder when you are done.""")
+The refund subagent's new prompt breaks the refund policy less often on its own eval, and declines
+the refund requests that arrive without an order number instead of asking for it, so refunds end
+to end get worse (docs/problems.md, problem 2). Next: open Claude Code in {dest} with the plugin
+enabled and ask "should we ship the refund team's change?". Delete the folder when you are done.""")
     return 0

@@ -63,36 +63,24 @@ def labels_sha(ev: Evals, spec: JudgeSpec) -> str | None:
     return hashlib.sha256(p.read_bytes()).hexdigest()[:16] if p.exists() else None
 
 
-def _v2_modes(ev, spec: JudgeSpec) -> list[dict] | None:
-    """For a 2.0 eval, the failure modes this judge grades (as the counted check or a
-    diagnostic); None for a 1.x suite, whose judges name their mode in front matter."""
-    from .repo import Eval
-
-    if not isinstance(ev, Eval):
-        return None
+def _v2_modes(ev, spec: JudgeSpec) -> list[dict]:
+    """The failure modes this judge grades, as the counted check or a diagnostic."""
     return [fm for fm in ev.failure_modes()
             if fm.get("check") == spec.id or spec.id in (fm.get("diagnostics") or [])]
 
 
 def judge_categories(ev: Evals, spec: JudgeSpec) -> list[str]:
-    """The categories (1.x) or use cases (2.0) the judge applies to."""
-    modes = _v2_modes(ev, spec)
-    if modes is not None:
-        from .spec import use_cases
+    """The use cases the judge applies to."""
+    from .spec import use_cases
 
-        every = [u["id"] for u in use_cases(ev.spec())]
-        out: list[str] = []
-        for fm in modes:
-            ucs = fm.get("use_cases")
-            for u in every if ucs == ALL_CATEGORIES else (ucs if isinstance(ucs, list) else []):
-                if u not in out:
-                    out.append(u)
-        return out
-    fm = next((f for f in ev.failure_modes() if f.get("id") == spec.failure_mode), None)
-    if fm is None:
-        return []
-    cats = fm.get("categories") or []
-    return ev.category_ids() if ALL_CATEGORIES in cats else list(cats)
+    every = [u["id"] for u in use_cases(ev.spec())]
+    out: list[str] = []
+    for fm in _v2_modes(ev, spec):
+        ucs = fm.get("use_cases")
+        for u in every if ucs == ALL_CATEGORIES else (ucs if isinstance(ucs, list) else []):
+            if u not in out:
+                out.append(u)
+    return out
 
 
 def applies_to(ev: Evals, spec: JudgeSpec, case: dict) -> bool:

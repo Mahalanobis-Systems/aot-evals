@@ -25,8 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import agreement, bench, components, journal, trust
-from . import gates as gates_mod
+from . import agreement, bench, components, journal
 from .brand import page
 from .repo import Evals
 from .util import ContractError
@@ -42,7 +41,9 @@ def _judges(ev: Evals) -> list[dict]:
     from .labels import status as label_status
 
     out = []
-    for cid in gates_mod._judge_checks(ev):
+    from .spec import check_ids
+
+    for cid in sorted(c for c in check_ids(ev.spec()) if ev.check_type(c) == "judge"):
         try:
             spec = load_spec(ev.judge_check_path(cid))
         except ContractError as e:
@@ -86,12 +87,12 @@ def _judge_queue(ev: Evals, jid: str, labeller: str) -> list[dict]:
 def state(ev: Evals) -> dict:
     from .requirements import load_standard
 
-    gs = gates_mod.evaluate(ev)
+    spec = ev.spec()
     std = load_standard(ev) or {"rules": [], "body": ""}
     res = bench.suite_disagreements(ev)
-    return {"agent": ev.agent_name, "suite_dir": str(ev.root), **trust.summary(ev, gs),
-            "gates": [{"id": g.id, "command": g.command, "status": g.status,
-                       "first": (g.problems or g.info or [""])[0]} for g in gs],
+    return {"agent": ev.agent_name, "eval": ev.id, "suite_dir": str(ev.root),
+            "spec": {"complete": spec.complete, "missing": [i.field for i in spec.missing],
+                     "invalid": [i.field for i in spec.invalid]},
             "labellers": sorted({r.get("labeller") for by in agreement.per_labeller(ev).values()
                                  for r in by.values()} - {None, ""}),
             "labelled": len(agreement.per_labeller(ev)),

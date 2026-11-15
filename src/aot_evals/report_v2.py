@@ -96,7 +96,7 @@ class Scored:
         self.status = {cid: case_status(ev, c) for cid, c in self.cases.items()}
         for cid, c in self.cases.items():
             c["cluster"] = self.status[cid]["cluster"]  # as correctness() reads it
-        from .gates import untracked_cases
+        from .evidence import untracked_cases
 
         try:
             self.untracked = set(untracked_cases(ev))

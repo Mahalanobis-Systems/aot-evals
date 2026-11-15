@@ -100,36 +100,10 @@ def _collapse_progress(items: list[dict]) -> list[dict]:
     return out
 
 
-def roadmap_html(snapshot: list[dict] | None, focus: str | None = None) -> str:
-    """The C0-C19 strip: one cell per gate, grouped by stage, the focus gate outlined."""
-    from .checkpoint import STAGES
-
-    if not snapshot:
-        return ""
-    status = {g["id"]: g["status"] for g in snapshot}
-    groups = []
-    for stage in STAGES:
-        cells = []
-        for gid in stage["gates"]:
-            st = status.get(gid, "unmet")
-            cls = {"met": "met", "unmet": "unmet", "not_applicable": "na",
-                   "not_implemented": "later"}.get(st, "unmet")
-            mark = " focus" if gid == focus else ""
-            cells.append(f'<span class="gate {cls}{mark}" title="{gid} {_esc(st)}">{gid}</span>')
-        groups.append(f'<div class="stage"><span class="stage-name">{_esc(stage["name"])}</span>'
-                      f'<span class="gates">{"".join(cells)}</span></div>')
-    return ('<div class="roadmap" aria-label="Gates C0 to C19">' + "".join(groups) +
-            '</div><p class="caption legend"><span class="gate met">C0</span> met '
-            '<span class="gate unmet">C0</span> open <span class="gate na">C0</span> does not apply '
-            '<span class="gate later">C0</span> not yet automated</p>')
-
-
 def activity_page(ev: Evals, items: list[dict]) -> str:
     agent = ev.agent_name
     last = items[-1] if items else None
     milestones = [e for e in items if e.get("kind") == "milestone"]
-    snapshot = milestones[-1].get("gates") if milestones else None
-    focus = milestones[-1].get("gate") if milestones else None
 
     parts = []
     if last and last.get("kind") in WAITING_KINDS:
@@ -147,12 +121,6 @@ def activity_page(ev: Evals, items: list[dict]) -> str:
                      f'</span></div>')
     else:
         parts.append('<div class="banner">Nothing logged yet. The log fills in as Claude works.</div>')
-
-    if snapshot:
-        parts.append('<h2>Where the evals stand</h2>')
-        parts.append(roadmap_html(snapshot, focus))
-        parts.append('<p class="caption">As of the latest checkpoint. Each gate is one step of '
-                     'the method (C0 import … C18 report); the checkpoint pages explain each.</p>')
 
     if milestones:
         rows = []

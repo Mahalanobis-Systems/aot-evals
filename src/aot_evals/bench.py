@@ -354,8 +354,6 @@ def drafts(ev: Evals) -> list[dict]:
 def inbox(ev: Evals) -> list[dict]:
     """What the Judge phase needs from engineering: triaged disagreements whose cause is a fix to
     the suite, drafted cases, and changes to the agent only an engineer can run."""
-    from . import trust
-
     out = []
     for d in suite_disagreements(ev)["items"]:
         t = d.get("triage") or {}
@@ -367,8 +365,4 @@ def inbox(ev: Evals) -> list[dict]:
         out.append({"kind": "draft", "item": dr["id"], "case": dr["like"],
                     "what": "finish the drafted case and move it into cases/",
                     "note": (dr.get("trigger") or {}).get("text", ""), "by": dr["by"]})
-    for c in trust.changes(ev):
-        if c["kind"] in ("agent", "agent-uncommitted", "new-use-case", "cases", "checks", "candidate", "adopt"):
-            out.append({"kind": c["kind"], "item": None, "case": None, "what": c["path"][0],
-                        "note": c["what"], "by": None})
     return out
