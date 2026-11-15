@@ -614,7 +614,8 @@ def _v(v) -> str:
 def render_md(r: dict) -> str:
     log = r["log"]
     L = [f"# Migration of {r['agent']} to aot-evals 2.0", "",
-         f"`aot-evals migrate --to 2` turned the 1.x suite in `{r.get('from_rel', r['from'])}/` ({r['shape']} layout) into this agent "
+         f"`aot-evals migrate --to 2` turned the 1.x suite in `{r.get('from_rel', r['from'])}/` "
+         f"({r['shape']} layout) into this agent "
          f"folder with one eval, `{EVAL_ID}/`, on {date.today().isoformat()}. It moved files, renamed fields and "
          "applied the mapping table in docs/v2-design.md §8; it invented nothing. Check each section below, then "
          "commit.", "",
