@@ -22,7 +22,7 @@ AGENT_DIRS = ("env", "data")
 # Each eval's own.
 EVAL_DIRS = ("cases", "checks/code", "checks/judge", "labels", "runs", "report")
 # The eval folders sit one level down, so the agent-level patterns need a leading */ to reach them.
-GITIGNORE_V2 = "*/runs/*/raw/\n*/checks/judge/*.queue.csv\n"
+GITIGNORE_V2 = "*/runs/*/raw/\n*/checks/judge/*.queue.csv\n*/data/\n"
 
 _UNIT_SYSTEM = "    kind: system                   # the whole agent, through agent.yaml's invoke"
 _UNIT_COMPONENT = """    kind: component
