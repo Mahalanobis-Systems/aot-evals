@@ -12,8 +12,9 @@ aot-evals 2.0 organizes everything around the four parts of an eval: the **estim
 number, about what, drives which decision), the **sampling design** (which cases, drawn how), the
 **measurement model** (how wrong the grader is) and the **decision rule** (when to act). Each eval
 writes them down in one file, `eval.yaml`, and the rules for building a suite follow from them
-([docs/estimators.md](docs/estimators.md)). Assess, Build and Judge stay as the three phases, each
-settling some of the parts. [docs/method.md](docs/method.md) is rewritten as the reference for
+([docs/estimators.md](docs/estimators.md)). The README now starts from the workflow, who does what (the
+owner, engineering, and the people who know what good looks like) and the traps evals fall into, with
+the four parts underneath for anyone who wants them. [docs/method.md](docs/method.md) is rewritten as the reference for
 2.0; [docs/problems.md](docs/problems.md) shows why each part matters and
 [docs/statistics.md](docs/statistics.md) derives the numbers.
 
