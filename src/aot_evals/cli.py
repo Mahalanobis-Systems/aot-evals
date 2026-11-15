@@ -416,17 +416,19 @@ def cmd_migrate(args) -> int:
     from pathlib import Path
 
     from . import migrate as migrate_mod
-    from .repo import is_evals_root
 
-    if args.evals:
-        evals_dir = Path(args.evals).expanduser().resolve()
-        if not is_evals_root(evals_dir):
-            evals_dir = evals_dir.parent if evals_dir.parent.name == "evals" else evals_dir
-    else:
-        here = Path.cwd().resolve()
-        evals_dir = next((d / "evals" for d in (here, *here.parents) if (d / "evals").is_dir()),
-                         next((d for d in (here, *here.parents) if d.name == "evals"), here / "evals"))
-    migrate_mod.run(evals_dir, dry_run=args.dry_run)
+    if args.to != "2":
+        sys.exit("aot-evals migrate --to 2: turns a 1.x suite into a 2.0 agent folder with one eval, "
+                 "end-to-end (docs/v2-design.md §8); --dry-run says what it would do")
+    here = Path(args.evals).expanduser() if args.evals else Path.cwd()
+    if not args.evals:
+        here = next((d / "evals" for d in (here.resolve(), *here.resolve().parents) if (d / "evals").is_dir()),
+                    here)
+    evals_dir = migrate_mod.evals_dir_for(here)
+    agent = args.agent
+    if agent is None and here.resolve() != evals_dir and migrate_mod._is_v1(here.resolve()):
+        agent = here.resolve().name  # --evals named one suite
+    migrate_mod.run(evals_dir, agent=agent, dry_run=args.dry_run)
     return 0
 
 
@@ -1042,8 +1044,9 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--k", type=int, default=3, help="--run: trials per case for the baseline (3-5)")
     s.set_defaults(fn=cmd_build)
 
-    s = sub.add_parser("migrate", help="move suites from evals/<agent>/ to evals/agents/<agent>/")
-    s.add_argument("--dry-run", action="store_true", help="say what would move, and move nothing")
+    s = sub.add_parser("migrate", help="--to 2: a 1.x suite to a 2.0 agent folder with one eval, end-to-end")
+    s.add_argument("--to", help="the version to migrate to: 2")
+    s.add_argument("--dry-run", action="store_true", help="say what would move and map, and write nothing")
     s.set_defaults(fn=cmd_migrate)
 
     s = sub.add_parser("components", help="the optimization loop's components as a checklist, read from the suite")

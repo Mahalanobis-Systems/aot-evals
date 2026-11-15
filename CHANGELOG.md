@@ -26,7 +26,20 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
   eval. `coverage` reads an eval's `coverage.yaml`; `ops` reads its constraints per use case.
 - **Command judges in a 2.0 eval run from the repository root**, as agent.yaml's paths do; they
   ran from the agent's folder.
-
+- **`aot-evals migrate --to 2`** (stage 8, docs/v2-design.md §8) turns a 1.x suite into a 2.0
+  agent folder with one eval, `end-to-end/`: `evals/` itself, the old `evals/<agent>/` layout, or
+  `evals/agents/<agent>/` with its 1.x files. It moves files (with `git mv` where git tracks them),
+  writes `eval.yaml` from categories, failure modes, budgets and floors by the mapping table
+  (traffic weights, costs left null, superiority at α 0.05 and 80% power, `max_inflation` 2.0,
+  correction none, seed 1, cluster key `id`), renames the case fields, carries allocation.yaml's
+  scheduled and out-of-scope marks into `plan.yaml`, keeps the 1.x files it read in
+  `migrated-from-1x/`, and writes `MIGRATION.md`: each default, the check it chose per failure
+  mode, each dropped field with its value, the files it left in place and the lines to check by
+  hand (a check that finds files from its own path, a team script that names a moved folder). The
+  decision, the margin and any check it could not choose are left missing for the owner. The
+  hand-picked quality cases carry no `draw` and the 1.x runs are not 2.0 runs, so a migrated eval
+  reports nothing until it is drawn and run again; MIGRATION.md says so. It replaces the old
+  `migrate` (from `evals/<agent>/` to `evals/agents/<agent>/`).
 - **2.0: several evals per agent** (stage 7, docs/v2-design.md §1–§3, §6, §7; estimators §1).
   **agent.yaml lists the parts of the system** (`components`: each subagent, route and step, its
   context, owner and whether it ships on its own), and `validate` reads it: a component eval

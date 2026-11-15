@@ -141,8 +141,9 @@ prompt rewrite, so the discriminating set is re-derived after every prompt chang
 
 Each agent's suite lives in `evals/agents/<agent>/`, beside its discovery report. A repository
 with one agent may keep the suite in `evals/` itself. Pass `--agent NAME` to the CLI when there
-are several. Suites made before that layout live in `evals/<agent>/`; they are read as they are,
-and `aot-evals migrate` moves them.
+are several. `aot-evals migrate --to 2` turns a 1.x suite, wherever it lives (`evals/`,
+`evals/<agent>/` or `evals/agents/<agent>/`), into a 2.0 agent folder with one eval, `end-to-end/`,
+and writes `MIGRATION.md` beside it with every choice it made (docs/v2-design.md §8).
 
 **2.0 evals (preview).** An agent folder may instead hold 2.0 evals, one folder per eval with its
 `eval.yaml` ([v2-design.md §1](v2-design.md#1-layout)). `aot-evals --eval ID init [--component
