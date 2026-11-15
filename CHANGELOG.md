@@ -102,7 +102,8 @@ become the spec's missing and invalid fields plus the evidence and measurement g
   `pool`, `draw` and `cluster`.
 - **Measurement model.** Catch rate and clean pass rate everywhere, each with its interval, lower
   bound and labels per kind. A judge counts when its inflation factor at its lower bounds is within
-  `max_inflation`; a judge that doesn't count and feeds the quantity leaves θ̂ null. Corrections feed
+  `max_inflation`, read at the baseline's failure rate for a candidate (so a candidate that fails
+  less never loses its judge); a judge that doesn't count and feeds the quantity leaves θ̂ null. Corrections feed
   the estimate (`rogan_gladen`, `ppi`). The eval is held to people with floors read through a
   non-inferiority margin and a label count fixed before looking. `trials: auto` takes k from the
   baseline's variance split.

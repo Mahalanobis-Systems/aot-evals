@@ -463,7 +463,8 @@ def _required(ev, req: dict, base: Side, cand: Side | None) -> dict:
                          f"aot-evals --eval {name} run --purpose "
                          + (f"candidate --variable {subj['declared_variable']}" if not theirs else "baseline"))
         return out
-    ob, oc = Side(other, base_runs), Side(other, theirs)
+    ob = Side(other, base_runs)
+    oc = Side(other, theirs, reference=ob)
     problems = comparability_problems(other, ob, oc)
     if problems:
         out.update(reason=f"{name}: " + "; ".join(problems), runs=theirs, baseline_runs=base_runs)

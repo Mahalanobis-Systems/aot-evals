@@ -666,7 +666,8 @@ def _compare_v2(args, ev: Evals) -> int:
     cands = args.candidate or [m["run_id"] for m in e.runs("candidate") if m.get("finished")][-1:]
     if not base or not cands:
         sys.exit("needs a baseline and a candidate run (aot-evals run --purpose candidate ...)")
-    b, c = Side(e, base), Side(e, cands)
+    b = Side(e, base)
+    c = Side(e, cands, reference=b)
     comp = decision_mod.comparison(e, b, c)
     comp["decision"] = decision_mod.decide(e, b, c, comp)
     print(decision_mod.render_comparison(comp), flush=True)  # the result first: saving must never lose it

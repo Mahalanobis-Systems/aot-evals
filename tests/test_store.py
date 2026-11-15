@@ -117,6 +117,9 @@ def test_declines_missing_order_improves_the_part_and_breaks_the_whole(store_rep
     assert _rate(s, cand, "refund") < _rate(s, base, "refund") - 0.05  # refunds with no order number
     d = _report(s, "refund-subagent", cand_sub)["decision"]
     assert d["result"] != "pass"
+    # the candidate fails less, and its judge is still read at the baseline's rate: the floor is
+    # fixed before the candidate is looked at, so failing less can't make the decision unknown
+    assert d["headline"]["result"] != "unknown", d["headline"]
     assert next(a for a in d["also_requires"] if a["eval"] == "end-to-end")["result"] != "pass"
 
 

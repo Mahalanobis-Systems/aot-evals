@@ -419,7 +419,9 @@ a new instrument with unknown error rates (rule 13).
 A judge counts when its inflation factor q(1 − q)/(J²·p(1 − p)), at its lower bounds on catch and
 clean and at the eval's current failure rate on its mode, is at or under `max_inflation`. The
 current rate is the mode's design-weighted rate in the report's runs, corrected with the judge's
-point rates and kept half a failure away from 0 and 1. A judge with no current calibration (none,
+point rates and kept half a failure away from 0 and 1. A candidate's judges are read at the
+baseline runs' rate, never their own (`floor.read_on`), so whether a judge counts is fixed before
+the candidate is looked at, and failing less can't cost a candidate its judge. A judge with no current calibration (none,
 stale, or labels of one kind only) does not count. A counted judge that feeds the quantity and does
 not count leaves θ̂ null and every gate `unknown`, never a pass. With no scored run yet the floor is
 `unknown`, and `plan` counts the judge at `max_inflation`. A 2.0 judge that still sets `min_tpr` or
