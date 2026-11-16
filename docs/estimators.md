@@ -246,7 +246,8 @@ per request, so the number means something a business owner can use.
 - **One eval, one estimand** (rule 1). Two units, two populations or two decisions need two evals.
   This is what puts evals at context boundaries (section 1).
 - **The headline is θ̂ under the stated weights** (rule 2), with the per-use-case table beside it
-  as the diagnostic. An unweighted average over use cases is an arbitrary weighting nobody chose.
+  as the diagnostic. An unweighted average over use cases gives each of the four a weight of 0.25,
+  which reflects neither the traffic nor what a failure costs.
 - **A shift in the population re-opens the estimand** (rule 26). The shares are part of θ, so a
   new mix of traffic means a new θ. Shares are measured again on a schedule.
 
