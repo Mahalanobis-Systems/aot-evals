@@ -1,0 +1,151 @@
+{
+  "id": "tr_1265.h0",
+  "use_case": "gift-card",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 1,
+    "inclusion_prob": 0.6666666666666666
+  },
+  "order_template": "ot-11",
+  "cluster": "ot-11",
+  "trigger": {
+    "text": "Refund request: Please refund order A1531 to a gift card.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": null,
+    "order_id": "A1531",
+    "to": "gift_card",
+    "today": "2026-10-25"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1531": {
+        "address": "60 Oak Avenue",
+        "customer": "c-0266",
+        "delivered": "2026-09-21",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          },
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "gift_card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1532": {
+        "address": "5 Elm Street",
+        "customer": "c-0266",
+        "delivered": "2026-07-27",
+        "eta": null,
+        "items": [
+          {
+            "name": "blender",
+            "price": 49.99,
+            "sku": "SKU-101"
+          },
+          {
+            "name": "mixing bowls",
+            "price": 18.75,
+            "sku": "SKU-105"
+          },
+          {
+            "name": "cutting board",
+            "price": 22.4,
+            "sku": "SKU-107"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Order A1531 was delivered 34 days ago, past the 30-day refund window.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1531": {
+          "address": "60 Oak Avenue",
+          "customer": "c-0266",
+          "delivered": "2026-09-21",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            },
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "gift_card",
+          "refunded": 0.0,
+          "status": "delivered"
+        },
+        "A1532": {
+          "address": "5 Elm Street",
+          "customer": "c-0266",
+          "delivered": "2026-07-27",
+          "eta": null,
+          "items": [
+            {
+              "name": "blender",
+              "price": 49.99,
+              "sku": "SKU-101"
+            },
+            {
+              "name": "mixing bowls",
+              "price": 18.75,
+              "sku": "SKU-105"
+            },
+            {
+              "name": "cutting board",
+              "price": 22.4,
+              "sku": "SKU-107"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1265.h0",
+    "synthetic": false,
+    "source_trace": "tr_1265"
+  }
+}

@@ -1,0 +1,135 @@
+{
+  "id": "bf-already-refunded",
+  "use_case": "full-refund",
+  "pool": "bug_finding",
+  "order_template": "bf-refunded",
+  "failure_modes": [
+    "breaks-policy",
+    "wrong-amount",
+    "unrequested-change",
+    "wrong-reply"
+  ],
+  "coverage_entries": [
+    "full-refund",
+    "not-allowed"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-refunded",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "handoff",
+    "text": "Refund request: Can I get my money back for A8021?"
+  },
+  "inputs": {
+    "order_id": "A8021",
+    "items": null,
+    "to": "original",
+    "today": "2026-10-22"
+  },
+  "start_state": {
+    "orders": {
+      "A8021": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-103",
+            "name": "toaster",
+            "price": 29.99
+          },
+          {
+            "sku": "SKU-105",
+            "name": "mixing bowls",
+            "price": 18.75
+          }
+        ],
+        "payment": "card",
+        "refunded": 48.74,
+        "address": "65 Bay Street",
+        "eta": null,
+        "delivered": "2026-10-14",
+        "customer": "c-0011"
+      },
+      "A8022": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-108",
+            "name": "french press",
+            "price": 27.99
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "34 Oak Avenue",
+        "eta": null,
+        "delivered": "2026-08-03",
+        "customer": "c-0011"
+      }
+    },
+    "refunds": [
+      {
+        "order": "A8021",
+        "amount": 48.74,
+        "to": "original"
+      }
+    ],
+    "returns": [],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A8021": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-103",
+              "name": "toaster",
+              "price": 29.99
+            },
+            {
+              "sku": "SKU-105",
+              "name": "mixing bowls",
+              "price": 18.75
+            }
+          ],
+          "payment": "card",
+          "refunded": 48.74,
+          "address": "65 Bay Street",
+          "eta": null,
+          "delivered": "2026-10-14",
+          "customer": "c-0011"
+        },
+        "A8022": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-108",
+              "name": "french press",
+              "price": 27.99
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "34 Oak Avenue",
+          "eta": null,
+          "delivered": "2026-08-03",
+          "customer": "c-0011"
+        }
+      },
+      "refunds": [
+        {
+          "order": "A8021",
+          "amount": 48.74,
+          "to": "original"
+        }
+      ],
+      "returns": [],
+      "log": []
+    },
+    "output": "Order A8021 has already been refunded."
+  }
+}

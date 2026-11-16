@@ -6,23 +6,25 @@
 Writes two files, which the release workflow attaches to each GitHub release and the website
 (mahalsystems.ai) imports:
 
-- `evals.json`: the method as data. The commands, gates, measurements, experiments and report
-  panels are parsed from the tables in docs/method.md (they stay the record), alongside the
-  method's sections, the process, the practice findings, the benchmark catalog, the situations,
-  the templates and the plugin's skills:
+- `evals.json`: the method as data. The four parts, the three roles, the commands, the spec's
+  fields, report.json's keys and the gates are parsed from the tables in docs/method.md (they stay
+  the record), alongside the method's sections, the three guiding documents (estimators, problems,
+  statistics) with the terms and the rules, the online-store example, the practice findings, the
+  benchmark catalog, the situations, the templates and the plugin's skills:
 
-      {"schema": "aot-evals/site@1", "version": "0.4.1", "commit": "abc1234", "generated": "YYYY-MM-DD",
-       "method": {...}, "principles": [...], "planes": [...], "commands": [...], "judge_backends": [...],
-       "measurements": [...], "experiments": [...], "panels": [...], "gates": [...], "process": [...],
-       "practices": {...}, "benchmarks": {...}, "situations": [...], "templates": [...], "plugin": {...},
-       "download": {...}}
+      {"schema": "aot-evals/site@2", "version": "2.0.0", "commit": "abc1234", "generated": "YYYY-MM-DD",
+       "method": {...}, "principles": [...], "parts": [...], "roles": [...], "commands": [...],
+       "spec_fields": [...], "report_keys": [...], "gates": [...], "judge_backends": [...],
+       "docs": {"estimators": {...}, "problems": {...}, "statistics": {...}}, "terms": [...],
+       "rules": [...], "example": {...}, "practices": {...}, "benchmarks": {...}, "situations": [...],
+       "templates": [...], "plugin": {...}, "download": {...}}
 
   Relative links in the Markdown become absolute links to the release tag on GitHub, so text read
   on the site still points somewhere real. Keys may be added within a schema version, never
   removed or renamed.
-- `aot-evals-method-<version>.zip`: the method, references and templates as plain files, to
-  read or hand to any coding agent without installing the plugin. The same version always
-  builds the same bytes.
+- `aot-evals-method-<version>.zip`: the method, the guiding documents, the store example,
+  references and templates as plain files, to read or hand to any coding agent without installing
+  the plugin. The same version always builds the same bytes.
 
 A change to docs/method.md that breaks a table's shape fails here (and in tests/test_build_site.py)
 rather than publishing a partial method. See CONTRIBUTING.md, "Releasing".
@@ -46,26 +48,44 @@ from aot_evals import benchmarks  # noqa: E402
 
 REPO = "Mahalanobis-Systems/aot-evals"
 METHOD = ROOT / "docs" / "method.md"
+GUIDES = {"estimators": ROOT / "docs" / "estimators.md", "problems": ROOT / "docs" / "problems.md",
+          "statistics": ROOT / "docs" / "statistics.md"}
 PRACTICES = ROOT / "references" / "eval-best-practices.md"
-PROCESS = ROOT / "references" / "process"
+BACKENDS = ROOT / "references" / "judge-backends.md"
+EXAMPLE = ROOT / "examples" / "store"
+# The example's files the site shows as text: what an agent system's evals look like.
+EXAMPLE_FILES = [
+    "evals/agents/store/agent.yaml",
+    "evals/agents/store/end-to-end/eval.yaml",
+    "evals/agents/store/end-to-end/coverage.yaml",
+    "evals/agents/store/refund-subagent/eval.yaml",
+    "evals/agents/store/refund-subagent/coverage.yaml",
+    "evals/agents/store/refund-subagent/checks/judge/policy-judge.md",
+    "evals/agents/store/refund-subagent/checks/code/amount-matches.py",
+    "evals/agents/store/labels/standard.md",
+]
 TEMPLATES = ROOT / "templates"
 SKILLS = ROOT / "skills"
-SCHEMA = "aot-evals/site@1"
+SCHEMA = "aot-evals/site@2"
 
-# What the zip holds, as repository paths. A relative link in its Markdown to anything else
-# becomes a link to GitHub at the release tag, so every link works (tests/test_build_site.py).
+# What the zip holds, as repository paths (directories by their tracked files). A relative link in
+# its Markdown to anything else becomes a link to GitHub at the release tag, so every link works
+# (tests/test_build_site.py).
 BUNDLE = [
     "LICENSE",
     "NOTICE",
     "SECURITY.md",
     "docs/method.md",
+    "docs/estimators.md",
+    "docs/problems.md",
     "docs/statistics.md",
+    "examples/store",
     "references",
     "templates",
 ]
 
-GUIDANCE = "†"
 LINK = re.compile(r"(\]\()([^)\s]+)(\))")
+PIPE = re.compile(r"(?<!\\)\|")
 
 
 def tag_for(version: str) -> str:
@@ -100,7 +120,9 @@ def absolute_links(text: str, source: Path, tag: str, keep: set[str] | None = No
 
 
 def anchor(title: str) -> str:
-    """GitHub's heading anchor, so section ids match the links in the docs."""
+    """GitHub's heading anchor, so section ids match the links in the docs: inline links become
+    their text, then everything but word characters, hyphens and spaces goes."""
+    title = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", title)
     return re.sub(r"[^\w\- ]", "", title.lower()).replace(" ", "-")
 
 
@@ -111,26 +133,37 @@ def sections(text: str, level: str = "## ") -> tuple[str, list[dict]]:
     for part in parts[1:]:
         title, _, body = part.partition("\n")
         body = re.sub(r"\n-{3,}\s*$", "", body.strip()).strip()
-        out.append({"id": anchor(title.strip()), "title": title.strip(), "markdown": body})
+        m = re.match(r"(\d+)\. ", title.strip())
+        out.append({"id": anchor(title.strip()), "title": title.strip(), "markdown": body,
+                    "number": int(m.group(1)) if m else None})
     return parts[0].strip(), out
 
 
 def cells(line: str) -> list[str]:
-    return [c.strip() for c in line.strip().strip("|").split("|")]
+    """A table row's cells; `\\|` is a literal pipe inside a cell."""
+    return [c.strip().replace("\\|", "|") for c in PIPE.split(line.strip().strip("|"))]
 
 
-def table(md: str, where: str) -> list[dict]:
-    """The first Markdown table in `md`, one dict per row keyed by its snake_case header. The
-    table ends at the first line that is not a row, so a later table in the section is ignored."""
-    lines: list[str] = []
-    for ln in md.splitlines():
+def tables(md: str) -> list[list[str]]:
+    """Every Markdown table in `md`, as its lines."""
+    out: list[list[str]] = []
+    cur: list[str] = []
+    for ln in md.splitlines() + [""]:
         if ln.startswith("|"):
-            lines.append(ln)
-        elif lines:
-            break
-    if len(lines) < 3:
+            cur.append(ln)
+        elif cur:
+            out.append(cur)
+            cur = []
+    return out
+
+
+def table(md: str, where: str, nth: int = 0) -> list[dict]:
+    """The `nth` Markdown table in `md`, one dict per row keyed by its snake_case header."""
+    found = tables(md)
+    if len(found) <= nth or len(found[nth]) < 3:
         raise ValueError(f"{where}: no table")
-    header = [("id" if h in ("#", "") else h.lower().replace(" ", "_")) for h in cells(lines[0])]
+    lines = found[nth]
+    header = [("id" if h in ("#", "") else h.strip("`").lower().replace(" ", "_")) for h in cells(lines[0])]
     rows = []
     for ln in lines[2:]:
         row = cells(ln)
@@ -140,19 +173,8 @@ def table(md: str, where: str) -> list[dict]:
     return rows
 
 
-def ids(rows: list[dict], name_key: str | None = None) -> list[dict]:
-    """Plain ids, a `guidance_only` flag from the † mark, and the name column as `name`."""
-    for row in rows:
-        raw = row["id"]
-        row["id"] = raw.replace(GUIDANCE, "").strip()
-        row["guidance_only"] = GUIDANCE in raw
-        if name_key:
-            row["name"] = row.pop(name_key)
-    return rows
-
-
 def principles(md: str) -> list[dict]:
-    """The numbered list in §1: each item's bold lead as its title, and its full text."""
+    """The numbered list under Principles: each item's bold lead as its title, and its full text."""
     items = re.findall(r"^(\d+)\. (.*?)(?=^\d+\. |^\S|\Z)", md, flags=re.M | re.S)
     out = []
     for n, body in items:
@@ -162,24 +184,88 @@ def principles(md: str) -> list[dict]:
     return out
 
 
+# The sections of docs/method.md the site parses, by anchor without the section number; the
+# build fails if one goes missing.
+METHOD_SECTIONS = {
+    "principles": "principles",
+    "parts": "the-four-parts-and-the-three-roles",
+    "spec": "the-eval-spec",
+    "commands": "commands",
+    "report": "reportjson",
+    "gates": "gates",
+}
+
+
 def method(tag: str) -> dict:
     text = absolute_links(METHOD.read_text(), METHOD, tag)
     title = text.splitlines()[0].removeprefix("# ").strip()
     intro, secs = sections(text.split("\n", 1)[1])
     secs = [s for s in secs if s["id"] != "contents"]
-    # The text before the Contents list is the lead; after it, up to the first rule, the preface.
     lead = intro.split("\n\n")[0]
+    # After the Contents list, up to the first rule, the preface.
     preface = re.split(r"^## Contents\s*$", text, flags=re.M)[1]
     preface = re.split(r"^-{3,}\s*$", preface, flags=re.M)[0]
     preface = "\n\n".join(p for p in preface.strip().split("\n\n") if not re.match(r"^\d+\. \[", p))
-    for s in secs:
-        m = re.match(r"(\d+)\. ", s["title"])
-        s["number"] = int(m.group(1)) if m else None
-    by_number = {s["number"]: s for s in secs}
-    if set(by_number) != set(range(1, 11)):
-        raise ValueError(f"docs/method.md: expected sections 1-10, found {sorted(k for k in by_number if k)}")
+    numbers = [s["number"] for s in secs]
+    if numbers != list(range(1, len(secs) + 1)):
+        raise ValueError(f"docs/method.md: sections must be numbered 1..N in order, found {numbers}")
+    by_id = {s["id"]: s for s in secs}
+    by_name = {s["id"].split("-", 1)[-1]: s for s in secs}
+    missing = [a for a in METHOD_SECTIONS.values() if a not in by_name]
+    if missing:
+        raise ValueError(f"docs/method.md: no section {', '.join(missing)}")
     return {"title": title, "lead": " ".join(lead.split()), "preface": preface.strip(), "sections": secs,
-            "by_number": by_number}
+            "by_id": by_id, "by_name": by_name}
+
+
+def guide(name: str, path: Path, tag: str) -> dict:
+    """One guiding document: its title, the lead before its first section, and its sections."""
+    text = absolute_links(path.read_text(), path, tag)
+    title = text.splitlines()[0].removeprefix("# ").strip()
+    intro, secs = sections(text.split("\n", 1)[1])
+    return {"slug": name, "title": title, "intro": intro,
+            "sections": [s for s in secs if s["id"] != "contents"]}
+
+
+def terms(estimators: dict) -> list[dict]:
+    """estimators.md's Terms: each table under its bold heading, one row per term."""
+    sec = next((s for s in estimators["sections"] if s["id"] == "terms"), None)
+    if sec is None:
+        raise ValueError("docs/estimators.md: no Terms section")
+    out = []
+    groups = re.split(r"^\*\*(.+?)\*\*\s*$", sec["markdown"], flags=re.M)
+    for k in range(1, len(groups), 2):
+        group = groups[k].strip()
+        for row in table(groups[k + 1], f"estimators Terms, {group}"):
+            out.append({"group": group, "term": row["term"].replace("**", ""), "meaning": row["meaning"],
+                        "standard_term": row["standard_term"]})
+    if not out:
+        raise ValueError("docs/estimators.md: the Terms section has no tables")
+    return out
+
+
+def rules(estimators: dict) -> list[dict]:
+    sec = next((s for s in estimators["sections"] if s["id"] == "10-the-rules-in-one-table"), None)
+    if sec is None:
+        raise ValueError("docs/estimators.md: no section 10, the rules")
+    rows = table(sec["markdown"], "estimators §10 rules")
+    for r in rows:
+        r["number"] = int(r.pop("id"))
+    return rows
+
+
+def example(tag: str) -> dict:
+    readme = EXAMPLE / "README.md"
+    files = []
+    for rel in EXAMPLE_FILES:
+        p = EXAMPLE / rel
+        if not p.is_file():
+            raise ValueError(f"examples/store/{rel}: missing")
+        files.append({"path": f"examples/store/{rel}", "content": p.read_text()})
+    text = absolute_links(readme.read_text(), readme, tag)
+    return {"title": text.splitlines()[0].removeprefix("# ").strip(),
+            "markdown": text.split("\n", 1)[1].strip(), "files": files,
+            "demo": "aot-evals demo"}
 
 
 def plugin() -> dict:
@@ -198,35 +284,52 @@ def plugin() -> dict:
     }
 
 
+def _tracked(p: Path) -> list[Path] | None:
+    """The files git tracks under `p`, or None outside a git checkout."""
+    r = subprocess.run(["git", "ls-files", "-z", "--", p.relative_to(ROOT).as_posix()], cwd=ROOT,
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return None
+    return sorted(ROOT / f for f in r.stdout.split("\0") if f)
+
+
 def bundle_files() -> list[Path]:
     files = []
     for entry in BUNDLE:
         p = ROOT / entry
-        files += sorted(f for f in p.rglob("*") if f.is_file()) if p.is_dir() else [p]
-    return [f for f in files if "__pycache__" not in f.parts and f.name != ".DS_Store"]
+        if p.is_dir():
+            tracked = _tracked(p)
+            files += tracked if tracked else sorted(f for f in p.rglob("*") if f.is_file())
+        else:
+            files.append(p)
+    return [f for f in files if f.is_file() and "__pycache__" not in f.parts and f.name != ".DS_Store"]
 
 
 def bundle_readme(v: str) -> str:
     tag = tag_for(v)
     return f"""# The aot-evals method, {v}
 
-How to design, build, calibrate and run evals for a production agent, as plain files: the method,
-the step-by-step process, findings from the literature, a catalog of public agent benchmarks, and
-the templates. Read them, or point any coding agent at them. Apache License 2.0 (LICENSE, NOTICE).
+How to design, build, calibrate and run evals for a production agent, as plain files: an eval as
+an estimator with four parts (estimand, sampling design, measurement model, decision rule), the
+twelve problems they solve, the statistics behind every number, the reference for every command
+and file, a worked example, findings from the literature, a catalog of public agent benchmarks,
+and the templates. Read them, or point any coding agent at them. Apache License 2.0 (LICENSE, NOTICE).
 
 | Start with | What it holds |
 |---|---|
-| docs/method.md | The reference: principles, commands C0-C19 and their exit gates, judges, gates G1-G14 |
-| docs/statistics.md | Why each rule holds: how many cases, trials and labels; when to trust a judge or a difference |
-| references/process/README.md | The process in twelve steps, to a calibrated suite per agent |
+| docs/estimators.md | The structure: what an eval is, where evals go, the eval spec, the terms, the rules |
+| docs/problems.md | Twelve problems every agent eval has to solve, each with a worked example |
+| docs/statistics.md | The derivations: how many cases, trials and labels; when to trust a judge or a difference |
+| docs/method.md | The reference: the roles, the files, the eval spec, every command, report.json and the gates |
+| examples/store/ | The online store's support agent and refund subagent, with both evals |
 | references/eval-best-practices.md | What the 2025-2026 literature says about evaluating agents, with sources |
 | references/benchmarks.md, benchmarks.yaml | The public benchmark catalog, and how an agent is matched against it |
-| references/situations.yaml | The conditions a request can put an agent in, which every suite should cover |
+| references/situations.yaml | The conditions a request can put an agent in, which a bug-finding set should reach |
 | references/agent-contract.md | How an agent is run as a command: what goes in on stdin and comes back on stdout |
 | templates/ | A case, a code check and a judge spec to start from |
 
-The Claude Code plugin runs this method on your own agent and enforces its gates:
-https://github.com/{REPO} (this is release {tag}).
+The Claude Code plugin runs this method on your own agent: https://github.com/{REPO}
+(this is release {tag}).
 """
 
 
@@ -253,48 +356,43 @@ def build(today: str) -> dict:
     v = version()
     tag = tag_for(v)
     m = method(tag)
-    sec = m.pop("by_number")
+    sec = {k: m["by_name"][a]["markdown"] for k, a in METHOD_SECTIONS.items()}
+    m.pop("by_id")
+    m.pop("by_name")
 
     practices_text = absolute_links(PRACTICES.read_text(), PRACTICES, tag)
     p_intro, p_secs = sections(practices_text.split("\n", 1)[1])
-
-    process = []
-    for f in [PROCESS / "README.md", *sorted(p for p in PROCESS.glob("*.md") if p.name != "README.md")]:
-        text = absolute_links(f.read_text(), f, tag)
-        process.append({"slug": "overview" if f.name == "README.md" else f.stem,
-                        "title": text.splitlines()[0].removeprefix("# ").strip(),
-                        "markdown": text.split("\n", 1)[1].strip()})
+    docs = {name: guide(name, path, tag) for name, path in GUIDES.items()}
 
     entries = benchmarks.load()
     problems = benchmarks.validate(entries)
     if problems:
         raise ValueError("references/benchmarks.yaml: " + "; ".join(problems[:5]))
 
-    planes = table(sections(sec[2]["markdown"], "### ")[1][0]["markdown"], "method §2.1 Three planes")
-    for p in planes:
-        p["id"], _, p["plane"] = p["plane"].strip("*").partition(". ")
+    commands = table(sec["commands"], "method, Commands")
+    for c in commands:
+        c["name"] = c["command"].strip("`").split(" ")[0]
+        c["command"] = c["command"].strip("`")
 
     zip_name = f"aot-evals-method-{v}.zip"
-    commands = ids(table(sec[4]["markdown"], "method §4 Commands"))
-    for c in commands:
-        c["command"] = c["command"].strip("`")
-        c["guidance_only"] = c["exit_gate"].lower().startswith("guidance only")
-
     return {
         "schema": SCHEMA,
         "version": v,
         "commit": commit(),
         "generated": today,
         "method": m,
-        "principles": principles(sec[1]["markdown"]),
-        "planes": planes,
+        "principles": principles(sec["principles"]),
+        "parts": table(sec["parts"], "method, the four parts"),
+        "roles": table(sec["parts"], "method, the three roles", nth=1),
         "commands": commands,
-        "judge_backends": table(sec[5]["markdown"], "method §5 Judges"),
-        "measurements": ids(table(sec[6]["markdown"], "method §6 Measurements"), "measurement"),
-        "experiments": ids(table(sec[7]["markdown"], "method §7 Experiments"), "experiment"),
-        "panels": ids(table(sec[9]["markdown"], "method §9 panels"), "panel"),
-        "gates": ids(table(sec[10]["markdown"], "method §10 Gates")),
-        "process": process,
+        "spec_fields": table(sec["spec"], "method, the spec's fields"),
+        "report_keys": table(sec["report"], "method, report.json"),
+        "gates": [{**g, "id": g["id"].strip("`")} for g in table(sec["gates"], "method, Gates")],
+        "judge_backends": table(BACKENDS.read_text(), "references/judge-backends.md"),
+        "docs": docs,
+        "terms": terms(docs["estimators"]),
+        "rules": rules(docs["estimators"]),
+        "example": example(tag),
         "practices": {"title": practices_text.splitlines()[0].removeprefix("# ").strip(), "intro": p_intro,
                       "sections": p_secs},
         "benchmarks": {
@@ -302,7 +400,8 @@ def build(today: str) -> dict:
                 "workloads": sorted(benchmarks.WORKLOADS), "interaction": sorted(benchmarks.INTERACTIONS),
                 "environment": sorted(benchmarks.ENVIRONMENTS), "grading": sorted(benchmarks.GRADING),
                 "harness": sorted(benchmarks.HARNESS), "good_for": sorted(benchmarks.GOOD_FOR),
-                "status": sorted(benchmarks.STATUS), "data": sorted(benchmarks.DATA), "pii": sorted(benchmarks.PII),
+                "status": sorted(benchmarks.STATUS), "data": sorted(benchmarks.DATA),
+                "pii": sorted(benchmarks.PII),
             },
             "entries": entries,
         },

@@ -1,4 +1,4 @@
-"""C11 `reliability` (E4): do a judge's verdicts repeat, and do two model families agree?
+"""`reliability` (E4): do a judge's verdicts repeat, and do two model families agree?
 
 Each labelled item is judged in m fresh sessions on each of two or more backends from different
 model families. Reported (M9):
@@ -6,10 +6,11 @@ model families. Reported (M9):
 - three-level agreement across every verdict for an item: all agree / a strict
   majority / no majority;
 - cross-family agreement between the backends' majority verdicts, with Cohen's kappa;
-- next to them, TPR/TNR of each backend's majority verdict on the same human-labelled items.
+- next to them, the catch rate and clean pass rate (`catch`, `clean`) of each backend's majority
+  verdict on the same human-labelled items.
 
 Reliability is not validity: two families can agree because they share an error. The report keeps
-these numbers in their own column group, never in place of TPR/TNR.
+these numbers in their own column group, never in place of the catch and clean pass rates.
 """
 
 from __future__ import annotations
@@ -21,27 +22,27 @@ from pathlib import Path
 from .calibrate import confusion, get_judgements, load_calibration, rates, threshold_for
 from .judges import JudgeSpec
 from .labels import load_labels
-from .repo import Evals
+from .repo import Eval
 from .util import load_json, now_iso, write_json
 
 
-def reliability_path(ev: Evals, spec: JudgeSpec) -> Path:
+def reliability_path(ev: Eval, spec: JudgeSpec) -> Path:
     return ev.p("checks", "judge", f"{spec.id}.reliability.json")
 
 
-def load_reliability(ev: Evals, spec: JudgeSpec) -> dict | None:
+def load_reliability(ev: Eval, spec: JudgeSpec) -> dict | None:
     return load_json(reliability_path(ev, spec))
 
 
 def stratified_subset(labels: list[dict], n: int | None) -> list[dict]:
-    """Up to n labels, round-robin across (category, label) strata in a fixed order, so a
-    subsample keeps both classes and every category (TPR and TNR need both)."""
+    """Up to n labels, round-robin across (use case, label) strata in a fixed order, so a
+    subsample keeps both kinds and every use case (the catch and clean pass rates need both)."""
     ordered = sorted(labels, key=lambda r: hashlib.sha256(r["item_id"].encode()).hexdigest())
     if not n or n >= len(ordered):
         return ordered
     strata: dict[tuple, list[dict]] = {}
     for r in ordered:
-        strata.setdefault((r.get("category") or "", bool(r["label"])), []).append(r)
+        strata.setdefault((r.get("use_case") or "", bool(r["label"])), []).append(r)
     out: list[dict] = []
     while len(out) < n:
         for key in sorted(strata):
@@ -50,13 +51,13 @@ def stratified_subset(labels: list[dict], n: int | None) -> list[dict]:
     return out
 
 
-def measure(ev: Evals, spec: JudgeSpec, backends: list[str], m: int = 3, n: int | None = None,
+def measure(ev: Eval, spec: JudgeSpec, backends: list[str], m: int = 3, n: int | None = None,
             log=print) -> dict:
     if len(backends) < 2:
         raise ValueError("reliability needs at least two backends")
     families = {spec.backends[b].get("family") for b in backends}
     if len(families) < 2:
-        raise ValueError(f"backends {backends} are all one model family ({families}); C11 needs two")
+        raise ValueError(f"backends {backends} are all one model family ({families}); reliability needs two")
     labels = stratified_subset(load_labels(ev, spec), n)
     if not labels:
         raise ValueError(f"judge {spec.id} has no labels")
@@ -120,13 +121,13 @@ def measure(ev: Evals, spec: JudgeSpec, backends: list[str], m: int = 3, n: int 
 def render(rec: dict) -> str:
     def f(v):
         return "-" if v is None else f"{100 * v:.1f}%"
-    lines = [f"C11 reliability {rec['judge']} v{rec['version']}: {rec['items']} labelled items × m={rec['m']}",
+    lines = [f"reliability {rec['judge']} v{rec['version']}: {rec['items']} labelled items × m={rec['m']}",
              f"  {'backend':<12} {'family':<12} {'self-consistency':>16}   | validity (majority vs labels): "
-             f"{'TPR':>7} {'TNR':>7}"]
+             f"{'catch':>7} {'clean':>7}"]
     for b, d in rec["backends"].items():
         mv = d["majority_vs_labels"]
         lines.append(f"  {b:<12} {str(d['family']):<12} {f(d['self_consistency']):>16}   | {'':<30} "
-                     f"{f(mv['tpr']):>7} {f(mv['tnr']):>7}")
+                     f"{f(mv['catch']):>7} {f(mv['clean']):>7}")
     tl = rec["three_level"]
     lines.append(f"  three-level agreement: all {f(tl['all'])}, majority {f(tl['majority'])}, none {f(tl['none'])}")
     for p in rec["cross_family"]:

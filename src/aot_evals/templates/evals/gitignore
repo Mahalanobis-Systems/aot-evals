@@ -1,4 +1,4 @@
-# aot-evals: raw traces, exports and pulled transcripts never enter git (docs/method.md §1, principle 5).
+# aot-evals: raw traces, exports and pulled transcripts never enter git (docs/method.md, principle 8).
 # The export manifest and the reviewed, scrubbed cases are committed.
 data/*
 !data/export.manifest.json

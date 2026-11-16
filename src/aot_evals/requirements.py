@@ -1,14 +1,16 @@
-"""The labelling standard and each case's requirements (C6, C8).
+"""The labelling standard and each case's requirements.
 
 Our experiments comparing aot-evals with plain Claude Code found that a suite whose checks each
 decide correctly can still miss most of what makes a person fail a run, because nobody wrote
 down what a correct run must do. Checks were derived
-from failure modes per category ("the expected change happened"), and nothing asked, case by
+from failure modes per use case ("the expected change happened"), and nothing asked, case by
 case, whether the list was complete, the task was attached, or the answer's numbers were true.
 
-`labels/standard.md` holds the rules a person applies when labelling (C9, C19), with the
-categories each rule applies to. Every case carries `requirements`: what a correct run of that
-case must do, in plain words, each naming the checks that decide it:
+The agent system's `labels/standard.md`, shared by its evals (docs/method.md), holds the
+rules a person applies when labelling whole runs, with the use cases each rule applies to
+(`use_cases`). Every case carries
+`requirements`: what a correct run of that case must do, in plain words, each naming the checks
+that decide it:
 
     "requirements": [
       {"id": "invitee", "rule": "writes-right", "says": "the invite goes to Ana only",
@@ -18,9 +20,10 @@ case must do, in plain words, each naming the checks that decide it:
     ],
     "rules_not_applicable": {"connected": "nothing to connect: one event, no people records"}
 
-C6: every case in a rule's categories cites the rule in a requirement, or says why not.
-C8: every requirement names at least one check that applies to the case, or says why it is
-unchecked. An unchecked requirement is allowed, and visible: it is a known gap, not a hidden one.
+`author_problems`: every case in a rule's use cases cites the rule in a requirement, or says why
+not. `check_problems`: every requirement names at least one check that applies to the case, or
+says why it is unchecked. An unchecked requirement is allowed, and visible: it is a known gap,
+not a hidden one.
 """
 
 from __future__ import annotations
@@ -29,12 +32,13 @@ from pathlib import Path
 
 import yaml
 
-from .repo import ALL_CATEGORIES, Evals
+from .repo import ALL_USE_CASES, Evals
 from .util import ContractError
 
 
 def standard_path(ev: Evals) -> Path:
-    return ev.p("labels", "standard.md")
+    """The agent system's standard, the same file from the agent folder and from each eval."""
+    return ev.standard_path
 
 
 def load_standard(ev: Evals) -> dict | None:
@@ -53,9 +57,14 @@ def load_standard(ev: Evals) -> dict | None:
     return {"rules": meta.get("rules") or [], "body": body}
 
 
-def rules_for(rules: list[dict], category: str | None) -> list[dict]:
-    return [r for r in rules if ALL_CATEGORIES in (r.get("categories") or [ALL_CATEGORIES])
-            or category in (r.get("categories") or [])]
+def rule_use_cases(rule: dict) -> list[str]:
+    """The use cases a rule applies to: its `use_cases`, or all when it names none."""
+    ucs = rule.get("use_cases")
+    return list(ucs) if isinstance(ucs, list) and ucs else [ALL_USE_CASES]
+
+
+def rules_for(rules: list[dict], use_case: str | None) -> list[dict]:
+    return [r for r in rules if ALL_USE_CASES in rule_use_cases(r) or use_case in rule_use_cases(r)]
 
 
 def standard_problems(ev: Evals) -> list[str]:
@@ -77,7 +86,7 @@ def standard_problems(ev: Evals) -> list[str]:
 
 
 def author_problems(ev: Evals, case: dict, rules: list[dict]) -> list[str]:
-    """C6: the case says what a correct run must do, rule by rule."""
+    """The case says what a correct run must do, rule by rule."""
     cid = case.get("id", "?")
     reqs = case.get("requirements")
     if not reqs:
@@ -96,15 +105,15 @@ def author_problems(ev: Evals, case: dict, rules: list[dict]) -> list[str]:
             problems.append(f"case {cid}: requirement {q['id']} cites rule {q['rule']!r}, not in labels/standard.md")
     cited = {q.get("rule") for q in reqs if isinstance(q, dict)}
     na = case.get("rules_not_applicable") or {}
-    for r in rules_for(rules, case.get("category")):
+    for r in rules_for(rules, case.get("use_case")):
         if r["id"] not in cited and not str(na.get(r["id"]) or "").strip():
-            problems.append(f"case {cid}: rule {r['id']} applies to {case.get('category')} but no requirement "
+            problems.append(f"case {cid}: rule {r['id']} applies to {case.get('use_case')} but no requirement "
                             f"cites it; add one, or say why in rules_not_applicable")
     return problems
 
 
 def check_problems(ev: Evals, case: dict) -> list[str]:
-    """C8: each requirement is decided by a check that runs on this case, or is marked unchecked."""
+    """Each requirement is decided by a check that runs on this case, or is marked unchecked."""
     cid = case.get("id", "?")
     applies = {c for c, _ in ev.checks_for_case(case, check_type=None)}
     problems = []
@@ -117,7 +126,8 @@ def check_problems(ev: Evals, case: dict) -> list[str]:
         for c in checks:
             if c not in applies:
                 problems.append(f"case {cid}: requirement {q['id']} names check {c}, which doesn't run on this "
-                                "case (list its failure mode in the case, and the check under that failure mode)")
+                                "case (give a failure mode of its use case that check, in eval.yaml's "
+                                "measurement.failure_modes)")
     return problems
 
 
@@ -127,7 +137,7 @@ def coverage(ev: Evals) -> list[dict]:
     out = []
     cases = ev.cases(include_dropped=False)
     for r in std["rules"]:
-        applicable = [c for c in cases if r in rules_for(std["rules"], c.get("category"))]
+        applicable = [c for c in cases if r in rules_for(std["rules"], c.get("use_case"))]
         cited = [c for c in applicable if any(q.get("rule") == r["id"] for q in c.get("requirements") or [])]
         checked = [c for c in cited if any(q.get("rule") == r["id"] and q.get("checks")
                                            for q in c.get("requirements") or [])]

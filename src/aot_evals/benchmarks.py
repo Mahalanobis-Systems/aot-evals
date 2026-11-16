@@ -1,8 +1,8 @@
-"""The public benchmark catalog (references/benchmarks.yaml) and how Assess matches an agent to it.
+"""The public benchmark catalog (references/benchmarks.yaml) and how discovery matches an agent to it.
 
-Assess runs from this local copy: no web search, no model call. `match()` scores every catalog
+Discovery runs from this local copy: no web search, no model call. `match()` scores every catalog
 entry against the agent's workloads and task types and returns the best fits with the reason each
-might fit. Build may search the web for newer benchmarks and propose additions to the catalog
+might fit. Engineering may search the web for newer benchmarks and propose additions to the catalog
 (references/benchmarks.md says how). The catalog's fields and vocabularies are in
 references/benchmarks.md; `validate()` enforces them, and tests/test_benchmarks.py runs it.
 """
@@ -30,8 +30,7 @@ ENVIRONMENTS = {"static", "api-sandbox", "database", "browser", "desktop", "mobi
 GRADING = {"exact-match", "state-diff", "unit-tests", "programmatic-check", "llm-judge", "human", "pass^k",
            "trajectory-check"}
 HARNESS = {"inspect_evals", "hal", "agentbeats", "own-repo", "none"}
-GOOD_FOR = {"grading-design", "case-template", "baseline", "user-simulator", "sandbox-design", "privacy-pattern",
-            "taxonomy"}
+GOOD_FOR = {"grading-design", "case-template", "baseline", "sandbox-design", "privacy-pattern", "taxonomy"}
 STATUS = {"active", "frozen", "saturated", "deprecated"}
 DATA = {"synthetic", "real-public", "real-scraped", "mixed"}
 PII = {"none", "possible", "yes"}

@@ -1,119 +1,125 @@
 ---
 name: report
-description: The report for any phase of aot-evals - regenerate <suite>/report/report.json (fixed schema) and write one self-contained local HTML diagnostic from it, shaped around the user's question (why did the candidate regress? is this suite any good? what does it cost?). Use when someone asks for an eval report, dashboard, scorecard or diagnostic for an agent that has an evals/ directory.
+description: The report for anyone working with aot-evals - the owner, engineering or the graders - regenerate an eval's <eval>/report/report.json (schema aot-evals/report@2) and write one self-contained local HTML diagnostic from it, organized by the four parts (estimand, sampling design, measurement model, decision rule) and shaped around the user's question (should we ship this change? why did the candidate regress? is this eval any good? what does it cost?). Use when someone asks for an eval report, dashboard, scorecard or diagnostic for an agent that has an evals/ directory.
 user-invocable: false
 ---
 
 # report: the report
 
-Paths below start at `<suite>/`, this agent's suite: `evals/agents/<agent>/`, beside its discovery report
-(a one-agent repository may keep it in `evals/` itself). When the repository has several agents, pass
-`--agent <agent>` to every `aot-evals` command.
+`aot-evals` is `"${CLAUDE_PLUGIN_ROOT}/bin/aot-evals"`. An agent's evals live in
+`evals/agents/<agent>/<eval>/`; pass `--agent <agent>` with several agents and `--eval <id>` with
+several evals. Each eval has its own report: a report about a component change covers the component
+eval and the end-to-end eval it also requires.
 
 ## 1. Regenerate the data
 
 ```bash
-aot-evals report                       # latest baseline
-aot-evals report --run A --run B       # specific runs
+aot-evals --eval <id> report                          # the baseline
+aot-evals --eval <id> report --candidate <run-id>     # adds the comparison and decides on the candidate
+aot-evals --eval <id> report --run A --run B          # specific runs
 ```
 
-This writes `<suite>/report/report.json` (schema `aot-evals/report@1`, docs/method.md §8). Read it in full
-before writing anything. It is the only data source: never re-derive a number differently from
-it, and never fill a `null` in. When `refused` is set, the report leads with that.
+This writes `<eval>/report/report.json`, schema `aot-evals/report@2` (`${CLAUDE_PLUGIN_ROOT}/docs/method.md`
+§10). Read it in full before writing anything. It is the only data source: never re-derive a number
+differently from it, never round it before display, and never fill in a `null`; show the reason
+beside it (`null_reason`, `reason`, `corrected_reason`, `floor.reason`). When `refused` is set, the
+report leads with it: those runs measured a different quantity, and the next step is a baseline
+under the current spec. Terms mean what `${CLAUDE_PLUGIN_ROOT}/docs/estimators.md#terms` says.
+
+**Consequences first.** The panels carry the full numbers; the prose around them says what they
+mean for the reader's next step ("not yet: about 40 more refund cases would show it", "this judge
+needs about 80 more labeled failures before it counts"), and who takes that step (the owner,
+engineering or the graders). Explain an estimator or a test only when the reader asks, and then
+link `docs/estimators.md` or `docs/statistics.md`.
 
 ## 2. Ask what the report is for
 
-The schema is fixed and the HTML is not. Each file is written for one question, and the question
-decides what leads:
+The schema is fixed and the HTML is not. Each file answers one question, and the question decides
+what leads:
 
 | Question | Leads with |
 |---|---|
-| "How is the agent doing?" | P1 gates, P3 + P4 side by side, P9 flakiness |
-| "Is this suite any good?" | P1 gates, P14 agreement with a person, P5 coverage, P6 discrimination, P13 next actions |
-| "Why did the candidate regress?" | P7 comparison, the losing cases in P12 |
-| "What does it cost?" | P4 operational, budget breaches, cost per success |
+| "Should we ship this change?" | Decision, Comparison, Operational, then Measurement |
+| "How is the agent doing?" | Headline, Use cases, Operational |
+| "Is this eval any good?" | Spec, Evidence gates, Measurement, Design, Next steps |
+| "Why did the candidate regress?" | Comparison (the losses), Use cases, Cases |
+| "What does it cost?" | Operational, the constraints in Decision |
 
 If the question isn't clear, ask it in one line.
 
-## 3. Write one self-contained HTML file → `<suite>/report/report-<YYYY-MM-DD>.html`
+## 3. Write one self-contained HTML file → `<eval>/report/report-<YYYY-MM-DD>.html`
 
-```bash
-aot-evals report --html --title "<a title that states what this report answers>"
-```
+Write the file yourself (there is no HTML command); never overwrite an existing report, take the
+next free name (`report-<date>-2.html`). The shell:
 
-This writes the **branded shell**: Montserrat and Roboto embedded, the AOT logo top right, the
-"Mahal Systems" wordmark bottom right, the brand style sheet, and report.json inlined as
-`<script type="application/json" id="data">`.
-- **Write the panels into `<main id="panels">`**, replacing the `PANELS` comment. Use inline JS
-  that reads the `#data` script, or static HTML.
-- **Leave the header and footer as generated.** Don't add other logos, icon sets, colors or
-  fonts: the style sheet (`references/style.css`, already inlined) has every class you need.
-  That includes `.ci`, `.bar.gains` / `.bar.losses`, `.marks`, `tr.fail`, `.greyed`, `.over`,
-  `.empty-cell` and `colgroup.group-reliability`.
-- **Colors.** Velocity Green appears once per region at most, for the thing that improved.
-  Failures are Forest bold on a Pale Green band (`tr.fail`), never red.
-- **Dates.** Write dates for readers as "Month Day, Year" (`October 2, 2026`).
-- **Self-contained.** No network requests, no CDN, no build step. The file must open from the
-  filesystem and be attachable to a PR or an email. The shell never overwrites a report whose
-  panels are already written; it picks the next free name.
+- `<style>`: the brand style sheet `${CLAUDE_PLUGIN_ROOT}/skills/report/references/style.css`,
+  inlined in full, after `@font-face` rules for the fonts in `${CLAUDE_PLUGIN_ROOT}/brand/fonts/`
+  (Montserrat 400/600/700, Roboto 400/700) as base64 `data:font/woff2` URLs. It has every class
+  you need: `.ci`, `.bar.gains` / `.bar.losses`, `.marks`, `tr.fail`, `.greyed`, `.over`,
+  `.empty-cell`, `colgroup.group-reliability`.
+- A header with a title that states what the report answers, the eval id, its version and the
+  report's date, and the AOT logo (`${CLAUDE_PLUGIN_ROOT}/brand/aot-logo-128.png`, base64) top right;
+  a footer with the "Mahal Systems" wordmark bottom right and the schema.
+- report.json inlined as `<script type="application/json" id="data">`, and the panels in
+  `<main id="panels">`, as static HTML or inline JS that reads `#data`.
+
+A short script does the embedding: read the CSS, base64 the fonts and logo, and `json.dumps` the
+report into the page. Rules for the file:
+
+- **Self-contained.** No network requests, no CDN, no build step. It must open from the filesystem
+  and be attachable to a pull request or an email.
+- **Brand** (`${CLAUDE_PLUGIN_ROOT}/brand/README.md`): Enterprise Forest for structure, Velocity
+  Green at most once per region for the thing that improved, Charcoal on Cloud White, the neutral
+  grey ramp, no other colors. Failures are Forest bold on a Pale Green band (`tr.fail`), never red.
+  No gradients, shadows, emoji, icon sets or other logos. Tabular numerals, right-aligned; small
+  dense tables rather than large charts; error bars wherever an interval exists; prose in one
+  column of about 70 characters; a print stylesheet.
+- **Dates** for readers as "Month Day, Year" (`November 14, 2026`).
 - **Don't publish it.** It's a local file; tell the user the path.
 
 ### Panels
 
-Include the panels that serve the question, in the order the question needs. A panel with no
-data shows one line saying so.
+Include the panels that serve the question, in the order it needs. A panel with no data shows one
+line saying so.
 
 | id | Panel | From report.json |
 |---|---|---|
-| P0 | Conditions: agent and commits (flag dirty), every model id declared and observed, harness, k, N per set, regime, exports, dates, total cost | `agent`, `conditions`, `sets`, `runs` |
-| P1 | Gates: every G1–G14, pass/fail/n.a., what each failure blocks. **Above the results** | `gates` |
-| P2 | Validity: task × simulator × judge and the product (M25), plus the MDE per set (M7) | `validity`, `sets.*.mde_at_80_power` |
-| P3 | Correctness by category: pass rate with CI error bars and `pass^k`, ordered by worth, variance band shaded, n, k and set on every row; where `pass^k` is null, show `pass_pow_k_reason` instead of a bare dash; excluded (unscreened) cases greyed beside it | `categories[].pass_rate`, `.pass_pow_k`, `.pass_pow_k_reason`, `.variance_band`, `.excluded` |
-| P4 | Operational by category against budgets: cost per success, p50/p90, cache-hit, errors by outcome code with CI, retries, kills; breaches flagged. **Next to P3, never merged with it** | `categories[].operational` |
-| P5 | Coverage: taxonomy entry × failure mode counts. Outline empty cells, mark `not_applicable` cells n/a, and show the source in the caption with the empty-cell count. Add the authoring queue. Show `MISSING` when G5 fails | `coverage` (`cells`, `empty_cells`, `authoring_queue`) |
-| P6 | Discrimination: one stacked bar of always-pass / always-fail / discriminating, with counts, the fraction against its threshold, and the per-case index. Show the prune proposal with its before and after pairwise tests. With `redundancy: null`: "needs at least two candidates" | `redundancy` |
-| P7 | Comparison: gains and losses as separate bars, each case linked to P12. Put the McNemar p, bootstrap CI, MDE and variance band in the caption; the verdict and its reasons; per-set rows (label error-finding as not a quality estimate); plane-B deltas and new budget breaches beside it. No net-only view. If `refused`, show the G7 problems instead | `comparison` |
-| P8 | Judges: backend and model family next to the agent's, version, labels, TPR/TNR with CIs, κ, confusion matrix, threshold, ECE/Brier, cost per judgement, holdout rates; E5's backend comparison (`backends_compared`, `recommendation`). Self-consistency, cross-family agreement and three-level agreement go in a separate column group labelled "reliability (not validity)". Uncalibrated judges are greyed, with `status_reasons` shown | `checks[].judge`, `conditions.judge_backends`, `conditions.judge_cost_usd` |
-| P9 | Flakiness: per case, k marks in run order (pass, fail, operational failure) | `cases[].trials` |
-| P10 | Drift (not yet automated) | — |
-| P11 | Online (not yet automated) | `online` |
-| P12 | Case detail: inputs, start and expected state, actual state diff, each check's verdict and detail (for judges: score, reasoning, and whether it `counted`), plane-B counters, trace ref, provenance, screen status | `cases[]` |
-| P13 | Next actions, each with the command that clears it | `next_actions` |
-| P14 | Agreement with a person (C19, M29): catch rate and clean pass rate with intervals, dev and holdout side by side, against their floors; how many disagreements, by cause from `labels/triage.yaml`. With `agreement: null`: "the suite's verdicts have not been checked against a person's (G14)". Place it beside P3: a pass rate means little without it | `agreement` |
+| `conditions` | The runs, their dates, the agent and evals commits (flag dirty), each model id declared and observed, harness, k, the spec's version and its hash per part | `runs`, `eval`, `spec.sha`, `estimate.k`, `decision.subject` |
+| `spec` | Complete, or each missing and invalid field with what it blocks; the defaults filled. **Above the numbers** when anything is missing | `spec` |
+| `headline` | θ̂ with its interval and `ci_method`, the quantity, the weights per use case and where they came from, n cases, n clusters, n effective, k; corrected and uncorrected side by side when a correction applies. When `theta` is null, the `null_reason` in its place | `estimate` |
+| `use-cases` | One row per use case and pool: share, cost, weight, μ̂ with its interval (corrected beside it), n, k, `pass_pow_k` (or its reason), flaky cases, the zero-failure bound when nothing failed, and the variance band shaded. Bug-finding rows apart, labeled "bug-finding set: picked to find failures, not a rate of traffic". Excluded (unscreened or uncommitted) cases greyed with the reason | `use_cases[]` |
+| `design` | The quality set: drawn of n, frame, seed, oversampling and π range per use case, skips with reasons, refused cases; the bug-finding set and its coverage list; clusters: count, largest, design effect, any shared between the pools | `design`, `use_cases[].inclusion_prob_range` |
+| `measurement` | Per failure mode: its counted check and type, observed rate, catch rate and clean pass rate with intervals, J, labels per kind, inflation at the lower bounds against `max_inflation`, the floor's status, the corrected rate. Uncounted judges greyed with the reason. The eval against people beside it: catch and clean pass rates (dev, holdout), labels per kind against the count needed, the floor; the person-anchored rate; agreement between people (AC1, agreement on fails and on passes) in a column group labeled "reliability (not validity)" | `measurement`, `checks` |
+| `decision` | The result in words (`pass`, `fail`, `insufficient`, `unknown`, `trade`) with its reasons; each gate's test, estimate, interval, bound, p (and adjusted p), detectable effect and `cases_needed`; `also_requires` per eval; constraints with each breach (`new` flagged); the look count | `decision` |
+| `comparison` | Gains and losses as separate bars, each case listed; flips (b, c, flip rate) next to the net; Δθ̂ with its interval and the sign-flip p; the verdict and its reasons; per-use-case rows with adjusted p-values; bug-finding flips apart; new budget breaches. No net-only view. When `refused`, the refusal instead | `comparison` |
+| `operational` | Per use case: cost per success, latency p50 and p90, tokens, cache hits, errors by outcome code, against the constraints. **Next to the correctness panels, never merged with them** | `use_cases[].operational`, `decision.constraints` |
+| `gates` | The evidence gates by part (agent contract, design, measurement), pass, fail or n/a, with each failure's detail and what it means for the number | `gates`, `measurement.gates` |
+| `next` | Next steps, grouped by who takes them (the owner, engineering, the graders), each with what it would settle and the command that clears it, built from `spec.missing`, failed gates, `measurement.gates`, and the decision's reasons and `cases_needed` | those keys |
 
-### Rules (docs/method.md §9)
+### Rules
 
-1. **Every number shows n, k and an interval**, or says why there is none.
-2. **"Quality"** labels only `sets.quality_estimate.estimate`, with its weights published. Label
-   error-finding numbers "error-finding set — not a quality estimate".
-3. **Never combine correctness and operational numbers.** Show an operational regression even
-   when correctness hasn't changed.
-4. **Anything below its gate is greyed and kept out of the headline, but never hidden.**
-5. **Reliability and validity never share a column group.**
-6. **The headline is the per-category table**, not one aggregate pass rate.
-7. **Every claim in prose links (`#p3`, …) to the panel it comes from.**
-
-Visual style (the Mahal Systems brand: `${CLAUDE_PLUGIN_ROOT}/brand/README.md`):
-- Enterprise Forest for structure, Velocity Green sparingly, Charcoal on Cloud White, a neutral
-  grey ramp, and no other colors;
-- tabular numerals, right-aligned, decimals aligned;
-- small dense tables rather than large charts;
-- error bars wherever an interval exists;
-- no gradients, shadows, emoji or icon sets, and no logos other than the shell's;
-- prose in a single column of about 70 characters; matrices full width;
-- a print stylesheet.
+1. **Every number shows its n, its k and an interval**, or says why there is none.
+2. **The headline is θ̂ under the stated weights**, with the per-use-case table beside it as the
+   diagnostic. Name the weights; never show an unweighted average over use cases.
+3. **Only the quality set is a rate.** Bug-finding numbers are labeled as such and never sit in a
+   column with quality rates.
+4. **Correctness and cost are never combined.** Show an operational regression even when correctness
+   hasn't changed; a gain that breaks a budget is a trade.
+5. **Unknown stays unknown.** A null is shown with its reason, never as 0, a dash or a blank.
+6. **"No significant difference" is never written as "no worse"**: say what the decision rule says,
+   and the smallest change the comparison could have seen.
+7. **Reliability and validity never share a column group.**
+8. **Every claim in prose links (`#decision`, …) to the panel it comes from.**
 
 ## 4. Before handing it over
 
 Open the file in a browser if one is available. Check that every panel renders, nothing makes a
-network request, and every greyed item says which gate greyed it.
-
-The report is this skill's checkpoint. Log it, so it shows on the activity page with the "waiting
-for you" banner, and stop:
+network request, and every greyed item says why. Then log it, so it shows on the activity page with
+the "waiting for you" banner, and stop:
 
 ```bash
-aot-evals log "Report ready: <suite>/report/report-<date>.html" --kind question --gate C18
+aot-evals log "Report ready: <eval>/report/report-<date>.html" --kind question
 ```
 
-Give the user the path, the headline in two sentences, and the first item from P13. Log your
-steps as you write the panels (`${CLAUDE_PLUGIN_ROOT}/references/working-in-checkpoints.md`).
+Give the user the path, the headline in two plain sentences (the number with its range, and what
+the decision rule says to do), and the first next step with who takes it.

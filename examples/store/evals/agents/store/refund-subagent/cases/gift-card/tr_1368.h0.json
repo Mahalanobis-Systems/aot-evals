@@ -1,0 +1,127 @@
+{
+  "id": "tr_1368.h0",
+  "use_case": "gift-card",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 7,
+    "inclusion_prob": 0.6666666666666666
+  },
+  "order_template": "ot-04",
+  "cluster": "ot-04",
+  "trigger": {
+    "text": "Refund request: Please refund order A1737 to a gift card.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": null,
+    "order_id": "A1737",
+    "to": "gift_card",
+    "today": "2026-10-20"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1737": {
+        "address": "42 Oak Avenue",
+        "customer": "c-0369",
+        "delivered": "2026-10-03",
+        "eta": null,
+        "items": [
+          {
+            "name": "coffee grinder",
+            "price": 59.0,
+            "sku": "SKU-104"
+          },
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "gift_card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1738": {
+        "address": "63 Harbor Road",
+        "customer": "c-0369",
+        "delivered": "2026-09-05",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $86.99 for order A1737 to your gift card.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1737": {
+          "address": "42 Oak Avenue",
+          "customer": "c-0369",
+          "delivered": "2026-10-03",
+          "eta": null,
+          "items": [
+            {
+              "name": "coffee grinder",
+              "price": 59.0,
+              "sku": "SKU-104"
+            },
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "gift_card",
+          "refunded": 86.99,
+          "status": "delivered"
+        },
+        "A1738": {
+          "address": "63 Harbor Road",
+          "customer": "c-0369",
+          "delivered": "2026-09-05",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 86.99,
+          "order": "A1737",
+          "to": "gift_card"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1368.h0",
+    "synthetic": false,
+    "source_trace": "tr_1368"
+  }
+}

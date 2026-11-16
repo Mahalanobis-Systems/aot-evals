@@ -1,6 +1,6 @@
-"""Judge checks (docs/method.md §5): one failure mode, one binary typed question, any backend.
+"""Judge checks (docs/method.md): one failure mode, one binary typed question, any backend.
 
-A judge is `evals/checks/judge/<check-id>.md`: YAML frontmatter plus a human-readable body.
+A judge is `<eval>/checks/judge/<check-id>.md`: YAML frontmatter plus a human-readable body.
 
     ---
     id: summary-invents-figure
@@ -14,9 +14,7 @@ A judge is `evals/checks/judge/<check-id>.md`: YAML frontmatter plus a human-rea
     pass_options: [...]            # choice: options that mean pass
     pass_min_level: 1              # score: lowest level index that means pass
     inputs: [end.output, case.inputs.source]   # what the judge sees; dotted paths
-    mode: binary                   # binary | pairwise (G4)
-    min_tpr: 0.75                  # below either floor the judge stays uncalibrated (greyed)
-    min_tnr: 0.75
+    mode: binary                   # binary | pairwise
     primary: jev
     backends:
       jev:    {type: systemone, model: jev-1.13, family: typesafe,
@@ -26,7 +24,7 @@ A judge is `evals/checks/judge/<check-id>.md`: YAML frontmatter plus a human-rea
     ---
 
 Every backend returns a score s = P(pass) in [0, 1] for an item. Backends that return a
-probability (System One) are thresholded on the labels (C10); backends that return a bare
+probability (System One) are thresholded on the labels (`calibrate`); backends that return a bare
 verdict (a generative LLM, a command without a probability) give s in {0, 1}.
 """
 
@@ -55,7 +53,6 @@ except ImportError:  # pragma: no cover
 
 QUESTION_TYPES = ("noul", "choice", "score")
 BACKEND_TYPES = ("systemone", "anthropic", "command")
-DEFAULT_MIN_RATE = 0.75
 
 # USD per million tokens (input, output) for cost per judgement. The Messages API reports tokens,
 # not dollars, so generative judge costs are estimates; override with price_input_per_mtok /
@@ -109,27 +106,19 @@ class JudgeSpec:
         return names[0] if len(names) == 1 else None
 
     @property
-    def min_tpr(self) -> float:
-        return float(self.meta.get("min_tpr", DEFAULT_MIN_RATE))
-
-    @property
-    def min_tnr(self) -> float:
-        return float(self.meta.get("min_tnr", DEFAULT_MIN_RATE))
-
-    @property
     def mode(self) -> str:
         return self.meta.get("mode", "binary")
 
     def sha(self) -> str:
         """Hash of everything that changes what the judge decides (not the prose body)."""
-        relevant = {k: v for k, v in self.meta.items() if k not in ("primary", "min_tpr", "min_tnr")}
+        relevant = {k: v for k, v in self.meta.items() if k != "primary"}
         return hashlib.sha256(json.dumps(relevant, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
     def backend_sha(self, backend: str) -> str:
         """sha() for one backend: the question and inputs plus that backend's own config only, so
         adding or changing another backend leaves this backend's cached judgements valid."""
         relevant = {k: v for k, v in self.meta.items()
-                    if k not in ("primary", "min_tpr", "min_tnr", "backends")}
+                    if k not in ("primary", "backends")}
         relevant["backend"] = self.backends.get(backend)
         return hashlib.sha256(json.dumps(relevant, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
@@ -158,7 +147,7 @@ class JudgeSpec:
             if b.get("type") not in BACKEND_TYPES:
                 p.append(f"judge {self.id}: backend {name} type must be one of {BACKEND_TYPES}")
             if not b.get("family"):
-                p.append(f"judge {self.id}: backend {name} has no model family (G4)")
+                p.append(f"judge {self.id}: backend {name} has no model family")
             if not b.get("model"):
                 p.append(f"judge {self.id}: backend {name} has no model id")
             if b.get("type") == "command" and not (_repo_root(self) / str(b.get("cwd", "."))).is_dir():
@@ -513,10 +502,11 @@ def _command(spec: JudgeSpec, cfg: dict, judge_input: dict, base: dict) -> Judge
 
 
 def _repo_root(spec: JudgeSpec) -> Path:
-    """<suite>/checks/judge/<id>.md -> the repository root; command judges run from there."""
+    """evals/agents/<agent>/<eval>/checks/judge/<id>.md -> the repository root, where agent.yaml's
+    relative paths start; command judges run from there."""
     from .repo import Evals
 
-    return Evals(spec.path.resolve().parents[2]).repo_root
+    return Evals(spec.path.resolve().parents[3]).repo_root
 
 
 def credentials_missing(cfg: dict) -> str | None:

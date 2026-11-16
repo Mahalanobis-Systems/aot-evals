@@ -35,6 +35,16 @@ def run_id_stamp() -> str:
     return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
+def load_yaml_text(text: str, where: str) -> Any:
+    """YAML from a string (a file as committed, read with git show), with load_yaml's loader."""
+    if yaml is None:
+        raise ContractError("PyYAML is not available; run aot-evals through its bin/ wrapper")
+    try:
+        return yaml.load(text, Loader=_Loader)  # noqa: S506 - a SafeLoader
+    except yaml.YAMLError as e:
+        raise ContractError(f"{where}: invalid YAML: {e}") from e
+
+
 def load_yaml(path: Path) -> Any:
     if yaml is None:
         raise ContractError("PyYAML is not available; run aot-evals through its bin/ wrapper")
@@ -188,10 +198,17 @@ def git_strictly_before(cwd: Path, a: str, b: str) -> bool:
 
 
 def git_untracked_or_modified(cwd: Path, pathspec: str) -> list[str]:
-    out = git(["status", "--porcelain", "--untracked-files=all", "--", pathspec], cwd)
-    if out is None:
+    """Paths under `pathspec` that git has untracked or with uncommitted changes. The porcelain
+    status is read unstripped: `git()` strips its output, which would eat the leading space of the
+    first line (" M path") and cut into the first path."""
+    try:
+        r = subprocess.run(["git", "status", "--porcelain", "-z", "--untracked-files=all", "--", pathspec],
+                           cwd=str(cwd), capture_output=True, text=True, timeout=30)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         return []
-    return [line[3:] for line in out.splitlines() if line.strip()]
+    if r.returncode != 0:
+        return []
+    return [e[3:] for e in r.stdout.split("\0") if len(e) > 3]
 
 
 def get_path(obj: Any, dotted: str) -> Any:

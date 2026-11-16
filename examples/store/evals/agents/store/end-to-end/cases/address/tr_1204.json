@@ -1,0 +1,138 @@
+{
+  "id": "tr_1204",
+  "use_case": "address",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 1,
+    "inclusion_prob": 0.26666666666666666
+  },
+  "template": "address-t1",
+  "cluster": "address-t1",
+  "trigger": {
+    "text": "Please send order A1409 to 808 Mill Lane instead.",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0205",
+    "today": "2026-10-27"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1409": {
+        "address": "25 Elm Street",
+        "customer": "c-0205",
+        "delivered": null,
+        "eta": "2026-10-28",
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "shipped"
+      },
+      "A1410": {
+        "address": "82 Bay Street",
+        "customer": "c-0205",
+        "delivered": "2026-08-12",
+        "eta": null,
+        "items": [
+          {
+            "name": "blender",
+            "price": 49.99,
+            "sku": "SKU-101"
+          },
+          {
+            "name": "mixing bowls",
+            "price": 18.75,
+            "sku": "SKU-105"
+          },
+          {
+            "name": "cutting board",
+            "price": 22.4,
+            "sku": "SKU-107"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Order A1409 has already shipped, so I can't change its address.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1409": {
+          "address": "25 Elm Street",
+          "customer": "c-0205",
+          "delivered": null,
+          "eta": "2026-10-28",
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "shipped"
+        },
+        "A1410": {
+          "address": "82 Bay Street",
+          "customer": "c-0205",
+          "delivered": "2026-08-12",
+          "eta": null,
+          "items": [
+            {
+              "name": "blender",
+              "price": 49.99,
+              "sku": "SKU-101"
+            },
+            {
+              "name": "mixing bowls",
+              "price": 18.75,
+              "sku": "SKU-105"
+            },
+            {
+              "name": "cutting board",
+              "price": 22.4,
+              "sku": "SKU-107"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1204",
+    "synthetic": false
+  }
+}

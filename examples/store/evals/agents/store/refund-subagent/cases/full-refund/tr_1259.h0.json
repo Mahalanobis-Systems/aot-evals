@@ -1,0 +1,127 @@
+{
+  "id": "tr_1259.h0",
+  "use_case": "full-refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 9,
+    "inclusion_prob": 0.3305785123966942
+  },
+  "order_template": "ot-10",
+  "cluster": "ot-10",
+  "trigger": {
+    "text": "Refund request: Please refund order A1519.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": null,
+    "order_id": "A1519",
+    "to": "original",
+    "today": "2026-10-11"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1519": {
+        "address": "24 Elm Street",
+        "customer": "c-0260",
+        "delivered": "2026-09-30",
+        "eta": null,
+        "items": [
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1520": {
+        "address": "7 Elm Street",
+        "customer": "c-0260",
+        "delivered": "2026-07-13",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $42.00 for order A1519 to your original payment.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1519": {
+          "address": "24 Elm Street",
+          "customer": "c-0260",
+          "delivered": "2026-09-30",
+          "eta": null,
+          "items": [
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            }
+          ],
+          "payment": "card",
+          "refunded": 42.0,
+          "status": "delivered"
+        },
+        "A1520": {
+          "address": "7 Elm Street",
+          "customer": "c-0260",
+          "delivered": "2026-07-13",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 42.0,
+          "order": "A1519",
+          "to": "original"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1259.h0",
+    "synthetic": false,
+    "source_trace": "tr_1259"
+  }
+}

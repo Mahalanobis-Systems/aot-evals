@@ -1,4 +1,4 @@
-"""Keep the agent away from the answers (docs/method.md §4: the agent must not see the cases).
+"""Keep the agent away from the answers (docs/method.md: the agent must not see the cases).
 
 evals/ lives in the repository the agent runs in. An agent with a coding harness can grep its
 working directory, match a case file and read the expected answer. Two defences:
@@ -10,7 +10,7 @@ working directory, match a case file and read the expected answer. Two defences:
   deleted when the run ends.
 - Every run is checked for exposure, isolated or not: eval files (cases, checks, labels) that
   changed during the run, and agent output that names a case file or the suite's path. Either
-  makes the run's manifest a problem (C12), so it cannot become a baseline unnoticed.
+  makes the run's manifest a problem (the `manifest` gate), so it cannot become a baseline unnoticed.
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ def make_copy(ev: Evals, label: str) -> Path:
     """A copy of the repository without the eval answers; returns the copy's repository root."""
     src = ev.repo_root
     evals_rel = str(ev.evals_dir.relative_to(src))
-    env_rel = str(ev.p("env").relative_to(src))
+    env_rel = str(ev.env_dir.relative_to(src))
     dest = Path(tempfile.mkdtemp(prefix=f"aot-evals-{label}-")) / src.name
     dest.mkdir()
     files = _git_list(src, "--cached", "--others", "--exclude-standard")
@@ -96,7 +96,8 @@ def answer_files(ev: Evals) -> dict[str, str]:
         base = ev.p(d)
         if base.is_dir():
             for p in sorted(base.rglob("*")):
-                if p.is_file() and not p.name.endswith((".queue.csv", ".judgements.jsonl")):
+                if (p.is_file() and not p.name.endswith((".queue.csv", ".judgements.jsonl"))
+                        and "__pycache__" not in p.parts):  # Python rewrites these when a check runs
                     out[str(p.relative_to(ev.root))] = sha256_file(p)[:16]
     return out
 

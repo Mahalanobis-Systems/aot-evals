@@ -1,117 +1,119 @@
-"""Phases, trust per category, changes since the baseline, and the next step (trust.py)."""
+"""Where each eval stands, its trust, the changes since a baseline and the next step per role
+(trust.py, docs/method.md)."""
 
 from __future__ import annotations
 
 import json
 
-from aot_evals import agreement, trust
+import yaml
+from conftest import StoreRepo
+
+from aot_evals import cli, components, trust
 from aot_evals.repo import Evals
 
 
-def _label_all(repo, ev, run_id: str, label: str = "pass") -> None:
-    rows = [{"item_id": agreement.item_key(run_id, a["case_id"], a["trial"], a["attempt"]),
-             "case_id": a["case_id"], "run": run_id, "trial": a["trial"], "attempt": a["attempt"],
-             "label": label, "labeller": "tester", "note": ""}
-            for a in agreement.finals(ev, [run_id])]
-    agreement.import_rows(ev, rows, "tester")
+def _status(capsys, *argv: str) -> dict:
+    assert cli.main([*argv, "status", "--json"]) == 0
+    return json.loads(capsys.readouterr().out)
 
 
-def test_phase_and_next_step_before_and_after_the_baseline(make_repo):
-    repo = make_repo()
-    ev = Evals(repo.evals)
-    ph = trust.phase(ev)
-    assert ph["id"] == "build" and ph["done"] == ["assess"]
-    nx = trust.next_step(ev)
-    assert nx["phase"] == "build" and "smoke" in nx["how"]
-    assert all(r["level"] == "untested" for r in trust.trust(ev))
-    assert trust.changes(ev) == []  # nothing to compare with yet
-
-    repo.cli("run", "--purpose", "smoke", "--case", "book-001")
-    assert "baseline" in trust.next_step(ev)["how"]
-    assert repo.cli("run", "--purpose", "baseline", "--k", "3") == 0
-    assert trust.phase(ev)["id"] == "judge"
-    levels = {r["category"]: r for r in trust.trust(ev)}
-    assert levels["book-meeting"]["level"] == "provisional"
-    assert "labelled" in levels["book-meeting"]["why"]
-    nx = trust.next_step(ev)
-    assert nx["phase"] == "judge" and nx.get("category") and "label" in nx["how"]
+def _roles(t: dict) -> dict:
+    return {st["role"]: st["step"] for st in t["next"]}
 
 
-def test_a_category_is_validated_when_the_suite_agrees_with_a_person(make_repo):
-    repo = make_repo()
-    ev = Evals(repo.evals)
-    repo.cli("run", "--purpose", "smoke", "--case", "book-001")
-    assert repo.cli("run", "--purpose", "baseline", "--k", "3") == 0
-    run_id = ev.latest_run("baseline")["run_id"]
-    # the floors are suite-wide; lower them so the toy suite's 30 runs can clear them
-    (ev.p("labels", "floors.yaml")).write_text("min_runs: 10\nmin_each: 1\n")
-    _label_all(repo, ev, run_id, "pass")
-    agreement.measure(ev, log=lambda *_: None)
-    res = json.loads(agreement.result_path(ev).read_text())
-    assert set(res["categories"]) == {"book-meeting", "nothing-to-do"}
-    levels = {r["category"]: r for r in trust.trust(ev)}
-    # every labelled run passes: the suite-wide floor (one of each kind) isn't met, and the
-    # category's catch rate has no denominator. Provisional, and the reason says why.
-    assert levels["book-meeting"]["level"] == "provisional"
-    assert "at least 1 of each" in levels["book-meeting"]["why"]
-    assert levels["book-meeting"]["clean"] == 1.0 and levels["book-meeting"]["catch"] is None
-    assert levels["book-meeting"]["labelled_runs"] == 21 and levels["nothing-to-do"]["labelled_runs"] == 9
+def test_no_eval_and_no_discovery_report_is_the_owners_discovery(tmp_path, capsys):
+    s = _status(capsys, "--evals", str(tmp_path / "evals" / "agents" / "bot"))
+    assert s["stands"] == "no discovery report yet"
+    assert "/aot-evals:start" in _roles(s)["owner"]
+    assert s["evals"] == []
 
 
-def test_changes_since_the_baseline_name_the_short_path(make_repo):
-    repo = make_repo()
-    ev = Evals(repo.evals)
-    repo.cli("run", "--purpose", "smoke", "--case", "book-001")
-    assert repo.cli("run", "--purpose", "baseline", "--k", "3") == 0
-    assert trust.changes(ev) == []
-
-    # a check changed: re-grade offline, no agent runs
-    path = ev.code_check_path("requested-event-exists")
-    path.write_text(path.read_text() + "\n# tightened\n")
-    kinds = [c["kind"] for c in trust.changes(ev)]
-    assert kinds == ["checks"]
-    assert "agreement" in trust.changes(ev)[0]["path"][0]
-    assert trust.next_step(ev)["change"] == "checks"
-
-    # a new category: a new use case
-    d = ev.p("cases", "reschedule")
-    d.mkdir()
-    case = json.loads(ev.p("cases", "book-meeting", "book-001.json").read_text())
-    case.update({"id": "move-001", "category": "reschedule"})
-    (d / "move-001.json").write_text(json.dumps(case))
-    cats = repo.yaml("categories.yaml")
-    cats["categories"].append({"id": "reschedule", "definition": "move a meeting", "example": "t",
-                               "worth": "high", "simple": False, "cost": {"incorrect": "high"},
-                               "observed_share": 0.0, "share_source": "traces"})
-    repo.write_yaml("categories.yaml", cats)
-    ch = {c["kind"]: c for c in trust.changes(ev)}
-    assert "new-use-case" in ch and "reschedule" in ch["new-use-case"]["what"]
-    levels = {r["category"]: r for r in trust.trust(ev)}
-    assert levels["reschedule"]["level"] == "untested"
-
-    # the invocation changed in agent.yaml (an env var, as the demo's candidate does): the agent changed
-    a = repo.yaml("agent.yaml")
-    a["invoke"]["env"]["AGENT_BREAK"] = "book-002"
-    repo.write_yaml("agent.yaml", a)
-    assert any(c["kind"] == "agent" and "environment variables" in c["what"] for c in trust.changes(ev))
-    a["invoke"]["env"].pop("AGENT_BREAK")
-    repo.write_yaml("agent.yaml", a)
-
-    # the agent changed: a candidate run, then label only what changed
-    (repo.root / "agent" / "agent.py").write_text((repo.root / "agent" / "agent.py").read_text() + "\n# v2\n")
-    assert any(c["kind"] == "agent-uncommitted" for c in trust.changes(ev))
-    repo.commit("agent v2")
-    ch = {c["kind"]: c for c in trust.changes(ev)}
-    assert "agent" in ch and "candidate" in ch["agent"]["path"][0]
+def test_a_discovery_report_without_an_eval_is_engineerings_build(tmp_path, capsys):
+    agent = tmp_path / "evals" / "agents" / "bot"
+    agent.mkdir(parents=True)
+    (agent / "discovery.md").write_text("# Bot\n")
+    s = _status(capsys, "--evals", str(agent))
+    assert "no eval yet" in s["stands"]
+    assert list(_roles(s)) == ["engineering"] and "aot-evals build" in _roles(s)["engineering"]
 
 
-def test_status_prints_the_summary_and_the_gate_table_on_request(make_repo, capsys):
-    repo = make_repo()
-    assert repo.cli("status") == 0
-    out = capsys.readouterr().out
-    assert "Phase: Build" in out and "Next:" in out and "C0" not in out.split("Upgrades")[0]
-    assert repo.cli("status", "--gates") == 0
-    assert "C12  baseline" in capsys.readouterr().out
-    assert repo.cli("status", "--json") == 0
-    data = json.loads(capsys.readouterr().out)
-    assert data["phase"]["id"] == "build" and "trust" in data and "gates" in data
+def test_an_eval_without_a_baseline_is_untested_and_engineering_runs_it(store_repo: StoreRepo):
+    t = trust.eval_trust(store_repo.ev("end-to-end"))
+    assert t["stands"] == "no baseline has run"
+    assert t["level"] == "untested"
+    assert "run --purpose baseline" in _roles(t)["engineering"]
+
+
+def test_a_baseline_makes_the_eval_provisional_and_hands_labelling_to_people(store_repo: StoreRepo, capsys):
+    s = store_repo
+    assert s.cli("run", "--purpose", "baseline") == 0
+    t = trust.eval_trust(s.ev("end-to-end"))
+    assert t["stands"] == "a number under the current spec, not yet held to people"
+    assert t["level"] == "provisional"
+    assert "aot-evals --eval end-to-end serve" in _roles(t)["graders"]
+    assert t["theta"] is not None
+    assert t["conditions"] == {"spec": True, "estimate": True, "judges": True, "people": False,
+                               "sized": None}
+    why = " ".join(t["why"])
+    assert "not held to people" in why
+    # a paired rule is sized from the flip rate, which no comparison has measured yet
+    assert "can't size the decision rule yet" in why and "--flip-rate" in why
+    # once a comparison has measured it, the plan sizes the rule and the quality set falls short
+    comp = s.agent / "end-to-end" / "report" / "comparisons"
+    comp.mkdir(parents=True)
+    (comp / "c.json").write_text(json.dumps({"generated": "2026-11-14T00:00:00Z", "refused": None,
+                                             "candidate_runs": [], "flips": {"flip_rate": 0.05}}))
+    t = trust.eval_trust(s.ev("end-to-end"))
+    assert t["conditions"]["sized"] is False
+    assert "the decision rule needs about" in " ".join(t["why"])
+    capsys.readouterr()
+    out = _status(capsys, "--evals", str(s.agent), "--eval", "end-to-end")
+    assert [e["eval"] for e in out["evals"]] == ["end-to-end"]
+    assert out["evals"][0]["complete"] is True  # the spec's fields ride along
+    assert cli.main(["--evals", str(s.agent), "status"]) == 0
+    text = capsys.readouterr().out
+    assert "2 eval(s): 1 untested, 1 provisional" in text
+    assert "end-to-end: provisional" in text and "refund-subagent: untested" in text
+    assert "next for the people who know what good looks like: label whole runs" in text
+    assert "next for engineering:" in text
+
+
+def test_a_changed_estimand_is_a_revision_since_the_baseline(store_repo: StoreRepo):
+    s = store_repo
+    assert s.cli("run", "--purpose", "baseline") == 0
+    path = s.agent / "end-to-end" / "eval.yaml"
+    spec = yaml.safe_load(path.read_text())
+    spec["estimand"]["use_cases"][0]["cost"] = 2
+    path.write_text(yaml.safe_dump(spec, sort_keys=False))
+    ev = Evals(s.agent).eval("end-to-end")
+    ch = trust.changes(ev)
+    assert [c["kind"] for c in ch] == ["revision"]
+    assert ch[0]["parts"] == ["estimand"]
+    t = trust.eval_trust(ev)
+    assert t["level"] == "untested"
+    assert t["stands"] in ("no baseline has run", "no number under the current spec yet")
+    assert trust.summary(Evals(s.agent))["evals"][0]["next"][0]["role"] == "engineering"  # the re-run first
+
+
+def test_a_changed_agent_since_the_baseline_points_at_a_candidate(store_repo: StoreRepo):
+    s = store_repo
+    assert s.cli("run", "--purpose", "baseline") == 0
+    prompt = s.root / "agent" / "store_prompt.md"
+    prompt.write_text(prompt.read_text() + "\nBe brief.\n")
+    kinds = [c["kind"] for c in trust.changes(s.ev("end-to-end"))]
+    assert kinds == ["agent-uncommitted"]
+    s.commit("prompt")
+    ch = trust.changes(s.ev("end-to-end"))
+    assert [c["kind"] for c in ch] == ["agent"]
+    assert "--purpose candidate" in ch[0]["next"]
+
+
+def test_components_rows_carry_their_role(store_repo: StoreRepo):
+    rows = components.checklist(Evals(store_repo.agent))
+    by = {r["id"]: r for r in rows}
+    assert {r["role"] for r in rows} == {"owner", "engineering", "graders"}
+    assert by["weighting"]["role"] == "owner"   # the estimand
+    assert by["golden"]["role"] == "engineering"       # the sampling design
+    assert by["deterministic"]["role"] == "engineering"  # the checks
+    assert by["misclassification"]["role"] == "graders"  # the error rates
+    assert all(r["group"] == r["part"] for r in rows)  # the grader application reads group

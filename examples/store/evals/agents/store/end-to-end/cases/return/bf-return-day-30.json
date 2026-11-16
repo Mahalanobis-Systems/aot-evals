@@ -1,0 +1,136 @@
+{
+  "id": "bf-return-day-30",
+  "use_case": "return",
+  "pool": "bug_finding",
+  "template": "bf-return-window",
+  "failure_modes": [
+    "wrong-answer",
+    "wrong-end-state",
+    "unrequested-change",
+    "wrong-route"
+  ],
+  "coverage_entries": [
+    "return",
+    "window-edge"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-return-window",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "message",
+    "text": "I want to return order A7005."
+  },
+  "inputs": {
+    "today": "2026-10-20",
+    "customer": "c-0003"
+  },
+  "start_state": {
+    "orders": {
+      "A7005": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-103",
+            "name": "toaster",
+            "price": 29.99
+          },
+          {
+            "sku": "SKU-105",
+            "name": "mixing bowls",
+            "price": 18.75
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "14 Mill Lane",
+        "eta": null,
+        "delivered": "2026-09-20",
+        "customer": "c-0003"
+      },
+      "A7006": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-106",
+            "name": "chef's knife",
+            "price": 42.0
+          },
+          {
+            "sku": "SKU-107",
+            "name": "cutting board",
+            "price": 22.4
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "13 Cedar Court",
+        "eta": null,
+        "delivered": "2026-09-01",
+        "customer": "c-0003"
+      }
+    },
+    "refunds": [],
+    "returns": [],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A7005": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-103",
+              "name": "toaster",
+              "price": 29.99
+            },
+            {
+              "sku": "SKU-105",
+              "name": "mixing bowls",
+              "price": 18.75
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "14 Mill Lane",
+          "eta": null,
+          "delivered": "2026-09-20",
+          "customer": "c-0003"
+        },
+        "A7006": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-106",
+              "name": "chef's knife",
+              "price": 42.0
+            },
+            {
+              "sku": "SKU-107",
+              "name": "cutting board",
+              "price": 22.4
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "13 Cedar Court",
+          "eta": null,
+          "delivered": "2026-09-01",
+          "customer": "c-0003"
+        }
+      },
+      "refunds": [],
+      "returns": [
+        {
+          "order": "A7005",
+          "opened": "2026-10-20"
+        }
+      ],
+      "log": []
+    },
+    "output": "I've started a return for order A7005. You'll get a label by email."
+  }
+}

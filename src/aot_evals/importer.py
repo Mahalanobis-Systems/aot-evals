@@ -1,7 +1,7 @@
-"""C0 `import`: bring a data export into `evals/data/` and record where it came from.
+"""`import`: bring a data export into `evals/data/` and record where it came from.
 
 The export itself is git-ignored; the manifest entry is committed. Every downstream number has
-to trace back to an entry here or to a committed case (G12). Nothing in this plugin calls a live
+to trace back to an entry here or to a committed case (`committed`). Nothing in this plugin calls a live
 vendor API: the team exports from its observability stack and imports the file.
 """
 
@@ -68,7 +68,8 @@ def manifest_path(ev: Evals) -> Path:
 
 
 def import_export(ev: Evals, src: Path, *, source: str, query: str, window: str,
-                  export_id: str | None = None, notes: str | None = None) -> dict:
+                  export_id: str | None = None, notes: str | None = None,
+                  handoffs_of: str | None = None) -> dict:
     if not src.is_file():
         raise FileNotFoundError(src)
     data = load_json(manifest_path(ev)) or {"exports": []}
@@ -94,6 +95,8 @@ def import_export(ev: Evals, src: Path, *, source: str, query: str, window: str,
         "sha256": sha256_file(dest),
         "notes": notes,
     }
+    if handoffs_of:  # handoffs into a component, captured as they happened (rule 4; handoffs.py)
+        entry["handoffs"] = {"component": handoffs_of, "from": None, "captured": True}
     data["exports"].append(entry)
     write_json(manifest_path(ev), data)
     return entry

@@ -1,0 +1,111 @@
+{
+  "id": "tr_1277.h0",
+  "use_case": "gift-card",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 4,
+    "inclusion_prob": 0.6666666666666666
+  },
+  "order_template": "ot-12",
+  "cluster": "ot-12",
+  "trigger": {
+    "text": "Refund request: I want a refund for the toaster I bought.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": null,
+    "order_id": null,
+    "to": "original",
+    "today": "2026-10-18"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1555": {
+        "address": "67 Harbor Road",
+        "customer": "c-0278",
+        "delivered": "2026-10-02",
+        "eta": null,
+        "items": [
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          }
+        ],
+        "payment": "gift_card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1556": {
+        "address": "50 Oak Avenue",
+        "customer": "c-0278",
+        "delivered": "2026-08-05",
+        "eta": null,
+        "items": [
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "I can refund that for you. What is your order number?",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1555": {
+          "address": "67 Harbor Road",
+          "customer": "c-0278",
+          "delivered": "2026-10-02",
+          "eta": null,
+          "items": [
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            }
+          ],
+          "payment": "gift_card",
+          "refunded": 0.0,
+          "status": "delivered"
+        },
+        "A1556": {
+          "address": "50 Oak Avenue",
+          "customer": "c-0278",
+          "delivered": "2026-08-05",
+          "eta": null,
+          "items": [
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1277.h0",
+    "synthetic": false,
+    "source_trace": "tr_1277"
+  }
+}

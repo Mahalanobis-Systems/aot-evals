@@ -1,0 +1,149 @@
+{
+  "id": "bf-window-30",
+  "use_case": "full-refund",
+  "pool": "bug_finding",
+  "order_template": "bf-window-30",
+  "failure_modes": [
+    "breaks-policy",
+    "wrong-amount",
+    "unrequested-change",
+    "wrong-reply"
+  ],
+  "coverage_entries": [
+    "full-refund",
+    "window-edge"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-window-30",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "handoff",
+    "text": "Refund request: I'd like a refund for order A8001."
+  },
+  "inputs": {
+    "order_id": "A8001",
+    "items": null,
+    "to": "original",
+    "today": "2026-10-22"
+  },
+  "start_state": {
+    "orders": {
+      "A8001": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-106",
+            "name": "chef's knife",
+            "price": 42.0
+          },
+          {
+            "sku": "SKU-107",
+            "name": "cutting board",
+            "price": 22.4
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "39 Bay Street",
+        "eta": null,
+        "delivered": "2026-09-22",
+        "customer": "c-0001"
+      },
+      "A8002": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-102",
+            "name": "kettle",
+            "price": 34.5
+          },
+          {
+            "sku": "SKU-106",
+            "name": "chef's knife",
+            "price": 42.0
+          },
+          {
+            "sku": "SKU-108",
+            "name": "french press",
+            "price": 27.99
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "85 Oak Avenue",
+        "eta": null,
+        "delivered": "2026-09-01",
+        "customer": "c-0001"
+      }
+    },
+    "refunds": [],
+    "returns": [],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A8001": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-106",
+              "name": "chef's knife",
+              "price": 42.0
+            },
+            {
+              "sku": "SKU-107",
+              "name": "cutting board",
+              "price": 22.4
+            }
+          ],
+          "payment": "card",
+          "refunded": 64.4,
+          "address": "39 Bay Street",
+          "eta": null,
+          "delivered": "2026-09-22",
+          "customer": "c-0001"
+        },
+        "A8002": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-102",
+              "name": "kettle",
+              "price": 34.5
+            },
+            {
+              "sku": "SKU-106",
+              "name": "chef's knife",
+              "price": 42.0
+            },
+            {
+              "sku": "SKU-108",
+              "name": "french press",
+              "price": 27.99
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "85 Oak Avenue",
+          "eta": null,
+          "delivered": "2026-09-01",
+          "customer": "c-0001"
+        }
+      },
+      "refunds": [
+        {
+          "order": "A8001",
+          "amount": 64.4,
+          "to": "original"
+        }
+      ],
+      "returns": [],
+      "log": []
+    },
+    "output": "Refunded $64.40 for order A8001 to your original payment."
+  }
+}

@@ -1,0 +1,131 @@
+{
+  "id": "tr_1382.h0",
+  "use_case": "full-refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 38,
+    "inclusion_prob": 0.3305785123966942
+  },
+  "order_template": "ot-04",
+  "cluster": "ot-04",
+  "trigger": {
+    "text": "Refund request: Please refund order A1765.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": null,
+    "order_id": "A1765",
+    "to": "original",
+    "today": "2026-10-22"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1765": {
+        "address": "6 Cedar Court",
+        "customer": "c-0383",
+        "delivered": "2026-09-21",
+        "eta": null,
+        "items": [
+          {
+            "name": "coffee grinder",
+            "price": 59.0,
+            "sku": "SKU-104"
+          },
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1766": {
+        "address": "80 Mill Lane",
+        "customer": "c-0383",
+        "delivered": "2026-08-18",
+        "eta": null,
+        "items": [
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          },
+          {
+            "name": "mixing bowls",
+            "price": 18.75,
+            "sku": "SKU-105"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Order A1765 was delivered 31 days ago, past the 30-day refund window.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1765": {
+          "address": "6 Cedar Court",
+          "customer": "c-0383",
+          "delivered": "2026-09-21",
+          "eta": null,
+          "items": [
+            {
+              "name": "coffee grinder",
+              "price": 59.0,
+              "sku": "SKU-104"
+            },
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        },
+        "A1766": {
+          "address": "80 Mill Lane",
+          "customer": "c-0383",
+          "delivered": "2026-08-18",
+          "eta": null,
+          "items": [
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            },
+            {
+              "name": "mixing bowls",
+              "price": 18.75,
+              "sku": "SKU-105"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1382.h0",
+    "synthetic": false,
+    "source_trace": "tr_1382"
+  }
+}

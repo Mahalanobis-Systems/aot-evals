@@ -1,0 +1,137 @@
+{
+  "id": "tr_1381.h0",
+  "use_case": "full-refund",
+  "pool": "quality",
+  "draw": {
+    "frame": "refund-handoffs-2026-10",
+    "seed": 1234,
+    "index": 18,
+    "inclusion_prob": 0.3305785123966942
+  },
+  "order_template": "ot-04",
+  "cluster": "ot-04",
+  "trigger": {
+    "text": "Refund request: Please refund order A1763.",
+    "type": "handoff"
+  },
+  "inputs": {
+    "items": null,
+    "order_id": "A1763",
+    "to": "original",
+    "today": "2026-10-31"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1763": {
+        "address": "19 Bay Street",
+        "customer": "c-0382",
+        "delivered": "2026-10-18",
+        "eta": null,
+        "items": [
+          {
+            "name": "coffee grinder",
+            "price": 59.0,
+            "sku": "SKU-104"
+          },
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      },
+      "A1764": {
+        "address": "96 Bay Street",
+        "customer": "c-0382",
+        "delivered": "2026-08-29",
+        "eta": null,
+        "items": [
+          {
+            "name": "coffee grinder",
+            "price": 59.0,
+            "sku": "SKU-104"
+          },
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Refunded $86.99 for order A1763 to your original payment.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1763": {
+          "address": "19 Bay Street",
+          "customer": "c-0382",
+          "delivered": "2026-10-18",
+          "eta": null,
+          "items": [
+            {
+              "name": "coffee grinder",
+              "price": 59.0,
+              "sku": "SKU-104"
+            },
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 86.99,
+          "status": "delivered"
+        },
+        "A1764": {
+          "address": "96 Bay Street",
+          "customer": "c-0382",
+          "delivered": "2026-08-29",
+          "eta": null,
+          "items": [
+            {
+              "name": "coffee grinder",
+              "price": 59.0,
+              "sku": "SKU-104"
+            },
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [
+        {
+          "amount": 86.99,
+          "order": "A1763",
+          "to": "original"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:refund-handoffs-2026-10",
+    "export": "refund-handoffs-2026-10",
+    "trace_ref": "tr_1381.h0",
+    "synthetic": false,
+    "source_trace": "tr_1381"
+  }
+}

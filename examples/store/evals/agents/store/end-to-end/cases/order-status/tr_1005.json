@@ -1,0 +1,128 @@
+{
+  "id": "tr_1005",
+  "use_case": "order-status",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 1,
+    "inclusion_prob": 0.08571428571428572
+  },
+  "template": "order-status-t5",
+  "cluster": "order-status-t5",
+  "trigger": {
+    "text": "Can you check on order A1011 for me?",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0006",
+    "today": "2026-10-03"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1011": {
+        "address": "21 Mill Lane",
+        "customer": "c-0006",
+        "delivered": null,
+        "eta": "2026-10-09",
+        "items": [
+          {
+            "name": "blender",
+            "price": 49.99,
+            "sku": "SKU-101"
+          },
+          {
+            "name": "mixing bowls",
+            "price": 18.75,
+            "sku": "SKU-105"
+          },
+          {
+            "name": "cutting board",
+            "price": 22.4,
+            "sku": "SKU-107"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "processing"
+      },
+      "A1012": {
+        "address": "11 Cedar Court",
+        "customer": "c-0006",
+        "delivered": "2026-07-13",
+        "eta": null,
+        "items": [
+          {
+            "name": "blender",
+            "price": 49.99,
+            "sku": "SKU-101"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Order A1011 is processing; it should arrive on 2026-10-09.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1011": {
+          "address": "21 Mill Lane",
+          "customer": "c-0006",
+          "delivered": null,
+          "eta": "2026-10-09",
+          "items": [
+            {
+              "name": "blender",
+              "price": 49.99,
+              "sku": "SKU-101"
+            },
+            {
+              "name": "mixing bowls",
+              "price": 18.75,
+              "sku": "SKU-105"
+            },
+            {
+              "name": "cutting board",
+              "price": 22.4,
+              "sku": "SKU-107"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "processing"
+        },
+        "A1012": {
+          "address": "11 Cedar Court",
+          "customer": "c-0006",
+          "delivered": "2026-07-13",
+          "eta": null,
+          "items": [
+            {
+              "name": "blender",
+              "price": 49.99,
+              "sku": "SKU-101"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1005",
+    "synthetic": false
+  }
+}

@@ -1,410 +1,316 @@
-"""Phases, trust per category, and what changed since the baseline (docs/method.md §4.1).
+"""Where each eval stands, how far its number can be trusted, what changed since its baseline,
+and what's next for whom (docs/method.md).
 
-The gates (gates.py) say which steps of the method are done. This module reads them the way a
-team does: which of the three phases the work is in (assess, build, judge), how far each category's
-numbers can be trusted (untested, provisional, validated), what has changed since the last
-baseline and the short path back for each kind of change, and the single next step. `aot-evals
-status` prints it; `status --json` carries it; the checkpoint pages and the grader application
-read the same data.
+Three roles work on an agent's evals, usually at the same time:
+
+- **the owner** says what the agent is for, which mistakes cost most and what a change must show:
+  the estimand (use cases, shares, costs, the decision) and the decision rule;
+- **engineering** wires the agent up and keeps the loop running: the agent contract, the cases
+  (the sampling design), the checks, baselines and changes (the `build` skill);
+- **the people who know what good looks like** label whole runs, settle disagreements and write
+  rules, so judges are calibrated and the eval is held to people (the `judge` skill and
+  `aot-evals serve`).
+
+Trust is per eval, and is read from the same report.json the report writes:
+
+- **untested**: no number yet (no baseline under the current spec, or θ̂ null with its reason);
+- **provisional**: a number, but one of these is still open: the spec is incomplete, a counted
+  judge does not count yet, the eval is not held to people, or the quality set is smaller than
+  the decision rule needs (aot-evals plan);
+- **trusted**: every spec field filled, every counted judge within `max_inflation`, the eval
+  against people at its floors, and a quality set the decision rule's power calls for.
+
+Each eval's `next` lists one step per role that has one, `{role, who, step}`. `aot-evals status`
+prints it and `status --json` carries it.
 """
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-from . import agreement
-from . import gates as gates_mod
-from .repo import Evals
-from .util import git_commit_info, git_same_tree, load_json, sha256_file
+from .repo import Eval, Evals
+from .util import ContractError, git_commit_info, git_same_tree, load_json
 
-PHASES = {
-    "assess": "Assess: understand the agent, its traffic and its risks, and write the report.",
-    "build": "Build: wire the agent, seed cases from real runs, write checks, run the baseline.",
-    "judge": "Judge: people label runs, the suite is held to them, and each category earns trust.",
-}
-LEVELS = ("untested", "provisional", "validated")
-
-# Each kind of change since the baseline: what it invalidates, and the short path back.
-PATHS = {
-    "agent": ["Run a candidate on the same cases: aot-evals run --purpose candidate --k 5 "
-              "--variable KIND=VALUE (or --model ID), then aot-evals compare.",
-              "Have a person label only the runs whose verdict changed, and the categories that "
-              "are still provisional."],
-    "agent-uncommitted": ["Commit the agent before running: a run of an uncommitted build can't be "
-                          "named, so it can't be compared."],
-    "new-use-case": ["Write a check for the new category's failure modes (checks/code/ first).",
-                     "Run a baseline that includes it: aot-evals run --purpose baseline --k 5.",
-                     "Label its runs until it clears the floors; until then its numbers say provisional."],
-    "cases": ["Screen the new or changed cases: aot-evals screen --read-by NAME --case ID.",
-              "Include them in the next baseline; the report excludes unscreened cases (G8)."],
-    "checks": ["Re-grade the labelled runs offline, no agent runs needed: aot-evals agreement.",
-               "Re-run the baseline only if a check's verdicts should count in a comparison."],
-    "judge": ["Recalibrate from cached judgements: aot-evals calibrate --judge ID.",
-              "Then re-grade the labelled runs: aot-evals agreement."],
-    "standard": ["Recheck the labels the changed rules could flip, then aot-evals agreement."],
-    "labels": ["Measure agreement again: aot-evals agreement."],
-    "candidate": ["Compare it with the baseline: aot-evals compare."],
-    "mixed-baseline": ["Run a full baseline on the current agent, so every category is measured on one "
-                       "build: aot-evals run --purpose baseline --k 5."],
-    "adopt": ["Have a person label the runs whose verdict moved: aot-evals agreement label queue --changed "
-              "(or Label runs › Only what the last change moved, in aot-evals serve).",
-              "If the change ships, run it as the new baseline: aot-evals run --purpose baseline --k 5. "
-              "If not, put the agent back."],
-}
+ROLES = {"owner": "the owner", "engineering": "engineering",
+         "graders": "the people who know what good looks like"}
+LEVELS = ("untested", "provisional", "trusted")
+MEASURED_PARTS = ("estimand", "design", "measurement")
+PART_WORD = {"estimand": "estimand", "design": "sampling design", "measurement": "measurement model",
+             "decision_rule": "decision rule"}
+OWNER_PARTS = ("estimand", "decision_rule")  # the spec fields the owner decides
 
 
-# ---- phase ------------------------------------------------------------------------------------
-
-def discovery_path(ev: Evals) -> Path:
-    return ev.discovery_path()
+def _step(role: str, step: str) -> dict:
+    return {"role": role, "who": ROLES[role], "step": step}
 
 
-def phase(ev: Evals) -> dict:
-    """Which phase the work is in, and why."""
-    discovered = discovery_path(ev).exists()
-    cases = ev.cases(include_dropped=False)
-    base = ev.baseline_ids()
-    if base and cases:
-        pid, why = "judge", f"the baseline ({' + '.join(base)}) exists; the loop is running"
-    elif discovered or cases or ev.agent():
-        pid, why = "build", ("no finished baseline yet" if cases else "no cases yet")
-    else:
-        pid, why = "assess", "no discovery report yet"
-    done = [p for p in PHASES if list(PHASES).index(p) < list(PHASES).index(pid)]
-    return {"id": pid, "name": pid.capitalize(), "about": PHASES[pid], "why": why, "done": done,
-            "discovery_report": str(discovery_path(ev)) if discovered else None}
+def _owner_issue(spec):
+    """The first missing or invalid field the owner decides, or None."""
+    return next((i for i in (*spec.missing, *spec.invalid) if i.field.split(".", 1)[0] in OWNER_PARTS), None)
 
 
-# ---- trust per category --------------------------------------------------------------------------
+def _comparison_flip_rate(ev: Eval) -> float | None:
+    """The flip rate of the newest saved comparison, the only measured input a paired rule's plan
+    has before someone passes --flip-rate."""
+    d = ev.p("report", "comparisons")
+    if not d.is_dir():
+        return None
+    rows = [load_json(p) or {} for p in d.glob("*.json")]
+    rows = [r for r in rows if not r.get("refused")]
+    rows.sort(key=lambda r: r.get("generated") or "")
+    for r in reversed(rows):
+        v = (r.get("flips") or {}).get("flip_rate")
+        if isinstance(v, (int, float)) and v > 0:
+            return float(v)
+    return None
 
-def _rate(block: dict | None, key: str):
-    return ((block or {}).get(key) or {}).get("rate")
+
+def _sized(ev: Eval) -> tuple[bool | None, str]:
+    """Whether the quality set holds the cases the decision rule's power calls for (rule 7)."""
+    from . import plan as plan_mod
+
+    try:
+        p = plan_mod.plan(ev, flip_rate=_comparison_flip_rate(ev))
+    except (ContractError, ValueError, ZeroDivisionError):
+        return None, "the plan could not be computed (aot-evals plan)"
+    head = p.get("headline") or {}
+    if head.get("need") is None:
+        return None, f"the plan can't size the decision rule yet: {head.get('reason') or 'unknown need'}"
+    short = [r for r in p["rows"] if r["pool"] == "quality" and r.get("target") is not None
+             and r["drawn"] < r["target"] and r["status"] != "out_of_scope"]
+    if short:
+        have = sum(r["drawn"] for r in p["rows"] if r["pool"] == "quality")
+        want = p["quality_set"].get("total")
+        names = ", ".join(f"{r['use_case']} {r['drawn']}/{r['target']}" for r in short)
+        return False, (f"the quality set holds {have} drawn cases where the decision rule needs about {want} "
+                       f"({names}): aot-evals plan --write, then aot-evals draw")
+    return True, "the quality set holds what the decision rule's power calls for"
 
 
-def trust(ev: Evals) -> list[dict]:
-    """Per category: untested (no baseline covers it), provisional (numbers print but are not held
-    to a person's verdicts yet), or validated (the suite agrees with a person on its runs, C19)."""
-    base = ev.baseline_runs()
-    result = load_json(agreement.result_path(ev))
-    labels = agreement.load_labels(ev)
-    suite_problems = agreement.gate_problems(ev, result, labels) if base else []
-    f = agreement.floors(ev)
-    cases = ev.cases(include_dropped=False)
-    covered = {c for m in base for c in (m.get("case_set") or {}).get("ids") or []}
-    in_base = {c.get("category") for c in cases if c.get("id") in covered}
-    per_cat = (result or {}).get("categories") or {}
-    labelled = {}
-    for lab in labels:
-        cat = next((c.get("category") for c in cases if c.get("id") == lab.get("case_id")), None)
-        labelled[cat] = labelled.get(cat, 0) + 1
-    out = []
-    for cid in ev.category_ids():
-        n_cases = sum(c.get("category") == cid for c in cases)
-        row = {"category": cid, "n_cases": n_cases, "level": "untested", "catch": None, "clean": None,
-               "labelled_runs": labelled.get(cid, 0), "why": ""}
-        if not n_cases:
-            row["why"] = "no cases yet"
-        elif not base or cid not in in_base:
-            row["why"] = "no baseline run covers it"
-        else:
-            dev = (per_cat.get(cid) or {}).get("dev")
-            row["catch"], row["clean"] = _rate(dev, "catch"), _rate(dev, "clean")
-            row["level"] = "provisional"
-            if not row["labelled_runs"]:
-                row["why"] = "no run in this category has been labelled by a person"
-            elif suite_problems:
-                row["why"] = f"across the whole suite, {suite_problems[0]}"
-            elif row["catch"] is None or row["clean"] is None:
-                row["why"] = "its labelled runs are all one kind, so one rate can't be measured"
-            elif row["catch"] < f["min_catch"]:
-                row["why"] = f"catch rate {row['catch']:.0%} is below its floor {f['min_catch']:.0%}"
-            elif row["clean"] < f["min_clean"]:
-                row["why"] = f"clean pass rate {row['clean']:.0%} is below its floor {f['min_clean']:.0%}"
-            else:
-                row["level"], row["why"] = "validated", "the suite agrees with a person on its runs"
-        out.append(row)
+def eval_trust(ev: Eval, report: dict | None = None) -> dict:
+    """One eval's standing, trust level and next steps per role, each with its reasons, read
+    from report.json."""
+    from . import report as report_mod
+
+    spec = ev.spec()
+    out = {"eval": spec.eval_id, "level": "untested", "why": [], "theta": None, "ci": None,
+           "conditions": {"spec": spec.complete, "estimate": False, "judges": None, "people": None,
+                          "sized": None}, "stands": None, "next": []}
+    owner = _owner_issue(spec)
+    owner_steps = [_step("owner", f"decide {owner.field} in {spec.eval_id}/eval.yaml ({owner.why})")] if owner else []
+    runs = report_mod.default_runs(ev)
+    if not runs:
+        out["why"].append(f"no baseline yet: aot-evals --eval {spec.eval_id} run --purpose baseline")
+        out["stands"] = "no baseline has run"
+        out["next"] = [*owner_steps, _step("engineering", _engineering_next(ev, spec))]
+        return out
+    try:
+        r = report if report is not None else report_mod.build(ev, runs)
+    except ContractError as e:
+        out["why"].append(str(e))
+        out["stands"] = "the report could not be read"
+        out["next"] = [*owner_steps, _step("engineering", _engineering_next(ev, spec))]
+        return out
+    est = r.get("estimate") or {}
+    if r.get("refused") or est.get("theta") is None:
+        why = r.get("refused") or est.get("null_reason") or "θ̂ is null"
+        out["why"].append(why)
+        out["stands"] = "no number under the current spec yet"
+        out["next"] = [*owner_steps, _step("engineering", _engineering_next(ev, spec))]
+        return out
+    out["conditions"]["estimate"] = True
+    out["theta"], out["ci"] = est.get("theta"), est.get("ci")
+    out["level"] = "provisional"
+    why = out["why"]
+    steps: dict[str, str] = {}
+    if owner:
+        steps["owner"] = owner_steps[0]["step"]
+    if not spec.complete:
+        first = (spec.missing or spec.invalid)[0]
+        why.append(f"the spec lacks {len(spec.missing)} and has {len(spec.invalid)} invalid field(s), first "
+                   f"{first.field}: {first.why} (aot-evals validate)")
+        other = next((i for i in (*spec.missing, *spec.invalid) if i.field.split(".", 1)[0] not in OWNER_PARTS),
+                     None)
+        if other:
+            steps["engineering"] = f"fill {other.field} in {spec.eval_id}/eval.yaml ({other.why})"
+    meas = r.get("measurement") or {}
+    judge_gates = [g for g in meas.get("gates") or [] if g.get("id") in ("judge_floor", "judge_calibration")]
+    out["conditions"]["judges"] = not judge_gates
+    for g in judge_gates:
+        why.append(g.get("detail") or g["id"])
+    if judge_gates:
+        first_gate = judge_gates[0].get("detail") or judge_gates[0]["id"]
+        steps.setdefault("graders", f"label runs for the judges in the grader application (aot-evals --eval "
+                                    f"{spec.eval_id} serve), so they can be calibrated: {first_gate}")
+    people = meas.get("eval_vs_people") or {}
+    floor = people.get("floor") or {}
+    status = floor.get("status") or "unmeasured"
+    out["conditions"]["people"] = status == "meets" and not people.get("stale")
+    if status == "unmeasured" or not people.get("labels"):
+        why.append("the eval is not held to people yet: label whole runs (aot-evals agreement label queue, or "
+                   "aot-evals serve), then aot-evals agreement")
+        steps.setdefault("graders", f"label whole runs in the grader application (aot-evals --eval {spec.eval_id} "
+                                    "serve), so the eval is held to people")
+    elif people.get("stale"):
+        why.append("the eval against people is stale: aot-evals agreement regrade")
+        steps.setdefault("engineering", f"regrade the labelled runs: aot-evals --eval {spec.eval_id} agreement regrade")
+    elif status != "meets":
+        reasons = floor.get("reasons") or [f"the eval against people is {status}"]
+        why.append("eval against people: " + "; ".join(reasons))
+        steps.setdefault("graders", "give every disagreement with the eval a cause in the grader application "
+                                    f"(aot-evals --eval {spec.eval_id} serve); engineering fixes what they find")
+    sized, note = _sized(ev)
+    out["conditions"]["sized"] = sized
+    if not sized:
+        why.append(note)
+        steps.setdefault("engineering", note)
+    if not why:
+        out["level"] = "trusted"
+        why.append("every spec field filled, every counted judge within max_inflation, the eval held to people "
+                   "at its floors, and the quality set the decision rule needs")
+    out["stands"] = ("a number under the current spec, held to people" if out["conditions"]["people"]
+                     else "a number under the current spec, not yet held to people")
+    out["next"] = [_step(role, steps[role]) for role in ROLES if role in steps]
     return out
 
 
-# ---- changes since the baseline ----------------------------------------------------------------
+def _engineering_next(ev: Eval, spec) -> str:
+    """Engineering's next step toward an eval's first number, in the order the parts need it."""
+    sid = spec.eval_id
+    blocking = [i for i in (*spec.missing, *spec.invalid) if {"run", "draw", "estimate"} & set(i.blocks)
+                and i.field.split(".", 1)[0] not in OWNER_PARTS]
+    if blocking:
+        return f"fill {blocking[0].field} in {sid}/eval.yaml ({blocking[0].why}); aot-evals validate lists the rest"
+    try:
+        from .design import case_status
 
-def baseline_view(ev: Evals) -> dict | None:
-    """The effective baseline as one record: every case's file hash, every check's and judge's
-    fingerprint from the newest baseline run that covers it; the agent from the newest run."""
-    runs = ev.baseline_runs()
-    if not runs:
-        return None
-    newest = runs[-1]
-    view = {**newest, "run_ids": [m["run_id"] for m in runs], "runs": runs, "files": {}, "checks": {},
-            "judges": {}, "has_checks": any("checks" in m for m in runs),
-            "finished": max(m.get("finished") or "" for m in runs)}
-    for m in runs:  # oldest first, so newer runs overwrite
-        view["files"].update((m.get("case_set") or {}).get("files") or {})
-        view["checks"].update(m.get("checks") or {})
-        for jb in m.get("judge_backends") or []:
-            view["judges"][jb.get("check")] = {**jb, "run": m["run_id"]}
-    return view
+        cases = ev.cases(include_dropped=False)
+        drawn = sum(case_status(ev, c)["counts"] for c in cases)
+    except ContractError:
+        cases, drawn = [], 0
+    if not drawn:
+        return f"draw the quality set: aot-evals --eval {sid} plan --write, then aot-evals --eval {sid} draw"
+    from .screen import passes
+
+    if any(not passes(c.get("screen")) for c in cases):
+        return f"screen the cases: aot-evals --eval {sid} screen, and a person reads them (--read-by NAME)"
+    return f"commit, then run the baseline: aot-evals --eval {sid} run --purpose baseline"
 
 
-def _listed(names: list[str], n: int = 3) -> str:
-    return ", ".join(names[:n]) + (f", +{len(names) - n} more" if len(names) > n else "")
+def changes(ev: Eval) -> list[dict]:
+    """What changed since the newest baseline run, each with what it invalidates, the way back and
+    whose step that is (`role`)."""
+    from .spec import part_hashes
 
-
-def changes(ev: Evals) -> list[dict]:
-    """What differs between the suite and agent now and the effective baseline, as a list of
-    {kind, what, path}. Each kind names the short path back (PATHS)."""
-    base = baseline_view(ev)
+    base = ev.baseline_runs()
     if not base:
         return []
+    newest = base[-1]
     out = []
-
-    def add(kind: str, what: str) -> None:
-        out.append({"kind": kind, "what": what, "path": PATHS[kind]})
-
-    from .compare import latest_for
-    from .report import BUILD_FIELDS, manifest_view
-
-    agent_diff = _agent_diff(ev, base)
-    if agent_diff["dirty"]:
-        add("agent-uncommitted", "the agent has uncommitted changes")
-    if agent_diff["what"]:
-        # The current version may already have run as a candidate: then the step is to decide.
-        cand = next((m for m in reversed(ev.runs("candidate")) if m.get("finished")
-                     and m["finished"] > base["finished"] and not _agent_diff(ev, m)["what"]), None)
-        comp = latest_for(ev, base["run_ids"]) if cand else None
-        if cand and comp and cand["run_id"] in comp.get("candidate_runs", []):
-            add("adopt", f"the agent's current version ran as candidate {cand['run_id']} and was compared "
-                         f"with the baseline: {comp.get('verdict')}, {len(comp.get('gains') or [])} gain(s), "
-                         f"{len(comp.get('losses') or [])} loss(es)")
-        elif not cand:
-            add("agent", "; ".join(agent_diff["what"]))
-    if len(base["runs"]) > 1:
-        newest_commit = base["runs"][-1].get("agent_commit")
-
-        def build(m):
-            v = manifest_view(m)
-            if v.get("agent_commit") and newest_commit and git_same_tree(
-                    ev.repo_root, v["agent_commit"], newest_commit, exclude=ev.evals_dir):
-                v = {**v, "agent_commit": newest_commit}  # the same agent, recorded at another commit
-            return json.dumps({f: v[f] for f in BUILD_FIELDS}, sort_keys=True, default=str)
-        builds = {build(m) for m in base["runs"]}
-        if len(builds) > 1:
-            add("mixed-baseline", f"the baseline's runs ({_listed(base['run_ids'], 4)}) ran different builds "
-                                  "of the agent")
-
-    cases = ev.cases(include_dropped=False)
-    base_files = base["files"]
-    base_cats = {c.get("category") for c in cases if c.get("id") in base_files}
-    new_cats = sorted({c.get("category") for c in cases if c.get("category") not in base_cats} - {None})
-    for cat in new_cats:
-        n = sum(c.get("category") == cat for c in cases)
-        add("new-use-case", f"a new category, {cat}, with {n} case(s) no baseline has run")
-    added = [c["id"] for c in cases if c.get("id") not in base_files and c.get("category") in base_cats]
-    changed = [c["id"] for c in cases if c.get("id") in base_files
-               and sha256_file(ev.p(c["_path"]))[:16] != base_files[c["id"]]]
-    removed = [cid for cid in base_files if cid not in {c.get("id") for c in cases}]
-    if added or changed or removed:
-        bits = [f"{len(x)} {w} ({_listed(x)})" for x, w in ((added, "added"), (changed, "changed"),
-                                                           (removed, "dropped")) if x]
-        add("cases", "cases since the baseline: " + "; ".join(bits))
-
-    known = {**base["checks"], **{k: None for k in base["judges"] if k not in base["checks"]}}
-    now_checks = {}
-    for c in cases:
-        for cid, _ in ev.checks_for_case(c, check_type=None):
-            for path in (ev.code_check_path(cid), ev.judge_check_path(cid)):
-                if path.exists():
-                    now_checks[cid] = sha256_file(path)[:16]
-    diff = sorted(cid for cid in now_checks if base["checks"].get(cid) and now_checks[cid] != base["checks"][cid]
-                  and cid not in base["judges"])  # judges are compared by what they decide, below
-    # A baseline recorded without check hashes (an older aot-evals) can't say which checks are new.
-    new_checks = sorted(cid for cid in now_checks if cid not in known) if base["has_checks"] else []
-    if diff or new_checks:
-        what = []
-        if diff:
-            what.append(f"{len(diff)} code check(s) changed ({_listed(diff)})")
-        if new_checks:
-            what.append(f"{len(new_checks)} new check(s) ({_listed(new_checks)})")
-        add("checks", "; ".join(what))
-
-    from .calibrate import is_current, load_calibration
-    from .judges import load_spec
-
-    judged: dict[tuple, list[str]] = {}
-    for cid, jb in sorted(base["judges"].items()):
-        path = ev.judge_check_path(cid or "")
-        if not path.exists():
-            continue
-        try:
-            spec = load_spec(path)
-        except Exception:
-            continue
-        if not jb.get("judge_sha") or spec.sha() == jb["judge_sha"]:
-            continue
-        cal = load_calibration(ev, spec)
-        bumped = str(jb.get("version")) != str(spec.version)
-        if cal and is_current(ev, spec, cal):
-            state = "current" if cal.get("status") == "calibrated" else "failed"
-        else:
-            state = "stale" if cal else "none"
-        judged.setdefault((bumped, state), []).append(spec.id)
-    for (bumped, state), ids in sorted(judged.items(), key=lambda kv: (not kv[0][0], kv[0][1])):
-        one = len(ids) == 1
-        who = f"judge {ids[0]}" if one else f"{len(ids)} judges ({_listed(ids)})"
-        what = (f"{who} {'has' if one else 'have'} a new version since the baseline ran" if bumped else
-                f"{who} {'differs' if one else 'differ'} from what the baseline ran at the same version: "
-                f"{'its' if one else 'their'} question, inputs or backends were edited without a version bump "
-                "(bump `version` whenever you edit a judge)")
-        they, them, its = ("it", "it", "its") if one else ("they", "them", "their")
-        counts = "it counts" if one else "they count"
-        how = {"current": f"{its.capitalize()} calibration is current: re-judge the baseline's runs with {them} "
-                          "(aot-evals judge apply --judge ID; it judges every baseline run)",
-               "failed": f"{its.capitalize()} calibration is current but below the floors: iterate on {its} dev "
-                         f"errors and recalibrate (aot-evals calibrate --judge ID). Until then {counts} toward "
-                         "no number",
-               "stale": f"Recalibrate {them} from cached judgements (aot-evals calibrate --judge ID)",
-               "none": f"{they.capitalize()} {'has' if one else 'have'} no calibration yet: label and calibrate "
-                       f"(aot-evals label queue --judge ID). Until then {counts} toward no number"}[state]
-        out.append({"kind": "judge", "what": what, "path": [how, PATHS["judge"][1]], "judges": ids})
-
-    std = ev.p("labels", "standard.md")
-    if base.get("standard_sha") and std.exists() and sha256_file(std)[:16] != base["standard_sha"]:
-        add("standard", "the labelling standard changed")
-
-    result = load_json(agreement.result_path(ev))
-    labels = agreement.load_labels(ev)
-    if result and labels and (result.get("suite_sha") != agreement.suite_sha(ev)
-                              or result.get("labels_sha") != agreement.labels_sha(labels)):
-        if not any(c["kind"] in ("checks", "judge", "cases") for c in out):
-            add("labels", "labels were added since agreement was last measured")
-
-    cands = [m for m in ev.runs("candidate") if m.get("finished") and m["finished"] > base["finished"]]
-    if cands:
-        comp = latest_for(ev, base["run_ids"])
-        pending = [m["run_id"] for m in cands if not comp or m["run_id"] not in comp.get("candidate_runs", [])]
-        if pending:
-            add("candidate", f"candidate {pending[-1]} has not been compared with the baseline")
+    now = part_hashes(ev.spec(), ev)
+    then = newest.get("spec_sha") or {}
+    revised = [p for p in MEASURED_PARTS if then.get(p) != now.get(p)]
+    if revised:
+        out.append({"kind": "revision", "parts": revised, "role": "engineering",
+                    "what": f"the {' and '.join(PART_WORD[p] for p in revised)} changed since the baseline: a "
+                            "revision, so old and new numbers are different quantities (estimators §9)",
+                    "next": f"run the baseline again under the current spec: aot-evals --eval {ev.id} run "
+                            "--purpose baseline"})
+    elif then.get("decision_rule") != now.get("decision_rule"):
+        out.append({"kind": "decision_rule", "parts": ["decision_rule"], "role": "owner",
+                    "what": "the decision rule changed since the baseline",
+                    "next": f"commit eval.yaml (or aot-evals --eval {ev.id} log --kind decision \"why\") before "
+                            "the candidate runs, or the comparison refuses it (rule 21)"})
+    root = _agent_cwd(ev)
+    if root is not None and newest.get("agent_commit"):
+        info = git_commit_info(root, exclude=ev.evals_dir)
+        if info.get("dirty"):
+            out.append({"kind": "agent-uncommitted", "parts": [], "role": "engineering",
+                        "what": "the agent has uncommitted changes",
+                        "next": "commit the agent before running: a run of an uncommitted build can't be compared"})
+        elif info.get("commit") and info["commit"] != newest["agent_commit"] and \
+                git_same_tree(root, info["commit"], newest["agent_commit"], exclude=ev.evals_dir) is not True:
+            out.append({"kind": "agent", "parts": [], "role": "engineering",
+                        "what": f"the agent changed since the baseline ({newest['agent_commit'][:7]} → "
+                                f"{info['commit'][:7]})",
+                        "next": f"run a candidate with one declared variable, then compare: aot-evals --eval {ev.id} "
+                                f"run --purpose candidate --variable KIND=VALUE; aot-evals --eval {ev.id} compare"})
+    finished = newest.get("finished") or ""
+    cands = [m for m in ev.runs("candidate") if m.get("finished") and m["finished"] > finished]
+    compared = set()
+    d = ev.p("report", "comparisons")
+    if d.is_dir():
+        for p in d.glob("*.json"):
+            compared.update((load_json(p) or {}).get("candidate_runs") or [])
+    fresh = [m["run_id"] for m in cands if m["run_id"] not in compared]
+    if fresh:
+        out.append({"kind": "candidate", "parts": [], "role": "engineering",
+                    "what": f"candidate {fresh[-1]} has run and has not been compared",
+                    "next": f"aot-evals --eval {ev.id} compare --candidate {fresh[-1]}, then have people label "
+                            "what moved (aot-evals agreement label queue --changed)"})
     return out
 
 
-_INVOKE_WORDS = {"command": "its command", "cwd": "the folder it runs in", "env_sha": "its environment variables"}
+def _agent_cwd(ev: Eval) -> Path | None:
+    inv = ev.agent().get("invoke") or {}
+    cwd = inv.get("cwd") or "."
+    p = (ev.repo_root / cwd).resolve()
+    return p if p.exists() else None
 
 
-def _agent_diff(ev: Evals, m: dict) -> dict:
-    """How the agent now differs from the agent a run used: {what: [plain-words changes], dirty}."""
-    from .runner import _env_sha
-
-    invoke = ev.agent().get("invoke") or {}
-    cwd = (ev.repo_root / str(invoke.get("cwd", "."))).resolve()
-    g = git_commit_info(cwd, exclude=ev.evals_dir) if cwd.is_dir() else {"commit": None, "dirty": None}
-    what = []
-    if g["commit"] and m.get("agent_commit") and g["commit"] != m["agent_commit"] \
-            and git_same_tree(cwd, m["agent_commit"], g["commit"], exclude=ev.evals_dir) is not True:
-        # Different commit ids alone aren't a change: older versions counted commits to other parts
-        # of the repository. The agent changed only when its files differ.
-        what.append(f"the agent changed (commit {m['agent_commit'][:8]} → {g['commit'][:8]})")
-    then_inv = m.get("invoke") or {}
-    if (invoke.get("model") or None) != (then_inv.get("model") or None):
-        what.append(f"the agent's model setting changed ({then_inv.get('model')} → {invoke.get('model')})")
-    now = {"command": invoke.get("command"), "cwd": invoke.get("cwd"), "env_sha": _env_sha(invoke.get("env"))}
-    then = {k: then_inv.get(k) for k in now}
-    if then != now and any(then.values()):
-        words = ", ".join(_INVOKE_WORDS[k] for k in now if now[k] != then[k])
-        what.append(f"how agent.yaml runs the agent changed ({words})")
-    return {"what": what, "dirty": bool(g["dirty"])}
-
-
-# ---- the next step ---------------------------------------------------------------------------------
-
-def next_step(ev: Evals, gates: list[gates_mod.Gate] | None = None) -> dict:
-    """One plain-words step and the command (or skill) that does it."""
-    gates = gates if gates is not None else gates_mod.evaluate(ev)
-    by = {g.id: g for g in gates}
-    ph = phase(ev)
-    if ph["id"] == "assess":
-        return {"what": "Write the discovery report: scan the repository, answer three questions "
-                        "about the agent, and read its code, tools and traces.",
-                "how": "/aot-evals:start", "phase": "assess"}
-    if ph["id"] == "build":
-        a = ev.agent()
-        if not (a.get("invoke") or {}).get("command"):
-            return {"what": "Wire the agent so it runs as a command (references/agent-contract.md), "
-                            "or point invoke at recorded runs with aot-evals replay.",
-                    "how": "edit agent.yaml invoke:", "phase": "build"}
-        cases = ev.cases(include_dropped=False)
-        if not cases:
-            return {"what": "Seed 10 to 20 cases from real runs in the two or three largest "
-                            "categories, each with the end state a correct agent leaves behind.",
-                    "how": "cases/<category>/<id>.json (templates/case.json)", "phase": "build"}
-        unchecked = [c["id"] for c in cases if not ev.checks_for_case(c, check_type=None)]
-        if unchecked:
-            return {"what": f"Write a check for the {len(unchecked)} case(s) nothing checks yet "
-                            f"(e.g. {unchecked[0]}): code on the end state first, a side-effect "
-                            "check on every case.",
-                    "how": "checks/code/<id>.py (templates/check_code.py)", "phase": "build"}
-        if not any((m.get("counts") or {}).get("ok", 0) > 0 for m in ev.runs()):
-            return {"what": "Run the agent once end to end from its command.",
-                    "how": "aot-evals run --purpose smoke --case <id>", "phase": "build"}
-        return {"what": "Run the baseline: every case 3 to 5 times on the committed agent. Then "
-                        "start the grader application and hand it to the people who will label.",
-                "how": "aot-evals run --purpose baseline --k 5", "phase": "build"}
-    ch = changes(ev)
-    if ch:
-        return {"what": f"Since the baseline, {ch[0]['what']}. {ch[0]['path'][0]}",
-                "how": ch[0]["path"][0], "phase": "judge", "change": ch[0]["kind"]}
-    for row in trust(ev):
-        if row["level"] != "validated":
-            how = ("aot-evals agreement label queue --open" if "labelled" in row["why"]
-                   else "aot-evals agreement")
-            return {"what": f"{row['category']} is {row['level']}: {row['why']}.", "how": how,
-                    "phase": "judge", "category": row["category"]}
-    for gid, what, how in (
-            ("C14", "Find the coverage gaps against the outside list and triage each empty cell.",
-             "aot-evals coverage"),
-            ("C15", "Find the cases that never tell versions apart and decide what to prune.",
-             "aot-evals redundancy"),
-            ("C18", "Write the report.", "aot-evals report")):
-        g = by.get(gid)
-        if g and g.status == "unmet":
-            return {"what": what, "how": how, "phase": "judge"}
-    return {"what": "Every category is validated and nothing has changed since the baseline. "
-                    "Ship changes through candidate runs; the suite is ready for them.",
-            "how": "aot-evals run --purpose candidate ...", "phase": "judge"}
+def summary(agent_dir: Evals) -> dict:
+    """The agent system: where it stands, each eval's trust, changes and next steps per role."""
+    discovered = agent_dir.discovery_path().exists()
+    if not agent_dir.exists() or not agent_dir.has_evals:
+        if discovered:
+            stands = "the discovery report is written; no eval yet"
+            nxt = [_step("engineering", "aot-evals build: the end-to-end eval, and one per component that earns one")]
+        else:
+            stands = "no discovery report yet"
+            nxt = [_step("owner", "run discovery: /aot-evals:start in Claude Code, about 5 minutes")]
+        return {"agent": str(agent_dir.root), "stands": stands, "next": nxt, "discovery_report": discovered,
+                "evals": []}
+    rows = []
+    for ev in agent_dir.evals():
+        t = eval_trust(ev)
+        t["changes"] = changes(ev)
+        for c in t["changes"]:  # a change comes first for its role: the old next step waits on it
+            t["next"] = [s for s in t["next"] if s["role"] != c["role"]]
+        for c in reversed(t["changes"]):
+            if not any(s["role"] == c["role"] and s["step"] == c["next"] for s in t["next"]):
+                t["next"].insert(0, _step(c["role"], c["next"]))
+        t["next"] = _dedupe(t["next"])
+        rows.append(t)
+    counts = {lv: sum(t["level"] == lv for t in rows) for lv in LEVELS}
+    stands = f"{len(rows)} eval(s): " + ", ".join(f"{n} {lv}" for lv, n in counts.items() if n)
+    return {"agent": str(agent_dir.root), "stands": stands, "next": [], "discovery_report": discovered,
+            "evals": rows}
 
 
-# ---- status --------------------------------------------------------------------------------------
-
-def summary(ev: Evals, gates: list[gates_mod.Gate] | None = None) -> dict:
-    gates = gates if gates is not None else gates_mod.evaluate(ev)
-    return {"phase": phase(ev), "trust": trust(ev), "changes": changes(ev),
-            "next": next_step(ev, gates)}
+def _dedupe(steps: list[dict]) -> list[dict]:
+    """One step per role, the first; roles in ROLES order."""
+    first: dict[str, dict] = {}
+    for s in steps:
+        first.setdefault(s["role"], s)
+    return [first[r] for r in ROLES if r in first]
 
 
 def render(s: dict) -> str:
-    ph = s["phase"]
-    lines = [f"Phase: {ph['name']} ({ph['why']})", f"  {ph['about']}"]
-    if s["trust"]:
-        lines.append("\nTrust per category:")
-        w = max(len(r["category"]) for r in s["trust"])
-        for r in s["trust"]:
-            rates = ""
-            if r["catch"] is not None or r["clean"] is not None:
-                rates = (f"catch {_pct(r['catch'])}, clean pass {_pct(r['clean'])} "
-                         f"on {r['labelled_runs']} labelled runs; ")
-            lines.append(f"  {r['category']:<{w}}  {r['level']:<12} {rates}{r['why']}")
-    if s["changes"]:
-        lines.append("\nSince the baseline:")
-        for c in s["changes"]:
-            lines.append(f"  - {c['what']}")
-            for step in c["path"]:
-                lines.append(f"      {step}")
-    nx = s["next"]
-    lines.append(f"\nNext: {nx['what']}")
-    if nx.get("how") and nx["how"] not in nx["what"]:
-        lines.append(f"  $ {nx['how']}" if nx["how"].startswith("aot-evals") else f"  {nx['how']}")
+    lines = [f"agent at {s['agent']}", s["stands"]]
+    for t in s["evals"]:
+        theta = ""
+        if t["theta"] is not None:
+            ci = t.get("ci") or [None, None]
+            lo = f"{ci[0]:.1%}" if isinstance(ci[0], (int, float)) else "?"
+            hi = f"{ci[1]:.1%}" if len(ci) > 1 and isinstance(ci[1], (int, float)) else "?"
+            theta = f"  θ̂ {t['theta']:.1%} [{lo}, {hi}]"
+        lines.append(f"\n  {t['eval']}: {t['level']}{theta}; {t['stands']}")
+        for w in t["why"]:
+            lines.append(f"    - {w}")
+        for c in t.get("changes") or []:
+            lines.append(f"    changed: {c['what']}")
+        for st in t.get("next") or []:
+            lines.append(f"    next for {st['who']}: {st['step']}")
+    for st in s.get("next") or []:
+        lines.append(f"next for {st['who']}: {st['step']}")
     return "\n".join(lines)
-
-
-def _pct(v) -> str:
-    return "n/a" if v is None else f"{v:.0%}"

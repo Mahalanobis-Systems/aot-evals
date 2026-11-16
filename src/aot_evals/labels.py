@@ -1,6 +1,6 @@
-"""C9 `label`: human labels per judge, stratified across categories.
+"""`label`: human labels per judge, stratified across use cases.
 
-Labels live in `evals/checks/judge/<check-id>.labels.jsonl`, committed. Each line carries the
+Labels live in `<eval>/checks/judge/<check-id>.labels.jsonl`, committed. Each line carries the
 exact input the judge sees (`input`), so calibration can be re-run, on any backend, without the
 raw run data, which stays git-ignored. A label is binary and from the human's point of view:
 `label: true` means the item passes on this failure mode.
@@ -28,21 +28,21 @@ from pathlib import Path
 
 from . import stats
 from .judges import JudgeSpec, build_input, item_id
-from .repo import ALL_CATEGORIES, Evals
+from .repo import ALL_USE_CASES, Eval
 from .scrub import scan
 from .util import append_jsonl, load_json, now_iso, read_jsonl
 
-QUEUE_FIELDS = ["item_id", "case_id", "category", "run", "trial", "label", "labeller", "note", "input"]
+QUEUE_FIELDS = ["item_id", "case_id", "use_case", "run", "trial", "label", "labeller", "note", "input"]
 PASS_WORDS = {"pass", "p", "true", "t", "yes", "y", "1", "ok"}
 FAIL_WORDS = {"fail", "f", "false", "no", "n", "0"}
 HOLDOUT_SHARE = 5  # one in five
 
 
-def labels_path(ev: Evals, spec: JudgeSpec) -> Path:
+def labels_path(ev: Eval, spec: JudgeSpec) -> Path:
     return ev.p("checks", "judge", f"{spec.id}.labels.jsonl")
 
 
-def queue_path(ev: Evals, spec: JudgeSpec) -> Path:
+def queue_path(ev: Eval, spec: JudgeSpec) -> Path:
     return ev.p("checks", "judge", f"{spec.id}.queue.csv")
 
 
@@ -50,7 +50,7 @@ def split_for(iid: str) -> str:
     return "holdout" if int(hashlib.sha256(iid.encode()).hexdigest(), 16) % HOLDOUT_SHARE == 0 else "dev"
 
 
-def load_labels(ev: Evals, spec: JudgeSpec) -> list[dict]:
+def load_labels(ev: Eval, spec: JudgeSpec) -> list[dict]:
     """The latest label per item (a re-label by anyone replaces the earlier one)."""
     latest: dict[str, dict] = {}
     for rec in read_jsonl(labels_path(ev, spec)):
@@ -58,26 +58,38 @@ def load_labels(ev: Evals, spec: JudgeSpec) -> list[dict]:
     return list(latest.values())
 
 
-def labels_sha(ev: Evals, spec: JudgeSpec) -> str | None:
+def labels_sha(ev: Eval, spec: JudgeSpec) -> str | None:
     p = labels_path(ev, spec)
     return hashlib.sha256(p.read_bytes()).hexdigest()[:16] if p.exists() else None
 
 
-def judge_categories(ev: Evals, spec: JudgeSpec) -> list[str]:
-    fm = next((f for f in ev.failure_modes() if f.get("id") == spec.failure_mode), None)
-    if fm is None:
-        return []
-    cats = fm.get("categories") or []
-    return ev.category_ids() if ALL_CATEGORIES in cats else list(cats)
+def _modes(ev: Eval, spec: JudgeSpec) -> list[dict]:
+    """The failure modes this judge grades, as the counted check or a diagnostic."""
+    return [fm for fm in ev.failure_modes()
+            if fm.get("check") == spec.id or spec.id in (fm.get("diagnostics") or [])]
 
 
-def applies_to(ev: Evals, spec: JudgeSpec, case: dict) -> bool:
-    return any(fm.get("id") == spec.failure_mode for fm in ev.failure_modes_for_case(case))
+def judge_use_cases(ev: Eval, spec: JudgeSpec) -> list[str]:
+    """The use cases the judge applies to."""
+    from .spec import use_cases
+
+    every = [u["id"] for u in use_cases(ev.spec())]
+    out: list[str] = []
+    for fm in _modes(ev, spec):
+        ucs = fm.get("use_cases")
+        for u in every if ucs == ALL_USE_CASES else (ucs if isinstance(ucs, list) else []):
+            if u not in out:
+                out.append(u)
+    return out
+
+
+def applies_to(ev: Eval, spec: JudgeSpec, case: dict) -> bool:
+    return any(cid == spec.id for cid, _ in ev.checks_for_case(case, check_type="judge"))
 
 
 # ---- queue -------------------------------------------------------------------------------------
 
-def run_items(ev: Evals, spec: JudgeSpec, run_ids: list[str]) -> list[dict]:
+def run_items(ev: Eval, spec: JudgeSpec, run_ids: list[str]) -> list[dict]:
     """Judge inputs for every final, ok attempt in the runs that this judge applies to."""
     cases = {c["id"]: c for c in ev.cases() if c.get("id")}
     out = []
@@ -95,7 +107,7 @@ def run_items(ev: Evals, spec: JudgeSpec, run_ids: list[str]) -> list[dict]:
             end = {"world": raw.get("end_world"), "output": raw.get("output")}
             ji = build_input(spec, case, start, end)
             out.append({"item_id": item_id(spec, case["id"], ji), "case_id": case["id"],
-                        "category": case.get("category"), "run": rid, "trial": a["trial"],
+                        "use_case": case.get("use_case"), "run": rid, "trial": a["trial"],
                         "attempt": a["attempt"], "input": ji})
     return out
 
@@ -115,9 +127,9 @@ def _distinct(it: dict, picked: list[dict]) -> bool:
     return all(difflib.SequenceMatcher(None, a, _answer(p)).ratio() < NEAR_IDENTICAL for p in picked)
 
 
-def make_queue(ev: Evals, spec: JudgeSpec, run_ids: list[str], n: int, seed: int = 0) -> tuple[Path, list[dict]]:
+def make_queue(ev: Eval, spec: JudgeSpec, run_ids: list[str], n: int, seed: int = 0) -> tuple[Path, list[dict]]:
     """Sample by case, not by attempt: one item per case first (cases with no label yet first),
-    stratified across categories; then further trials only where a case's answers differ. With
+    stratified across use cases; then further trials only where a case's answers differ. With
     k = 3, sampling attempts fills the queue with near-identical repeats of one case."""
     labels = load_labels(ev, spec)
     labelled = {r["item_id"] for r in labels}
@@ -138,13 +150,13 @@ def make_queue(ev: Evals, spec: JudgeSpec, run_ids: list[str], n: int, seed: int
     picked: list[dict] = []
 
     def round_robin(eligible) -> None:
-        by_cat: dict[str, list[str]] = defaultdict(list)
+        by_uc: dict[str, list[str]] = defaultdict(list)
         for cid in sorted(by_case, key=lambda c: (bool(done[c]), rng.random())):
-            by_cat[by_case[cid][0]["category"] if by_case[cid] else ""].append(cid)
-        while len(picked) < n and any(by_cat.values()):
-            for cat in sorted(by_cat):
-                while by_cat[cat] and len(picked) < n:
-                    cid = by_cat[cat].pop(0)
+            by_uc[(by_case[cid][0].get("use_case") or "") if by_case[cid] else ""].append(cid)
+        while len(picked) < n and any(by_uc.values()):
+            for uc in sorted(by_uc):
+                while by_uc[uc] and len(picked) < n:
+                    cid = by_uc[uc].pop(0)
                     it = eligible(cid)
                     if it is not None:
                         picked.append(it)
@@ -184,7 +196,7 @@ def parse_label(value: str) -> bool | None:
 def _record(spec: JudgeSpec, row: dict, label: bool, labeller: str) -> dict:
     ji = row["input"] if isinstance(row["input"], dict) else json.loads(row["input"])
     iid = row.get("item_id") or item_id(spec, row["case_id"], ji)
-    return {"item_id": iid, "case_id": row["case_id"], "category": row.get("category") or None,
+    return {"item_id": iid, "case_id": row["case_id"], "use_case": row.get("use_case") or None,
             "label": label, "labeller": labeller, "date": now_iso()[:10],
             "note": row.get("note") or None, "split": split_for(iid),
             "source": {"run": row.get("run") or None, "trial": _int(row.get("trial"))},
@@ -198,7 +210,7 @@ def _int(v):
         return None
 
 
-def import_rows(ev: Evals, spec: JudgeSpec, rows: list[dict], default_labeller: str | None) -> dict:
+def import_rows(ev: Eval, spec: JudgeSpec, rows: list[dict], default_labeller: str | None) -> dict:
     added, skipped, refused = 0, [], []
     for i, row in enumerate(rows, 2):
         label = parse_label(row.get("label", ""))
@@ -220,13 +232,13 @@ def import_rows(ev: Evals, spec: JudgeSpec, rows: list[dict], default_labeller: 
     return {"added": added, "skipped": skipped, "refused": refused}
 
 
-def import_csv(ev: Evals, spec: JudgeSpec, path: Path, labeller: str | None) -> dict:
+def import_csv(ev: Eval, spec: JudgeSpec, path: Path, labeller: str | None) -> dict:
     with path.open(newline="") as f:
         rows = list(csv.DictReader(f))
     return import_rows(ev, spec, rows, labeller)
 
 
-def add(ev: Evals, spec: JudgeSpec, iid: str, label: str, labeller: str, note: str | None) -> dict:
+def add(ev: Eval, spec: JudgeSpec, iid: str, label: str, labeller: str, note: str | None) -> dict:
     q = queue_path(ev, spec)
     if not q.exists():
         raise FileNotFoundError(f"{q}: no queue; run `aot-evals label queue --judge {spec.id}` first")
@@ -238,16 +250,17 @@ def add(ev: Evals, spec: JudgeSpec, iid: str, label: str, labeller: str, note: s
     return import_rows(ev, spec, [row], labeller)
 
 
-# ---- status (M10) ------------------------------------------------------------------------------
+# ---- status ------------------------------------------------------------------------------------
 
-def status(ev: Evals, spec: JudgeSpec) -> dict:
+def status(ev: Eval, spec: JudgeSpec) -> dict:
     labels = load_labels(ev, spec)
     n_pass = sum(1 for r in labels if r["label"])
     n_fail = len(labels) - n_pass
-    by_cat: dict[str, dict] = {c: {"pass": 0, "fail": 0} for c in judge_categories(ev, spec)}
+    by_uc: dict[str, dict] = {u: {"pass": 0, "fail": 0} for u in judge_use_cases(ev, spec)}
     for r in labels:
-        d = by_cat.setdefault(r.get("category") or "(none)", {"pass": 0, "fail": 0})
+        d = by_uc.setdefault(r.get("use_case") or "(none)", {"pass": 0, "fail": 0})
         d["pass" if r["label"] else "fail"] += 1
+    missing = sorted(u for u, d in by_uc.items() if d["pass"] + d["fail"] == 0)
 
     def halfwidth(k):
         ci = stats.wilson(round(k * 0.8), k) if k else None  # at a rate of 0.8, a typical good judge
@@ -257,25 +270,27 @@ def status(ev: Evals, spec: JudgeSpec) -> dict:
         "judge": spec.id, "labels": len(labels), "pass": n_pass, "fail": n_fail,
         "holdout": sum(1 for r in labels if r.get("split") == "holdout"),
         "labellers": sorted({r["labeller"] for r in labels}),
-        "by_category": by_cat,
-        "missing_categories": sorted(c for c, d in by_cat.items() if d["pass"] + d["fail"] == 0),
-        "tpr_ci_halfwidth": halfwidth(n_pass), "tnr_ci_halfwidth": halfwidth(n_fail),
-        # TPR is measured on passing labels and TNR on failing ones, so each needs its own count
+        "by_use_case": by_uc, "missing_use_cases": missing,
+        # the catch rate is read on failing labels, the clean pass rate on passing ones, so each
+        # kind is counted on its own (statistics §3.4)
+        "labels_per_kind": {"fail": n_fail, "pass": n_pass},
+        "catch_ci_halfwidth": halfwidth(n_fail), "clean_ci_halfwidth": halfwidth(n_pass),
         "per_class_for_10pts": stats.labels_for_halfwidth(0.8, 0.10),
-        "status": ("usable" if len(labels) >= 100 else "minimum" if len(labels) >= 60 else "uncalibrated"),
     }
 
 
 def render_status(s: dict) -> str:
     def pct(v):
         return "n/a" if v is None else f"±{100 * v:.0f} pts"
-    lines = [f"{s['judge']}: {s['labels']} labels ({s['pass']} pass / {s['fail']} fail; "
-             f"{s['holdout']} holdout) — {s['status']} (M10: <60 uncalibrated, 100–200 usable)",
-             f"  TPR interval at this n: {pct(s['tpr_ci_halfwidth'])}; TNR: {pct(s['tnr_ci_halfwidth'])} "
-             f"(±10 pts needs about {s.get('per_class_for_10pts')} passing and as many failing labels)",
+    lines = [f"{s['judge']}: {s['labels']} labels: {s['fail']} failing, {s['pass']} passing "
+             f"({s['holdout']} holdout)",
+             f"  catch rate interval on {s['fail']} failing labels: {pct(s['catch_ci_halfwidth'])}; "
+             f"clean pass rate on {s['pass']} passing labels: {pct(s['clean_ci_halfwidth'])} "
+             f"(±10 pts at a rate of 0.8 needs about {s.get('per_class_for_10pts')} of each kind)",
+             "  its floor is measurement.max_inflation at the eval's failure rate (aot-evals report)",
              f"  labellers: {', '.join(s['labellers']) or '-'}"]
-    for c, d in sorted(s["by_category"].items()):
-        lines.append(f"  {c:<28} pass {d['pass']:>4}  fail {d['fail']:>4}")
-    if s["missing_categories"]:
-        lines.append(f"  no labels yet for: {', '.join(s['missing_categories'])}")
+    for u, d in sorted(s["by_use_case"].items()):
+        lines.append(f"  {u:<28} fail {d['fail']:>4}  pass {d['pass']:>4}")
+    if s["missing_use_cases"]:
+        lines.append(f"  no labels yet for: {', '.join(s['missing_use_cases'])}")
     return "\n".join(lines)

@@ -1,6 +1,6 @@
 """What the plugin shows first, and the discovery report page.
 
-The banner and the phase message are printed by the CLI, not written by the model: a model asked
+The banner and the welcome message are printed by the CLI, not written by the model: a model asked
 to show ASCII art or a welcome screen often skips it, and a command prints it every time."""
 
 from __future__ import annotations
@@ -21,27 +21,33 @@ BANNER = r"""
 by Mahal Systems
 """
 
-PHASES = """\
-I'll build tests for one of your agents in three phases.
+ROLES = """\
+I'll build tests for one of your agents. Three kinds of people work on
+them, usually at the same time, and I'll say what's next for each.
 
-Assess (about 5 minutes): what the agent is for, and a first report.
-  I'll scan this repository to find your agents and ask which one to test.
-  Then I'll ask three questions about it, and read its code, tools, records
-  and data. You'll get a report with what I found and the likely ways forward.
+The owner says what the agent is for, which mistakes cost most, and what
+a change must show before it ships.
+  First, about 5 minutes: I'll scan this repository to find your agents
+  and ask which one to test. Then I'll ask three questions about it, and
+  read its code, tools, records and data. You'll get a report: what it
+  handles, what a mistake in each kind of request costs, and where its
+  tests go.
 
-Build (half a day for the first pass): get the loop running.
-  I'll wire up a safe place to run it, turn real runs into test cases with a
-  check on each, and run the first full test. I'll only stop for things that
-  could touch real people, data or money.
+Engineering wires the agent up and keeps its tests running.
+  A safe place to run it, test cases drawn at random from real requests
+  and hard ones written to find bugs, a check on each way it can fail, a
+  baseline, and a comparison for every change. I'll only stop for things
+  that could touch real people, data or money.
 
-Judge (ongoing): the people who know what good looks like take over.
-  They label runs in the grader application, the tests are held to their
-  verdicts, and each kind of task earns trust on its own.
+The people who know what good looks like label runs.
+  In the grader application they label whole runs, settle disagreements
+  and write the rules labels follow. AI judges are measured against them,
+  and each eval earns trust once it agrees with them.
 """
 
 
 def start_text() -> str:
-    return BANNER.lstrip("\n") + "\n" + PHASES
+    return BANNER.lstrip("\n") + "\n" + ROLES
 
 
 def slug(name: str) -> str:
@@ -62,12 +68,9 @@ PILLARS = [  # (key in the report's front matter, headline, what it means, tag l
      "Runs that can't touch real people, data or money, and are fast and cheap to repeat.",
      "Safe · secure · efficient"),
     ("golden_use_cases", "Golden test cases",
-     "Examples drawn from real runs, grouped into the task types the agent actually handles.",
-     "Test cases · task types"),
+     "Examples drawn from real runs, grouped into the use cases the agent actually handles.",
+     "Test cases · use cases"),
 ]
-
-# Pillar headings in reports written before 0.1.1, still placed and numbered as their pillar.
-OLD_HEADS = {"Safe testing env": "Safe testing environment", "Golden use cases": "Golden test cases"}
 
 STATES = {"done": "✓", "partial": "◐", "risk": "!", "todo": "○"}
 
@@ -98,7 +101,7 @@ def _i(s) -> str:
 
 def _overview(fm: dict, agent: str) -> str:
     minutes = fm.get("minutes")
-    kicker = "Assess complete" + (f" · {minutes} minutes" if minutes else "")
+    kicker = "Discovery complete" + (f" · {minutes} minutes" if minutes else "")
     stats = "".join(f'<div class="stat"><span class="n">{_i(x.get("value"))}</span>'
                     f'<span class="l">{_i(x.get("label"))}</span></div>'
                     for x in (fm.get("stats") or [])[:3] if isinstance(x, dict))
@@ -140,7 +143,7 @@ def _next(fm: dict) -> str:
     for st in nx.get("steps") or []:
         you = st.get("who") == "you"
         steps.append(f'<li class="{"you" if you else "us"}"><div><span class="t">{_i(st.get("title"))}</span>'
-                     f'<span class="who">{"You" if you else "Build"}</span>'
+                     f'<span class="who">{"You" if you else "Claude"}</span>'
                      f'<div class="d">{_i(st.get("detail"))}</div></div>'
                      f'<div class="when">{_i(st.get("when"))}</div></li>')
     alts = "".join(f'<p><b>{_i(a.get("name"))}.</b> {_i(a.get("why"))}</p>'
@@ -152,7 +155,7 @@ def _next(fm: dict) -> str:
   <p class="path">{_i(nx.get("why"))}</p>
   <ol class="steps">{"".join(steps)}</ol>
   <div class="cta"><code>/aot-evals:start</code>
-    <span>Run it again to start Build. The first pass takes about half a day.</span></div>
+    <span>Run it again to wire the agent up and run its first baseline, about half a day.</span></div>
   {alts}
 </section>"""
 
@@ -179,7 +182,7 @@ def grid_html(grid: dict) -> str:
     if not cols or not rows:
         return ""
     vocab = {s["id"]: s for s in benchmarks.situations()}
-    head = ['<th>Task type</th>', '<th class="mod">Plain request<small>answerable, clear</small></th>']
+    head = ['<th>Use case</th>', '<th class="mod">Plain request<small>answerable, clear</small></th>']
     for c in cols:
         v = vocab.get(c["id"], {})
         head.append(f'<th class="mod">{_i(c.get("name") or v.get("name") or c["id"])}'
@@ -244,12 +247,11 @@ def discovery_body(fm: dict, text: str, agent: str) -> str:
     names = [p[1] for p in PILLARS]
     before, after = [], []
     rank = {n: k for k, n in enumerate(names)}  # the four pillars in their order, then the rest as written
-    secs = sorted(secs, key=lambda hb: rank.get(OLD_HEADS.get(hb[0], hb[0]), len(names)))
+    secs = sorted(secs, key=lambda hb: rank.get(hb[0], len(names)))
     for head, body in secs:
-        pillar = OLD_HEADS.get(head, head)
-        if pillar in names:
-            num = f'<span class="num">{names.index(pillar) + 1:02d}</span> '
-            golden = pillar == "Golden test cases" and isinstance(fm.get("grid"), dict)
+        if head in names:
+            num = f'<span class="num">{names.index(head) + 1:02d}</span> '
+            golden = head == "Golden test cases" and isinstance(fm.get("grid"), dict)
             extra = grid_html(fm["grid"]) if golden else ""
             before.append(f'<section class="detail-group" id="{slug(head)}"><h2>{num}{markdown.inline(head)}</h2>'
                           f"{markdown.render(body)}{extra}</section>")
@@ -257,12 +259,36 @@ def discovery_body(fm: dict, text: str, agent: str) -> str:
             group = after if head in AFTER_NEXT else before
             group.append(f'<section class="detail-group" id="{slug(head)}"><h2>{markdown.inline(head)}</h2>'
                          f"{markdown.render(body)}</section>")
-    comp = components_html(fm.get("components"))
-    if comp:
-        before.append(comp)
+    for extra in (boundaries_html(fm.get("boundaries")), components_html(fm.get("components"))):
+        if extra:
+            before.append(extra)
     details = ('<p class="kicker details-head">The details</p>' + "".join(before)) if before else ""
     return (_overview(fm, agent) + (markdown.render(lead) if lead.strip() else "") + details
             + _next(fm) + "".join(after))
+
+
+def boundaries_html(found) -> str:
+    """The context boundaries discovery found (front matter `boundaries:`, the fields of agent.yaml's
+    `components`), each with where it is graded (boundaries.py, estimators §1)."""
+    from . import boundaries
+
+    rows = boundaries.entries(found)
+    if not rows:
+        return ""
+    word = {boundaries.OWN_EVAL: "An eval of its own", boundaries.USE_CASE_GATE: "A use case gate end to end",
+            boundaries.USE_CASE: "A use case end to end", boundaries.CHECKS: "Checks in the end-to-end eval",
+            boundaries.UNKNOWN: "To decide with the owner"}
+    body = []
+    for r in rows:
+        p = boundaries.placement(r)
+        body.append(f"<tr><td><b>{_i(r['id'])}</b></td><td>{_i(r.get('kind') or '')}</td>"
+                    f"<td>{_i(r.get('context') or '')}</td><td>{word[p['placement']]}</td><td>{_i(p['why'])}</td></tr>")
+    return ('<section class="detail-group" id="context-boundaries"><h2>Where the evals go</h2>'
+            '<p>Every agent gets one eval end to end. A part of it gets an eval of its own only where it starts '
+            'from a handoff of its own (a context boundary) and a team changes it on its own schedule; '
+            '<code>aot-evals build</code> creates those evals.</p>'
+            '<div class="wrap"><table class="full"><thead><tr><th>Part</th><th>Kind</th><th>Context</th>'
+            f'<th>Graded by</th><th>Why</th></tr></thead><tbody>{"".join(body)}</tbody></table></div></section>')
 
 
 def components_html(found) -> str:
@@ -274,19 +300,20 @@ def components_html(found) -> str:
 
     word = {"done": "In place", "partial": "Partly", "todo": "To build", "later": "Later", "n/a": "Doesn't apply"}
     rows = []
-    for group, cid, name, phase, _ in COMPONENTS:
+    for part, cid, name, _ in COMPONENTS:
         f = found.get(cid)
         if not isinstance(f, dict):
             continue
         st = f.get("state") if f.get("state") in word else "todo"
-        rows.append(f"<tr><td>{_i(group)}</td><td>{_i(name)}</td><td>{_i(phase.capitalize())}</td>"
+        rows.append(f"<tr><td>{_i(part)}</td><td>{_i(name)}</td>"
                     f"<td>{word[st]}</td><td>{_i(f.get('note'))}</td></tr>")
     if not rows:
         return ""
     return ('<section class="detail-group" id="components"><h2>The components to build</h2>'
-            '<p>The parts an optimization loop needs around this agent, what exists today, and which phase '
-            'builds the rest. <code>aot-evals components</code> keeps this list current as the work goes on.</p>'
-            '<div class="wrap"><table class="full"><thead><tr><th>Area</th><th>Component</th><th>Phase</th>'
+            '<p>The parts an optimization loop needs around this agent, grouped by the part of an eval each '
+            'serves, and what exists today. <code>aot-evals components</code> keeps this list current as the '
+            'work goes on.</p>'
+            '<div class="wrap"><table class="full"><thead><tr><th>Part</th><th>Component</th>'
             f'<th>Today</th><th>Found</th></tr></thead><tbody>{"".join(rows)}</tbody></table></div></section>')
 
 

@@ -74,8 +74,7 @@ the time (12–13% critically) versus 16% (6%) when constrained by tools
 simulator's model [Lost in Simulation]; personas written by hand matched
 real users on only 6–8% of stylistic dimensions, and grounding simulators in
 real conversations raised that to 45% and exposed hidden failures
-[RealUserSim]. Validity compounds: task × simulator × judge each at 70% is
-about 34% overall [Validity]. Before trusting an environment, a trivial agent
+[RealUserSim]. Before trusting an environment, a trivial agent
 should score ~0 and a reference solution ~100 [ABC checklist].
 
 ## 5. When the world can't be faked
@@ -116,10 +115,11 @@ can only be monitored, not scored: when two experts can't agree pass/fail
 after seeing each other's critiques, track pairwise trends and edit distance
 instead [Hamel judge, Validators].
 
-**How these thresholds hold up.** [docs/statistics.md](../docs/statistics.md) checks each rule of
-thumb above (10 cases per category, 100–200 labels, the 60-label minimum, point-estimate floors)
-against the sampling, diagnostic-test and psychometric literature, says which ones aot-evals keeps,
-revises or supplements, and lists the changes proposed.
+**How these thresholds hold up.** aot-evals doesn't use the rules of thumb above (10 cases per
+category, 100–200 labels, the 60-label minimum, point-estimate floors). It derives the counts from
+each eval's decision rule and measurement model: case counts from power, labels counted per kind
+from a stated margin, and floors shown with a non-inferiority margin
+([docs/statistics.md](../docs/statistics.md) §3.4, §4.1, §4.2).
 
 ## Sources
 
@@ -284,7 +284,7 @@ several are cited in more than one.
 - **[Hamel judge]** Hamel Husain, "Creating a LLM-as-a-Judge That Drives
   Business Results", 2024-10-29. https://hamel.dev/blog/posts/llm-judge/.
   Critique shadowing; ~100 labels per failure mode; below 60 the intervals
-  are too wide; report TPR and TNR; Honeycomb converged in three iterations.
+  are too wide; report true positive and true negative rates; Honeycomb converged in three iterations.
 - **[Validators]** Shankar et al., "Who Validates the Validators?", UIST
   2024. https://arxiv.org/abs/2404.12272. Criteria drift: grading outputs
   changes the criteria.
@@ -305,8 +305,7 @@ several are cited in more than one.
   https://arxiv.org/abs/2508.15218. Gains hold in pairwise settings, less in
   direct scoring.
 - **[Validity]** Caban, "Measurement Without Validity", 2026-08, preprint.
-  https://arxiv.org/abs/2608.00794. Validity compounds across task ×
-  simulator × judge; 82% of 55 papers report broken inter-rater statistics;
+  https://arxiv.org/abs/2608.00794. 82% of 55 papers report broken inter-rater statistics;
   proposes ICC ≥ 0.70.
 
 ---

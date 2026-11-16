@@ -1,185 +1,55 @@
-"""C18 `report`: write `evals/report/report.json` (docs/method.md §8).
+"""`report` for an eval: `<eval>/report/report.json`, schema `aot-evals/report@2`
+(docs/method.md).
 
-Everything here is recomputed from per-trial records; nothing is pre-rounded; unknown values are
-`null`, never `0`. The report gates (G1-G14, docs/method.md §10) are evaluated here and decide which
-numbers may appear: a refused number is removed or greyed, and its gate says why.
+This module writes the keys of the estimand, the sampling design and the measurement model:
+`eval`, `spec`, `estimate` (the headline θ̂), `use_cases` (the per-use-case table, the
+diagnostic beside it), `design` and `measurement` (each failure mode's grader with its catch and
+clean pass rates and its floor, the eval held to people, the variance split; measurement.py),
+and `gates`, the evidence checks on the runs keyed by part (evidence.py).
+The decision rule's keys, `decision` and `comparison`, come from decision.py.
+Keys may be added within a schema version, never removed or renamed. Everything is recomputed
+from per-trial records, nothing is pre-rounded, and an unknown value is null with its reason, never 0.
+
+**What a trial scores.** A trial's verdict comes from the counted checks of the failure modes that
+apply to its case (one check per mode, rule 12); diagnostics are recorded and never counted. For
+`pass_rate` the trial's value is 1 when every counted check passed; for `failure_rate:<mode>` it
+is 1 when that mode's check failed. A trial missing a counted verdict (an operational failure, a
+check that raised, judges switched off) is unscored, never a pass or a fail. A case's value ŷ is
+the mean of its scored trials.
+
+**What counts toward θ̂.** Quality cases only (rule 5), with a draw from the spec's frame and seed
+(rule 6), screened and committed (rule 17), in runs whose estimand, design and measurement hashes
+match the current spec (docs/method.md). θ̂ = Σ w_s μ̂_s with μ̂_s the Hájek mean of ŷ over use case
+s and its interval from the clusters (`stats.stratified_hajek`).
+
+**What the grader's error does to it.** A counted judge that feeds the quantity counts only when
+its error rates are measured and within `measurement.max_inflation`; otherwise θ̂ is null with
+the reason (rule 13). The correction the spec names (`rogan_gladen`, `ppi`) is then applied to
+the observed θ̂; `estimate.uncorrected` keeps the number before it.
 """
 
 from __future__ import annotations
 
-import json
 from collections import defaultdict
+from types import SimpleNamespace
 
-from . import stats
-from .checks import declares_agent_report
-from .gates import manifest_problems, taxonomy_problems, untracked_cases
-from .repo import SETS, Evals
+from . import evidence, stats
+from .design import case_status, clusters, load_draw
+from .repo import POOLS, Eval
+from .results import correctness, operational, run_passes
 from .screen import passes as screen_passes
-from .util import load_json, now_iso, write_json
+from .spec import Spec, part_hashes, quantity, use_case_weights, use_cases
+from .util import ContractError, now_iso, write_json
 
-SCHEMA = "aot-evals/report@1"
-
-
-# The fields that name the build that ran (the agent and how it was invoked), as opposed to
-# what measured it (cases, checks, judges).
-BUILD_FIELDS = ("agent_commit", "harness", "model_ids", "invoke", "fakes_sha256", "simulator")
-
-
-def manifest_view(m: dict) -> dict:
-    """The fields of a manifest that define what was measured and on what."""
-    return {
-        "agent_commit": m.get("agent_commit"),
-        "agent_dirty": m.get("agent_dirty"),
-        "harness": m.get("harness"),
-        "model_ids": (m.get("agent") or {}).get("model_ids"),
-        "model_ids_observed": (m.get("agent") or {}).get("model_ids_observed"),
-        "invoke": dict(m.get("invoke") or {}),
-        "fakes_sha256": m.get("fakes_sha256"),
-        "simulator": m.get("simulator"),
-        "case_set": (m.get("case_set") or {}).get("files") or (m.get("case_set") or {}).get("sha256"),
-        "checks": m.get("checks"),
-        "judges": sorted((j.get("check"), j.get("model"), j.get("judge_sha"), j.get("backend"))
-                         for j in m.get("judge_backends") or []),
-    }
+SCHEMA = "aot-evals/report@2"
+MANIFEST_SCHEMA = "aot-evals/run-manifest@2"
+# The parts whose change makes two runs different quantities (docs/method.md); a decision-rule
+# change leaves the estimate alone.
+MEASURED_PARTS = ("estimand", "design", "measurement")
 
 
-def build_key(m: dict) -> str:
-    v = manifest_view(m)
-    return json.dumps({f: v[f] for f in BUILD_FIELDS}, sort_keys=True, default=str)
-
-
-def run_passes(manifests: list[dict]) -> dict[str, int]:
-    """run id -> pass over the suite. Runs of one build with the same k over disjoint case sets
-    (a suite split by category to pace a rate-limited runtime) are one pass; a repeat of a case
-    starts another. A variance band compares passes, never a pass with a part of one."""
-    passes: list[tuple[str, set]] = []
-    out = {}
-    for m in sorted(manifests, key=lambda m: m.get("started") or ""):
-        key = build_key(m) + f"|k={m.get('k')}"
-        ids = set((m.get("case_set") or {}).get("ids") or [])
-        for i, (k, seen) in enumerate(passes):
-            if k == key and not (seen & ids):
-                seen |= ids
-                out[m["run_id"]] = i
-                break
-        else:
-            passes.append((key, set(ids)))
-            out[m["run_id"]] = len(passes) - 1
-    return out
-
-
-class Context:
-    """The runs a report covers, with their records indexed for the computations below."""
-
-    def __init__(self, ev: Evals, run_ids: list[str]):
-        self.ev = ev
-        self.manifests = [m for m in (ev.run_manifest(r) for r in run_ids) if m]
-        self.attempts: list[dict] = []
-        self.check_lines: list[dict] = []
-        for m in self.manifests:
-            for r in ev.run_records(m["run_id"]):
-                (self.attempts if r.get("kind") == "attempt" else self.check_lines).append(r)
-        self.cases = {c["id"]: c for c in ev.cases() if c.get("id")}
-        self.untracked = set(untracked_cases(ev))
-        self.k = max((m.get("k") or 0 for m in self.manifests), default=None) or None
-        self.pass_of = run_passes(self.manifests)
-        self.trials_of: dict[str, int] = defaultdict(int)  # case id -> trials planned across runs
-        for m in self.manifests:
-            for cid in (m.get("case_set") or {}).get("ids") or []:
-                self.trials_of[cid] += m.get("k") or 0
-
-        self.checks_by_attempt: dict[tuple, list[dict]] = defaultdict(list)
-        for c in self.check_lines:
-            self.checks_by_attempt[(c["run_id"], c["case_id"], c["trial"], c["attempt"])].append(c)
-        self.judges = judge_states(ev)
-        self._recompute_passes()
-
-    def _recompute_passes(self) -> None:
-        """A trial's pass, from its check lines: code checks always count; a judge counts only when
-        it is calibrated on its current version, and its verdict is re-thresholded with the
-        calibrated threshold (G3). The as-written code verdict is kept as `passed_code`."""
-        for a in self.attempts:
-            a["passed_code"] = a.get("passed")
-            if a.get("outcome") != "ok" or a.get("instrument_error") or a["case_id"] not in self.cases:
-                continue
-            verdicts = []
-            for line in self.checks_by_attempt.get((a["run_id"], a["case_id"], a["trial"], a["attempt"]), []):
-                if line.get("type") != "judge":
-                    verdicts.append(line.get("passed"))
-                    continue
-                st = self.judges.get(line["check_id"])
-                counts = bool(st and st["calibrated"] and line.get("judge_sha") == st["sha"]
-                              and line.get("backend") == st["backend"])
-                line["counted"] = counts
-                if counts:
-                    score = line.get("score")
-                    line["verdict"] = None if score is None else score >= st["threshold_or_default"]
-                    verdicts.append(line["verdict"])
-            if any(v is None for v in verdicts):
-                a["passed"] = None
-                a["instrument_error"] = a.get("instrument_error") or "a counted judge returned no verdict"
-            else:
-                a["passed"] = all(verdicts) if verdicts else None
-
-    def finals(self) -> list[dict]:
-        return [a for a in self.attempts if a.get("final")]
-
-    def gated(self, case_id: str) -> bool:
-        """Whether a case may count toward gated numbers: screened (G8) and committed (G12)."""
-        case = self.cases.get(case_id)
-        if not case or not screen_passes(case.get("screen")):
-            return False
-        return not any(case["_path"] in u or u.endswith(case["_path"]) for u in self.untracked)
-
-
-def judge_states(ev: Evals) -> dict[str, dict]:
-    """Per judge check: its spec, current calibration and reliability, and whether it counts."""
-    from .calibrate import is_current, load_calibration
-    from .judges import load_spec
-    from .labels import load_labels
-    from .reliability import load_reliability
-
-    out: dict[str, dict] = {}
-    for fm in ev.failure_modes():
-        for cid in fm.get("checks") or []:
-            if cid in out or ev.check_type(cid) != "judge":
-                continue
-            st = {"spec": None, "sha": None, "backend": None, "calibrated": False, "labels": 0,
-                  "cal": None, "rel": None, "metrics": None, "threshold_or_default": 0.5,
-                  "reasons": [], "failure_mode": fm.get("id")}
-            out[cid] = st
-            try:
-                spec = load_spec(ev.judge_check_path(cid))
-            except Exception as e:
-                st["reasons"].append(f"invalid judge spec: {e}")
-                continue
-            st.update(spec=spec, sha=spec.sha(), backend=spec.primary, labels=len(load_labels(ev, spec)))
-            if spec.problems():
-                st["reasons"] += spec.problems()
-                continue
-            cal = load_calibration(ev, spec)
-            if not cal:
-                st["reasons"].append("not calibrated (C10)")
-            elif not is_current(ev, spec, cal):
-                st["reasons"].append("calibration is stale: the judge or its labels changed since")
-            else:
-                st["cal"] = cal
-                st["metrics"] = (cal.get("backends") or {}).get(spec.primary)
-                if cal.get("primary") != spec.primary:
-                    st["reasons"].append(f"calibrated with primary {cal.get('primary')}, now {spec.primary}")
-                elif cal.get("status") != "calibrated":
-                    st["reasons"] += cal.get("status_reasons") or ["below floors"]
-                else:
-                    st["calibrated"] = True
-                if st["metrics"] and st["metrics"].get("threshold") is not None:
-                    st["threshold_or_default"] = st["metrics"]["threshold"]
-            rel = load_reliability(ev, spec)
-            st["rel"] = rel if rel and rel.get("judge_sha") == spec.sha() else None
-    return out
-
-
-def default_runs(ev: Evals) -> list[str]:
-    """The effective baseline (every category's newest baseline run), else the latest finished run."""
+def default_runs(ev: Eval) -> list[str]:
+    """The effective baseline (each case's newest baseline run), else the latest finished run."""
     base = ev.baseline_ids()
     if base:
         return base
@@ -187,728 +57,387 @@ def default_runs(ev: Evals) -> list[str]:
     return [others[-1]["run_id"]] if others else []
 
 
-# ---- plane A ------------------------------------------------------------------------------
+def refusal(ev: Eval, spec: Spec, manifests: list[dict]) -> str | None:
+    """Why these runs' numbers cannot stand for the current spec, or None."""
+    now = part_hashes(spec, ev)
+    for m in manifests:
+        if m.get("schema") != MANIFEST_SCHEMA:
+            return (f"run {m.get('run_id')} has a {m.get('schema') or 'schema-less'} manifest, not "
+                    f"{MANIFEST_SCHEMA}; an eval's numbers come from runs made under its eval.yaml")
+        then = m.get("spec_sha") or {}
+        changed = [p for p in MEASURED_PARTS if then.get(p) != now.get(p)]
+        if changed:
+            return (f"run {m.get('run_id')} measured under a different {' and '.join(changed)} than the "
+                    "current eval.yaml, so its numbers are a different quantity (estimators §9); "
+                    "run the baseline again under the current spec")
+    return None
 
-def _passes_by_case(finals: list[dict]) -> dict[str, list[bool]]:
-    out: dict[str, list[bool]] = defaultdict(list)
-    for a in sorted(finals, key=lambda a: (a["run_id"], a["trial"])):
-        if a.get("passed") is not None:
-            out[a["case_id"]].append(bool(a["passed"]))
+
+class Scored:
+    """The runs a report covers, with each final attempt scored under the current spec."""
+
+    def __init__(self, ev: Eval, run_ids: list[str]):
+        self.ev = ev
+        self.spec = ev.spec()
+        self.manifests = [m for m in (ev.run_manifest(r) for r in run_ids) if m]
+        self.kind, self.mode = quantity(self.spec)
+        self.attempts: list[dict] = []
+        by_attempt: dict[tuple, list[dict]] = defaultdict(list)
+        for m in self.manifests:
+            for r in ev.run_records(m["run_id"]):
+                if r.get("kind") == "attempt":
+                    self.attempts.append(r)
+                elif r.get("kind") == "check":
+                    by_attempt[(r.get("run_id"), r.get("case_id"), r.get("trial"), r.get("attempt"))].append(r)
+        try:
+            cases = ev.cases()
+        except ContractError:
+            cases = []
+        self.cases = {c["id"]: c for c in cases if c.get("id")}
+        self.status = {cid: case_status(ev, c) for cid, c in self.cases.items()}
+        for cid, c in self.cases.items():
+            c["cluster"] = self.status[cid]["cluster"]  # as correctness() reads it
+        from .evidence import untracked_cases
+
+        try:
+            self.untracked = set(untracked_cases(ev))
+        except (ValueError, OSError):
+            self.untracked = set()
+        self.k = max((m.get("k") or 0 for m in self.manifests), default=0) or None
+        self.trials_of: dict[str, int] = defaultdict(int)
+        for m in self.manifests:
+            for cid in (m.get("case_set") or {}).get("ids") or []:
+                self.trials_of[cid] += m.get("k") or 0
+        self.pass_of = run_passes(self.manifests)
+        for a in self.attempts:
+            self._score(a, by_attempt.get((a["run_id"], a["case_id"], a["trial"], a["attempt"]), []))
+
+    def _score(self, a: dict, lines: list[dict]) -> None:
+        """Set a["passed"] (every counted check passed) and a["value"] (the quantity) on a final
+        attempt, or None for both when a counted verdict is missing."""
+        a["passed"] = a["value"] = None
+        case = self.cases.get(a["case_id"])
+        if not a.get("final") or a.get("outcome") != "ok" or a.get("instrument_error") or case is None:
+            return
+        verdicts = {ln.get("check_id"): ln.get("passed") for ln in lines if ln.get("counted")}
+        wanted = {fm["check"]: fm["id"] for fm in self.ev.failure_modes_for_case(case)
+                  if isinstance(fm.get("check"), str)}
+        # each counted check's own verdict, for its failure mode's rate (measurement.py)
+        a["verdicts"] = {c: verdicts.get(c) for c in wanted}
+        if not wanted or any(verdicts.get(c) is None for c in wanted):
+            return
+        a["passed"] = all(verdicts[c] for c in wanted)
+        if self.kind == "pass_rate":
+            a["value"] = 1.0 if a["passed"] else 0.0
+        elif self.kind == "failure_rate":
+            check = next((c for c, m in wanted.items() if m == self.mode), None)
+            a["value"] = None if check is None else (0.0 if verdicts[check] else 1.0)
+
+    def finals(self) -> list[dict]:
+        return [a for a in self.attempts if a.get("final")]
+
+    def screened(self, cid: str) -> bool:
+        """Read by a person and committed: cases with an unverified answer stay out (rule 17)."""
+        case = self.cases.get(cid)
+        if not case or not screen_passes(case.get("screen")):
+            return False
+        return not any(case["_path"] in u or u.endswith(case["_path"]) for u in self.untracked)
+
+    def counts(self, cid: str) -> bool:
+        return self.screened(cid) and bool(self.status.get(cid, {}).get("counts"))
+
+    def case_values(self, case_ids=None) -> dict[str, float]:
+        """ŷ per case: the mean of its scored trials' values."""
+        vals: dict[str, list[float]] = defaultdict(list)
+        for a in self.finals():
+            if a.get("value") is not None and (case_ids is None or a["case_id"] in case_ids):
+                vals[a["case_id"]].append(a["value"])
+        return {c: sum(v) / len(v) for c, v in vals.items()}
+
+    def ctx(self) -> SimpleNamespace:
+        """What the per-use-case computations in results.py read."""
+        return SimpleNamespace(cases=self.cases, trials_of=self.trials_of, k=self.k, pass_of=self.pass_of)
+
+
+# ---- keys ------------------------------------------------------------------------------------
+
+def eval_key(spec: Spec) -> dict:
+    est = spec.part("estimand")
+    return {"id": spec.eval_id, "version": spec.resolved.get("version"), "unit": est.get("unit"),
+            "quantity": est.get("quantity"), "decision": est.get("decision")}
+
+
+def _budget(spec: Spec, uc: str) -> dict | None:
+    con = spec.part("decision_rule").get("constraints")
+    if not isinstance(con, dict):
+        return None
+    default = con.get("default") if isinstance(con.get("default"), dict) else {}
+    per = (con.get("use_cases") or {}).get(uc) if isinstance(con.get("use_cases"), dict) else None
+    out = {**default, **(per if isinstance(per, dict) else {})}
+    return out or None
+
+
+def estimate(s: Scored, refused: str | None, weights: dict | None, source: str | None,
+             meas: dict | None = None) -> dict:
+    spec = s.spec
+    out = {"theta": None, "ci": None, "ci_method": None, "se": None, "quantity": spec.part("estimand").get("quantity"),
+           "weights": weights, "weights_source": source, "estimator": "hajek", "corrected": False,
+           "correction": spec.part("measurement").get("correction"), "uncorrected": None,
+           "n_cases": 0, "n_clusters": 0, "n_effective": None, "k": s.k, "null_reason": None}
+    blocked = spec.blocked("estimate")
+    if blocked:
+        out["null_reason"] = "the spec does not say what the number means: " + ", ".join(
+            sorted({i.field for i in blocked}))
+        return out
+    if weights is None:
+        out["null_reason"] = "the weights are not all stated (rule 2)"
+        return out
+    if not s.manifests:
+        out["null_reason"] = "no run yet: aot-evals run --purpose baseline"
+        return out
+    if refused:
+        out["null_reason"] = refused
+        return out
+    counted = {cid for cid in s.cases if s.counts(cid)}
+    values = s.case_values(counted)
+    strata = {}
+    for u in use_cases(spec):
+        uc = u["id"]
+        ids = sorted(c for c in values if s.cases[c].get("use_case") == uc)
+        strata[uc] = {"weight": weights.get(uc), "values": [values[c] for c in ids],
+                      "inclusion_probs": [s.status[c]["inclusion_prob"] for c in ids],
+                      "clusters": [s.status[c]["cluster"] for c in ids]}
+    r = stats.stratified_hajek(strata)
+    used = [c for c in values if weights.get(s.cases[c].get("use_case"))]
+    out["n_cases"] = len(used)
+    out["n_clusters"] = len({s.status[c]["cluster"] for c in used})
+    if r is None:
+        out["null_reason"] = "the weights sum to 0"
+        return out
+    if r["missing"]:
+        out["null_reason"] = ("no scored quality case in " + ", ".join(r["missing"])
+                              + ": θ is unknown without them (aot-evals draw, then run)")
+        return out
+    observed = {"point": r["point"], "ci": r["ci"], "se": r["se"]}
+    out.update({"theta": r["point"], "ci": r["ci"], "ci_method": r["ci_method"], "se": r["se"],
+                "n_effective": r.get("n_effective"),
+                "uncorrected": {"theta": r["point"], "ci": r["ci"], "se": r["se"]}})
+    if meas is None:
+        return out
+    from .measurement import correct, judge_block
+
+    why = judge_block(meas)
+    if why:
+        out.update({"theta": None, "ci": None, "se": None, "null_reason": why})
+        return out
+    c = correct(s, meas, weights, observed)
+    out.update(c)
+    if c.get("corrected"):
+        out["ci_method"] = (c.get("correction_detail") or {}).get("method") or out["ci_method"]
     return out
 
 
-def _cluster_keys(ctx: Context, case_ids) -> list[str | None] | None:
-    """Each case's `cluster` (template, source trace or seed), or None when no case has one."""
-    keys = [(ctx.cases.get(c) or {}).get("cluster") for c in case_ids]
-    return keys if any(k is not None for k in keys) else None
+def _row_correction(s: Scored, est: dict | None, meas: dict | None) -> dict | None:
+    """A use case's μ̂ corrected by Rogan-Gladen, when that is the spec's correction and its
+    grader is measured (the correction is linear, so each row corrects on its own). PPI corrects
+    θ̂ as a whole: its rows stay uncorrected (null)."""
+    if not est or est.get("point") is None or meas is None or meas.get("correction") != "rogan_gladen":
+        return None
+    kind, mode = quantity(s.spec)
+    var = (est.get("se") or 0.0) ** 2
+    if kind == "failure_rate":
+        row = next((r for r in meas["failure_modes"] if r["id"] == mode), None)
+        if not row or row["type"] != "judge":
+            return None
+        from .measurement import judge_calibration
+
+        c = judge_calibration(s.ev, row["check"], meas["alpha"])["counts"]
+        return stats.rogan_gladen_rate(est["point"], var, c["catch_k"], c["catch_n"], c["clean_k"],
+                                       c["clean_n"]) if c else None
+    a = meas["eval_vs_people"].get("all") or {}
+    cat, cln = a.get("catch") or {}, a.get("clean") or {}
+    if not cat.get("n") or not cln.get("n"):
+        return None
+    r = stats.rogan_gladen_rate(1 - est["point"], var, cat["k"], cat["n"], cln["k"], cln["n"])
+    return None if r is None else {**r, "point": 1 - r["point"], "ci": [1 - r["ci"][1], 1 - r["ci"][0]],
+                                   "note": "corrected on the failure rate 1 − μ̂"}
 
 
-def correctness(ctx: Context, finals: list[dict], set_name: str) -> dict:
-    by_case = _passes_by_case(finals)
-    keys = _cluster_keys(ctx, list(by_case))
-    rate = stats.clustered_pass_rate(list(by_case.values()), keys)
-    # A case's trials are those of the runs that included it: runs split by category each
-    # cover some cases, so summing k over every run left pass^k null.
-    complete = [v for c, v in by_case.items() if len(v) == ctx.trials_of.get(c)]
-    pass_pow_k = (sum(1 for v in complete if all(v)) / len(complete)) if complete and ctx.k and ctx.k > 1 else None
-    pass_pow_k_reason = None
-    if pass_pow_k is None and by_case:
-        pass_pow_k_reason = ("k = 1: pass^k needs repeated trials" if not ctx.k or ctx.k < 2 else
-                             "no case has a scored result on every planned trial (operational "
-                             "failures or instrument errors left gaps)")
-    flaky = sum(1 for v in by_case.values() if len(v) > 1 and 0 < sum(v) < len(v)) if ctx.k and ctx.k > 1 else None
-
-    per_repeat: dict[tuple, list[bool]] = defaultdict(list)
-    for a in finals:
-        if a.get("passed") is not None:
-            per_repeat[(ctx.pass_of.get(a["run_id"]), a["trial"])].append(bool(a["passed"]))
-    rates = [sum(v) / len(v) for v in per_repeat.values() if v]
-    band = [min(rates), max(rates)] if len(rates) >= 2 else None
-    pass_rate = None
-    if rate:
-        pass_rate = {"point": rate["point"], "ci": rate["ci"], "n": rate["n"],
-                     "n_cases": rate["n_cases"], "k": ctx.k, "set": set_name,
-                     "ci_method": rate["ci_method"]}
-        if "n_clusters" in rate:
-            pass_rate["n_clusters"] = rate["n_clusters"]
-    # M30: with no failure seen, how high could the failure rate still be? Counted over cases,
-    # since trials of one case are not independent; over clusters when cases carry one, since a
-    # clean result can't show how correlated a cluster's cases are (all-or-nothing is assumed).
-    clean = bool(by_case) and all(all(v) for v in by_case.values())
-    units = rate.get("n_clusters", len(by_case)) if rate else len(by_case)
-    zero_bound = stats.zero_failure_bound(units) if clean else None
-    return {"pass_rate": pass_rate, "pass_pow_k": pass_pow_k, "pass_pow_k_reason": pass_pow_k_reason,
-            "flaky": flaky, "variance_band": band, "zero_failure_bound": zero_bound,
-            "zero_failure_bound_basis": (("clusters" if keys else "cases") if clean else None),
-            "clusters": stats.cluster_summary(keys) if keys else None,
-            # M31: how much of the noise is case difficulty and how much run-to-run
-            "variance_components": stats.variance_components(list(by_case.values()))}
-
-
-# ---- plane B ------------------------------------------------------------------------------
-
-BUDGET_KEYS = {
-    # budgets.yaml key -> (operational field, direction)
-    "cost_per_success_usd": ("cost_per_success", "max"),
-    "cost_per_run_usd": ("cost_per_run", "max"),
-    "latency_p50_ms": ("latency_p50", "max"),
-    "latency_p90_ms": ("latency_p90", "max"),
-    "error_rate": ("error_rate_point", "max"),
-    "tokens_per_run": ("tokens_per_run", "max"),
-    "cache_hit_rate_min": ("cache_hit_rate", "min"),
-}
-
-
-def operational(attempts: list[dict], budget: dict | None, replay: bool = False) -> dict:
-    if replay:
-        # replayed records: their cost, latency and errors describe the replay, not the agent
-        return {"n_trials": len({(a["run_id"], a["case_id"], a["trial"]) for a in attempts}),
-                "n_attempts": len(attempts), "not_measured": "recorded runs replayed: plane B describes "
-                "the replay, not the agent", "budget": budget or {}, "budget_status": "not_measured",
-                "budget_breaches": []}
-    trials = {(a["run_id"], a["case_id"], a["trial"]) for a in attempts}
-    n_trials = len(trials)
-    costs = [a["cost_usd"] for a in attempts if a.get("cost_usd") is not None]
-    total_cost = sum(costs) if costs else None
-    successes = sum(1 for a in attempts if a.get("final") and a.get("passed") is True)
-    latencies = [a["latency_ms"] for a in attempts if a.get("latency_ms") is not None]
-
-    def total(key):
-        vals = [a[key] for a in attempts if a.get(key) is not None]
-        return sum(vals) if vals else None
-
-    tin, tout, tcached, tools = (total("tokens_input"), total("tokens_output"),
-                                 total("tokens_cached"), total("tool_calls"))
-    outcomes: dict[str, int] = defaultdict(int)
-    for a in attempts:
-        outcomes[a.get("outcome") or "instrument_error"] += 1
-    agent_attempts = [a for a in attempts if a.get("outcome") is not None]
-    errors = sum(1 for a in agent_attempts if a["outcome"] != "ok")
-    err_ci = stats.wilson(errors, len(agent_attempts))
-    op = {
-        "n_trials": n_trials,
-        "n_attempts": len(attempts),
-        "cost_total": total_cost,
-        "cost_per_run": total_cost / n_trials if total_cost is not None and n_trials else None,
-        "cost_per_success": total_cost / successes if total_cost is not None and successes else None,
-        "successes": successes,
-        "latency_p50": stats.percentile(latencies, 50),
-        "latency_p90": stats.percentile(latencies, 90),
-        "tokens_input": tin / n_trials if tin is not None and n_trials else None,
-        "tokens_output": tout / n_trials if tout is not None and n_trials else None,
-        "tokens_per_run": (((tin or 0) + (tout or 0)) / n_trials
-                           if (tin is not None or tout is not None) and n_trials else None),
-        "cache_hit_rate": tcached / tin if tcached is not None and tin else None,
-        "tool_calls": tools / n_trials if tools is not None and n_trials else None,
-        "outcomes": dict(outcomes),
-        "error_rate": ({"point": errors / len(agent_attempts), "ci": list(err_ci), "n": len(agent_attempts)}
-                       if agent_attempts else None),
-        "retries": sum(1 for a in attempts if a.get("attempt", 0) > 0),
-        "agent_retries": total("retries"),
-        "killed": sum(1 for a in attempts if a.get("killed")),
-        "budget": budget or {},
-        "budget_status": None,
-        "budget_breaches": [],
-    }
-    if budget:
-        compared = 0
-        for key, limit in budget.items():
-            if key not in BUDGET_KEYS or limit is None:
-                continue
-            field, direction = BUDGET_KEYS[key]
-            value = op["error_rate"]["point"] if field == "error_rate_point" and op["error_rate"] else op.get(field)
-            if value is None:
-                continue
-            compared += 1
-            if (direction == "max" and value > limit) or (direction == "min" and value < limit):
-                op["budget_breaches"].append({"budget": key, "limit": limit, "actual": value})
-        if compared:
-            op["budget_status"] = "over" if op["budget_breaches"] else "within"
-    return op
-
-
-# ---- sections -----------------------------------------------------------------------------
-
-def category_rows(ctx: Context) -> list[dict]:
-    ev = ctx.ev
-    cats = {c["id"]: c for c in ev.categories() if c.get("id")}
-    groups: dict[tuple, list[dict]] = defaultdict(list)
-    for a in ctx.attempts:
-        groups[(a.get("category"), a.get("set"))].append(a)
+def use_case_rows(s: Scored, weights: dict | None, meas: dict | None = None) -> list[dict]:
+    spec = s.spec
+    replay = bool(s.manifests) and all(m.get("replay") for m in s.manifests)
     rows = []
-    order = {"high": 0, "medium": 1, "low": 2}
-    for (cid, set_name), attempts in sorted(
-            groups.items(), key=lambda kv: (order.get((cats.get(kv[0][0]) or {}).get("worth"), 3),
-                                            str(kv[0][0]), str(kv[0][1]))):
-        if cid is None:
-            continue
-        cat = cats.get(cid) or {}
-        finals = [a for a in attempts if a.get("final")]
-        gated_finals = [a for a in finals if ctx.gated(a["case_id"])]
-        ungated_finals = [a for a in finals if not ctx.gated(a["case_id"])]
-        row = {
-            "id": cid,
-            "worth": cat.get("worth"),
-            "simple": cat.get("simple"),
-            "observed_share": cat.get("observed_share"),
-            "n_cases": len({a["case_id"] for a in gated_finals}),
-            **correctness(ctx, gated_finals, set_name),
-            "operational": operational(attempts, ev.budget_for(cid),
-                                       replay=bool(ctx.manifests) and all(m.get("replay") for m in ctx.manifests)),
-            "excluded": None,
-        }
-        if ungated_finals:
-            ex = correctness(ctx, ungated_finals, set_name)
-            row["excluded"] = {"n_cases": len({a["case_id"] for a in ungated_finals}),
-                               "reason": "unscreened or uncommitted cases (G8, G12)",
-                               "pass_rate": ex["pass_rate"]}
-        rows.append(row)
+    ctx = s.ctx()
+    for u in use_cases(spec):
+        uc = u["id"]
+        for pool in POOLS:
+            attempts = [a for a in s.attempts if a.get("use_case") == uc and a.get("pool") == pool]
+            finals = [a for a in attempts if a.get("final")]
+            ok = (lambda c: s.counts(c)) if pool == "quality" else s.screened
+            kept = [a for a in finals if ok(a["case_id"])]
+            left = [a for a in finals if not ok(a["case_id"])]
+            pis = [s.status[c]["inclusion_prob"] for c in s.cases
+                   if s.cases[c].get("use_case") == uc and s.status[c]["pool"] == pool
+                   and s.status[c]["inclusion_prob"] is not None] if pool == "quality" else []
+            row = {"id": uc, "pool": pool, "share": u.get("share"), "cost": u.get("cost"),
+                   "weight": (weights or {}).get(uc) if pool == "quality" else None,
+                   "inclusion_prob_range": [min(pis), max(pis)] if pis else None,
+                   "n_cases": len({a["case_id"] for a in kept if a.get("passed") is not None}),
+                   "estimate": None,
+                   **correctness(ctx, kept, pool),
+                   "operational": operational(attempts, _budget(spec, uc), replay=replay),
+                   "excluded": None}
+            if pool == "quality":
+                vals = s.case_values({a["case_id"] for a in kept})
+                ids = sorted(vals)
+                row["estimate"] = stats.hajek_mean([vals[c] for c in ids],
+                                                   [s.status[c]["inclusion_prob"] for c in ids],
+                                                   [s.status[c]["cluster"] for c in ids])
+                row["estimate_corrected"] = _row_correction(s, row["estimate"], meas)
+            else:
+                row["note"] = "bug-finding cases: they find failures and never enter θ̂ (rule 5)"
+            if left:
+                why = ("not drawn from the spec's frame and seed, unscreened or uncommitted (rules 6, 17)"
+                       if pool == "quality" else "unscreened or uncommitted (rule 17)")
+                row["excluded"] = {"n_cases": len({a["case_id"] for a in left}), "reason": why,
+                                   "pass_rate": correctness(ctx, left, pool)["pass_rate"]}
+            rows.append(row)
     return rows
 
 
-def quality_estimate(ctx: Context, gate_ok: bool) -> dict | None:
-    if not gate_ok:
-        return None
-    cats = {c["id"]: c for c in ctx.ev.categories() if c.get("id")}
-    strata = []
-    weights = {}
-    for cid, cat in cats.items():
-        share = cat.get("observed_share")
-        finals = [a for a in ctx.finals() if a.get("category") == cid and a.get("set") == "quality_estimate"
-                  and a.get("passed") is not None and ctx.gated(a["case_id"])]
-        if not isinstance(share, (int, float)) or not finals:
-            continue
-        # Size each stratum by cases, not trials: trials of one case are not independent.
-        per_case = _passes_by_case(finals)
-        strata.append((share, sum(sum(v) / len(v) for v in per_case.values()), len(per_case)))
-        weights[cid] = share
-    est = stats.weighted_estimate(strata)
-    if est:
-        wsum = sum(weights.values())
-        est["weights"] = {k: v / wsum for k, v in weights.items()}
-        est["missing_categories"] = sorted(set(cats) - set(weights))
-    return est
-
-
-def check_rows(ctx: Context) -> list[dict]:
-    ev = ctx.ev
-    fm_of = {}
-    for fm in ev.failure_modes():
-        for cid in fm.get("checks") or []:
-            fm_of.setdefault(cid, fm)
-    final_keys = {(a["run_id"], a["case_id"], a["trial"], a["attempt"]) for a in ctx.finals()}
-    fires: dict[str, int] = defaultdict(int)
-    sole: dict[str, int] = defaultdict(int)
-    evaluated: dict[str, int] = defaultdict(int)
-    cases_seen: dict[str, set] = defaultdict(set)
-    for key, lines in ctx.checks_by_attempt.items():
-        if key not in final_keys:
-            continue
-        def verdict(line):
-            return line.get("verdict") if line.get("type") == "judge" else line.get("passed")
-        failed = [line["check_id"] for line in lines if verdict(line) is False]
-        for line in lines:
-            if verdict(line) is None:
-                continue
-            evaluated[line["check_id"]] += 1
-            cases_seen[line["check_id"]].add(key[1])
-            if verdict(line) is False:
-                fires[line["check_id"]] += 1
-                if len(failed) == 1:
-                    sole[line["check_id"]] += 1
-    rows = []
-    for cid, fm in sorted(fm_of.items()):
-        ctype = ev.check_type(cid)
-        judge = None
-        if ctype == "judge":
-            judge = judge_block(ctx, cid)
-        rate = fires[cid] / evaluated[cid] if evaluated[cid] else None
-        rows.append({
-            "id": cid, "type": ctype, "failure_mode": fm.get("id"),
-            "trigger_rate": rate,
-            "sole_failure_rate": sole[cid] / fires[cid] if fires[cid] else None,
-            "evaluations": evaluated[cid] or None,
-            "corrected_trigger_rate": corrected_trigger_rate(rate, len(cases_seen[cid]), judge),
-            "judge": judge,
-        })
-    return rows
-
-
-def corrected_trigger_rate(rate: float | None, n_cases: int, judge: dict | None) -> dict | None:
-    """M32: how often the failure mode really occurs, given how often the judge fires and the
-    judge's measured TPR and TNR (stats.rogan_gladen). A judge that misses failures under-reports
-    them and one that over-fires inflates them; the correction undoes both, and its interval
-    carries the uncertainty of the calibration as well as of the runs. The runs' share is counted
-    over cases, since trials of one case are not independent."""
-    cm = (judge or {}).get("confusion")
-    if rate is None or not cm or n_cases <= 0:
-        return None
-    pass_k = round((1 - rate) * n_cases)
-    r = stats.rogan_gladen(pass_k, n_cases, cm["tp"], cm["tp"] + cm["fn"], cm["tn"], cm["tn"] + cm["fp"])
-    if r is None:
-        return {"point": None, "ci": None, "observed": rate,
-                "reason": "TPR + TNR <= 1 on the labels: the judge is no better than chance"}
-    return {"point": 1 - r["point"], "ci": [1 - r["ci"][1], 1 - r["ci"][0]], "observed": rate,
-            "n_cases": n_cases, "calibrated": (judge or {}).get("status") == "calibrated",
-            "method": r["method"]}
-
-
-def judge_block(ctx: Context, cid: str) -> dict:
-    st = ctx.judges.get(cid) or {}
-    spec, m, rel = st.get("spec"), st.get("metrics") or {}, st.get("rel") or {}
-    backend_cfg = spec.backends.get(spec.primary, {}) if spec else {}
-    rel_b = (rel.get("backends") or {}).get(st.get("backend")) or {}
-    cross = [p for p in rel.get("cross_family") or [] if st.get("backend") in p["backends"]]
-    lines = [line for line in ctx.check_lines if line.get("check_id") == cid and line.get("cost_usd") is not None]
+def design_key(s: Scored) -> dict:
+    spec = s.spec
+    design = spec.part("design")
+    qs = design.get("quality_set") if isinstance(design.get("quality_set"), dict) else {}
+    bf = design.get("bug_finding_set") if isinstance(design.get("bug_finding_set"), dict) else {}
+    statuses = list(s.status.values())
+    quality = [x for x in statuses if x["pool"] == "quality"]
+    log = load_draw(s.ev)
+    cl = clusters(s.ev, statuses)
+    by_cluster: dict[str, list[float]] = defaultdict(list)
+    for c, v in s.case_values({x["id"] for x in quality if s.counts(x["id"])}).items():
+        by_cluster[s.status[c]["cluster"]].append(v)
+    deff, icc, why = None, None, None
+    if not by_cluster:
+        why = "no scored quality case yet"
+    elif all(len(v) == 1 for v in by_cluster.values()):
+        deff, icc = 1.0, None
+        why = "every cluster holds one case"
+    else:
+        od = stats.overdispersion_test(list(by_cluster.values()))
+        icc = od["icc"] if od else None
+        if icc is None:
+            why = "the cluster ICC could not be estimated"
+        else:
+            sizes = [len(v) for v in by_cluster.values()]
+            deff = stats.design_effect(sum(sizes) / len(sizes), max(0.0, min(1.0, icc)))
     return {
-        "backend": backend_cfg.get("type"), "backend_name": st.get("backend"),
-        "model": backend_cfg.get("model"), "model_family": backend_cfg.get("family"),
-        "agent_model_family": ctx.ev.agent().get("model_family"),
-        "version": spec.version if spec else None, "mode": spec.mode if spec else None,
-        "tpr": m.get("tpr"), "tpr_ci": m.get("tpr_ci"), "tnr": m.get("tnr"), "tnr_ci": m.get("tnr_ci"),
-        "labels": st.get("labels", 0), "kappa": m.get("kappa"), "confusion": m.get("confusion"),
-        "threshold": m.get("threshold"), "holdout": m.get("holdout"),
-        "self_consistency": rel_b.get("self_consistency"),
-        "cross_family": cross[0]["agreement"] if cross else None,
-        "cross_family_kappa": cross[0]["kappa"] if cross else None,
-        "three_level": rel.get("three_level"),
-        "confidence_calibration": m.get("confidence_calibration") or {"ece": None, "brier": None},
-        "cost_per_judgement": m.get("cost_per_judgement"),
-        "run_cost_usd": sum(line["cost_usd"] for line in lines) if lines else None,
-        "backends_compared": {b: {k: v.get(k) for k in ("type", "model", "family", "tpr", "tnr", "kappa",
-                                                          "cost_per_judgement", "labels")}
-                              for b, v in ((st.get("cal") or {}).get("backends") or {}).items()},
-        "recommendation": (st.get("cal") or {}).get("recommendation"),
-        "status": "calibrated" if st.get("calibrated") else "uncalibrated",
-        "status_reasons": st.get("reasons") or [],
+        "quality": {"n": len(quality), "drawn": sum(1 for x in quality if x["counts"]),
+                    "frame": (spec.part("estimand").get("population") or {}).get("frame")
+                    if isinstance(spec.part("estimand").get("population"), dict) else None,
+                    "seed": qs.get("seed"), "oversample": qs.get("oversample"),
+                    "strata": log.get("strata"), "skips": list(log.get("skips") or []),
+                    "refused": [{"id": x["id"], "problems": x["problems"]} for x in quality if x["problems"]]},
+        "bug_finding": {"n": sum(1 for x in statuses if x["pool"] == "bug_finding"),
+                        "coverage": bf.get("coverage")},
+        "clusters": {**cl, "cluster_key": design.get("cluster_key"), "design_effect": deff,
+                     "icc": icc, "design_effect_reason": why},
+        "cases_without_pool": [x["id"] for x in statuses if x["pool"] not in POOLS],
     }
 
 
-def coverage(ev: Evals, g5_ok: bool) -> dict:
-    t = ev.taxonomy()
-    entries = [e.get("id") for e in t.get("entries") or [] if e.get("id")]
-    fms = [f.get("id") for f in ev.failure_modes() if f.get("id")]
-    counts: dict[tuple, int] = defaultdict(int)
-    for c in ev.cases(include_dropped=False):
-        # every mode the case is checked against, including side-effect modes that run on all cases
-        modes = [fm.get("id") for fm in ev.failure_modes_for_case(c)]
-        for e in c.get("taxonomy_entries") or []:
-            for m in modes:
-                counts[(e, m)] += 1
-    # E8 triage: an entry may declare failure modes that cannot occur for it, with a reason.
-    na = {e.get("id"): dict(e.get("not_applicable") or {}) for e in t.get("entries") or [] if e.get("id")}
-    cells = []
-    for e in entries:
-        for m in fms:
-            cell = {"taxonomy_entry": e, "failure_mode": m, "n": counts[(e, m)]}
-            if m in na.get(e, {}):
-                cell["not_applicable"] = na[e][m] or "declared not applicable"
-            cells.append(cell)
-    cells.sort(key=lambda c: (c["n"] > 0 or "not_applicable" in c, c["taxonomy_entry"], c["failure_mode"]))
-    return {"list": "external" if g5_ok else "MISSING",
-            "source": _taxonomy_source(t),
-            "empty_cells": sum(1 for c in cells if c["n"] == 0 and "not_applicable" not in c),
-            "not_applicable_cells": sum(1 for c in cells if "not_applicable" in c),
-            "cells": cells}
+class Side:
+    """One set of runs scored under the current spec, with what the report computes on it: the
+    refusal, the measurement model, the estimate and the per-use-case rows. A comparison and a
+    decision read two sides scored the same way."""
+
+    def __init__(self, ev: Eval, run_ids: list[str], reference: Side | None = None):
+        """`reference`: the baseline side when this side is a candidate; its judges' floors are
+        then read at the reference's rates (measurement.section)."""
+        from .measurement import section
+
+        self.ev = ev
+        self.spec = ev.spec()
+        self.s = Scored(ev, run_ids)
+        self.weights, self.source = use_case_weights(self.spec)
+        self.refused = refusal(ev, self.spec, self.s.manifests)
+        self.meas = section(self.s, self.weights, self.refused,
+                            reference.floor_rates() if reference is not None else None)
+        self.est = estimate(self.s, self.refused, self.weights, self.source, self.meas)
+        self._rows: list[dict] | None = None
+
+    @property
+    def manifests(self) -> list[dict]:
+        return self.s.manifests
+
+    def floor_rates(self) -> dict:
+        """Each judged failure mode's floor rate on these runs, for a candidate to be read at."""
+        return {r["id"]: r.get("floor_rate") for r in self.meas["failure_modes"] if r["type"] == "judge"}
+
+    @property
+    def run_ids(self) -> list[str]:
+        return [m["run_id"] for m in self.s.manifests]
+
+    def rows(self) -> list[dict] | None:
+        if self.refused:
+            return None
+        if self._rows is None:
+            self._rows = use_case_rows(self.s, self.weights, self.meas)
+        return self._rows
 
 
-def _taxonomy_source(t: dict) -> str:
-    src = t.get("source")
-    if not src:
-        return "MISSING"
-    if isinstance(src, dict):
-        return str(src.get("document") or src.get("url") or src.get("path") or "MISSING")
-    return str(src)
+def build(ev: Eval, run_ids: list[str] | None = None, candidate_runs: list[str] | None = None) -> dict:
+    """report.json. With `candidate_runs`, adds the paired comparison against the reported
+    (baseline) runs and decides on the candidate; without, `decision` decides a threshold rule
+    on the reported runs and leaves a paired rule unknown until there is a candidate."""
+    from . import decision as decision_mod
 
-
-def case_rows(ctx: Context) -> list[dict]:
-    by_case: dict[str, list[dict]] = defaultdict(list)
-    for a in ctx.attempts:
-        by_case[a["case_id"]].append(a)
-    rows = []
-    for cid, attempts in sorted(by_case.items()):
-        case = ctx.cases.get(cid) or {}
-        s = case.get("screen") or {}
-        trials = []
-        for a in sorted(attempts, key=lambda a: (a["run_id"], a["trial"], a["attempt"])):
-            lines = ctx.checks_by_attempt.get((a["run_id"], cid, a["trial"], a["attempt"]), [])
-            trials.append({
-                "run": a["run_id"], "trial": a["trial"], "attempt": a["attempt"],
-                "final": a.get("final"), "outcome": a.get("outcome"), "passed": a.get("passed"),
-                "error": a.get("error") or None, "instrument_error": a.get("instrument_error"),
-                "checks": [{"id": line["check_id"], "type": line.get("type"),
-                            "passed": line.get("verdict") if line.get("type") == "judge" else line.get("passed"),
-                            "counted": line.get("counted", True), "score": line.get("score"),
-                            "detail": line.get("detail")} for line in lines],
-                "operational": {k: a.get(k) for k in ("cost_usd", "latency_ms", "tokens_input",
-                                                      "tokens_output", "tokens_cached",
-                                                      "tool_calls", "retries", "killed")},
-                "state_diff": a.get("state_diff"), "trace_ref": a.get("trace_ref"),
-            })
-        prov = case.get("provenance") or {}
-        rows.append({
-            "id": cid, "set": case.get("set"), "category": case.get("category"),
-            "provenance": prov.get("source"), "synthetic": prov.get("synthetic"),
-            "gated": ctx.gated(cid),
-            "screen": {"human_read": s.get("human_read"),
-                       "reference_passes": s.get("reference_passes"),
-                       "donothing_fails": s.get("donothing_fails")},
-            "inputs": case.get("inputs"), "trigger": case.get("trigger"),
-            "start_state": case.get("start_state"),
-            "expected_end_state": case.get("expected_end_state"),
-            "trials": trials,
-        })
-    return rows
-
-
-# ---- gates G1-G14 ---------------------------------------------------------------------------
-
-def _g(gid: str, ok: bool | None, detail: str, blocks: list[str]) -> dict:
-    status = {True: "pass", False: "fail", None: "not_applicable"}[ok]
-    return {"id": gid, "status": status, "detail": detail, "blocks": blocks}
-
-
-def evaluate_gates(ctx: Context) -> list[dict]:
-    ev = ctx.ev
-    gates = []
-
-    # G1: condition record
-    if not ctx.manifests:
-        gates.append(_g("G1", False, "no run to report on", ["report"]))
-    else:
-        probs = [p for m in ctx.manifests for p in manifest_problems(m)]
-        gates.append(_g("G1", not probs, "; ".join(probs) or "condition record complete", ["report"]))
-
-    # G2: k = 1
-    if ctx.k is None:
-        gates.append(_g("G2", None, "no runs", []))
-    else:
-        gates.append(_g("G2", ctx.k > 1, f"k = {ctx.k}", ["improvement", "regression", "drift"]))
-
-    # G3: judges under 60 labels, or not calibrated (TPR/TNR below floor, stale, unmeasured)
-    if not ctx.judges:
-        gates.append(_g("G3", None, "no judge checks", []))
-    else:
-        bad = {cid: st for cid, st in ctx.judges.items() if not st["calibrated"]}
-        detail = "; ".join(f"{cid}: {st['labels']} labels, " + ", ".join(st["reasons"] or ["uncalibrated"])
-                           for cid, st in bad.items())
-        gates.append(_g("G3", not bad, detail or "every judge calibrated on >= 60 labels by TPR/TNR",
-                        [f"check:{cid}" for cid in bad]))
-
-    # G4: a generative judge from the agent's own family doing pairwise or preference grading
-    agent_family = ev.agent().get("model_family")
-    pairwise = {cid: st for cid, st in ctx.judges.items() if st["spec"] and st["spec"].mode == "pairwise"}
-    if not pairwise:
-        gates.append(_g("G4", None, "no pairwise or preference judge in use", []))
-    else:
-        same = []
-        for cid, st in pairwise.items():
-            b = st["spec"].backends.get(st["backend"], {})
-            if (b.get("type") != "systemone" and agent_family and b.get("family") == agent_family
-                    and not st["spec"].meta.get("same_family_justification")):
-                same.append(cid)
-        gates.append(_g("G4", not same, f"same-family generative pairwise judges: {same}" if same else
-                        "pairwise judges are a different family from the agent, or justified",
-                        [f"check:{c}" for c in same]))
-
-    # G5: coverage list
-    tp = taxonomy_problems(ev)
-    gates.append(_g("G5", not tp, "; ".join(tp) or f"external list: {_taxonomy_source(ev.taxonomy())}",
-                    ["coverage"]))
-
-    # G6: quality from the error-finding set
-    qe_cases = [c for c in ctx.cases.values() if c.get("set") == "quality_estimate" and ctx.gated(c["id"])]
-    shares_traced = all(c.get("share_source") in {e.get("id") for e in ev.exports()}
-                        for c in ev.categories())
-    g6_ok = bool(qe_cases) and shares_traced
-    detail = ("quality-estimate set present, weights traced to exports" if g6_ok else
-              "no screened quality-estimate cases" if not qe_cases else
-              "category shares do not trace to an export (share_source)")
-    gates.append(_g("G6", g6_ok, detail + "; error-finding numbers are never called quality",
-                    [] if g6_ok else ["quality"]))
-
-    # G7: comparison without a paired test
-    gates.append(_g("G7", None, "no comparison in this report", []))
-
-    # G8: unscreened cases
-    in_run = {a["case_id"] for a in ctx.attempts if a["case_id"] in ctx.cases}
-    unscreened = sorted(c for c in in_run if not screen_passes(ctx.cases[c].get("screen")))
-    gates.append(_g("G8", not unscreened,
-                    f"{len(unscreened)} unscreened case(s) excluded from gated numbers: "
-                    f"{unscreened[:10]}" if unscreened else "every case in the run passed the screen",
-                    [f"case:{c}" for c in unscreened]))
-
-    # G9: simulated user not reported per simulator
-    sims = {m.get("simulator") for m in ctx.manifests if m.get("simulator")}
-    gates.append(_g("G9", None if not sims else len(sims) == 1,
-                    "no simulated user" if not sims else f"simulators: {sorted(map(str, sims))}",
-                    [] if len(sims) <= 1 else ["aggregate"]))
-
-    # G10: checks relying on the agent's own report
-    declared = [c for fm in ev.failure_modes() for c in fm.get("checks") or []
-                if ev.check_type(c) == "code" and declares_agent_report(ev.code_check_path(c))]
-    sensitive = sorted({c for case in ctx.cases.values()
-                        for c in (case.get("screen") or {}).get("claim_sensitive_checks") or []})
-    bad = sorted(set(declared) | set(sensitive))
-    gates.append(_g("G10", not bad, f"checks that trust the agent's report: {bad}" if bad else
-                    "no check passes on a bare success claim", [f"check:{c}" for c in bad]))
-
-    # G11: "better" while plane B regressed
-    gates.append(_g("G11", None, "no comparison in this report", []))
-
-    # G12: numbers that do not trace to an export or a committed case
-    uncommitted = sorted(c for c in in_run if any(ctx.cases[c]["_path"] in u or u.endswith(ctx.cases[c]["_path"])
-                                                  for u in ctx.untracked))
-    adhoc = sorted({a["case_id"] for a in ctx.attempts if a["case_id"] not in ctx.cases})
-    untraced = [c["id"] for c in ev.categories()
-                if c.get("share_source") not in {e.get("id") for e in ev.exports()}]
-    problems = []
-    if uncommitted:
-        problems.append(f"uncommitted or modified cases: {uncommitted[:10]}")
-    if adhoc:
-        problems.append(f"records for cases not in evals/cases: {adhoc[:10]}")
-    if untraced:
-        problems.append(f"observed shares not traced to an export: {untraced}")
-    gates.append(_g("G12", not problems, "; ".join(problems) or "every number traces to a "
-                    "committed case or an export", [f"case:{c}" for c in uncommitted + adhoc] +
-                    (["quality"] if untraced else [])))
-
-    # G13: retries / operational failures missing or scored
-    g13 = []
-    for a in ctx.attempts:
-        if a.get("outcome") not in (None, "ok") and a.get("passed") is not None:
-            g13.append(f"{a['case_id']} t{a['trial']} a{a['attempt']}: {a['outcome']} scored as correctness")
-    by_trial: dict[tuple, list[int]] = defaultdict(list)
-    for a in ctx.attempts:
-        by_trial[(a["run_id"], a["case_id"], a["trial"])].append(a["attempt"])
-    for key, att in by_trial.items():
-        if sorted(att) != list(range(len(att))):
-            g13.append(f"{key}: attempts {sorted(att)} are not contiguous from 0 (an attempt is missing)")
-    for m in ctx.manifests:
-        from .gates import trial_completeness
-        g13 += trial_completeness(ev, m)
-    gates.append(_g("G13", None if not ctx.manifests else not g13,
-                    "; ".join(g13[:5]) or "every attempt recorded; only ok attempts scored",
-                    ["plane_a", "plane_b"] if g13 else []))
-
-    # G14: the suite's verdict on whole runs not checked against a person's, or below floors (C19)
-    from . import agreement
-    probs = agreement.gate_problems(ev, load_json(agreement.result_path(ev)))
-    gates.append(_g("G14", not probs, "; ".join(probs[:3]) or "the suite agrees with a person on whole runs "
-                    "(C19 floors met; every dev disagreement triaged)", ["validated"] if probs else []))
-    return gates
-
-
-# ---- assembly -----------------------------------------------------------------------------
-
-def build(ev: Evals, run_ids: list[str] | None = None, candidate_runs: list[str] | None = None) -> dict:
-    from . import compare as compare_mod
-    from . import suite
-
-    run_ids = run_ids or default_runs(ev)
-    ctx = Context(ev, run_ids)
-    agent = ev.agent()
-    gates = evaluate_gates(ctx)
-    comparison = (compare_mod.compare(ev, run_ids, candidate_runs) if candidate_runs
-                  else compare_mod.latest_for(ev, run_ids) if run_ids else None)
-    if comparison:
-        gates = [g for g in gates if g["id"] not in ("G7", "G11")]
-        gates += comparison_gates(comparison)
-        gates.sort(key=lambda g: int(g["id"][1:]))
-    status = {g["id"]: g["status"] for g in gates}
-
-    declared_models = dict(agent.get("models") or {})
-    observed = {}
-    for m in ctx.manifests:
-        for site, ids in ((m.get("agent") or {}).get("model_ids_observed") or {}).items():
-            observed.setdefault(site, set()).update(ids)
-    exports = ev.exports()
-    m0 = ctx.manifests[-1] if ctx.manifests else {}
-    costs = [m.get("cost_usd") for m in ctx.manifests if m.get("cost_usd") is not None]
+    spec = ev.spec()
+    run_ids = run_ids if run_ids is not None else default_runs(ev)
+    base = Side(ev, run_ids)
+    cand = Side(ev, candidate_runs, reference=base) if candidate_runs else None
     report = {
         "schema": SCHEMA,
         "generated": now_iso(),
-        "refused": None,
-        "runs": [m["run_id"] for m in ctx.manifests],
-        "agent": {"id": agent.get("id"),
-                  "stable_window_since": (agent.get("stable_window") or {}).get("since"),
-                  "model_ids": declared_models,
-                  "model_ids_observed": {k: sorted(v) for k, v in observed.items()},
-                  "model_family": agent.get("model_family")},
-        "conditions": {
-            "agent_commit": m0.get("agent_commit"), "agent_dirty": m0.get("agent_dirty"),
-            "evals_commit": m0.get("evals_commit"), "evals_dirty": m0.get("evals_dirty"),
-            "harness": m0.get("harness"), "k": ctx.k,
-            "judge_backends": m0.get("judge_backends") or [], "simulator": m0.get("simulator"),
-            "judge_cost_usd": _judge_cost(ctx),
-            "fakes_sha256": m0.get("fakes_sha256"),
-            "cost_usd": sum(costs) if costs else None,
-            "started": min((m.get("started") for m in ctx.manifests), default=None),
-            "finished": max((m.get("finished") or "" for m in ctx.manifests), default=None) or None,
-            "data_exports": [{"id": e.get("id"), "source": e.get("source"),
-                              "window": e.get("window"), "rows": e.get("rows")} for e in exports],
-        },
-        "regime": "offline",
-        "taxonomy": {"name": ev.taxonomy().get("name"),
-                     "source": _taxonomy_source(ev.taxonomy()) if status["G5"] == "pass" else "MISSING",
-                     "read_on": ev.taxonomy().get("read_on"),
-                     "entries": [e.get("id") for e in ev.taxonomy().get("entries") or []]},
-        "sets": {s: {"n": sum(1 for c in ctx.cases.values() if c.get("set") == s and ctx.gated(c["id"]))}
-                 for s in SETS},
-        "categories": None,
-        "checks": check_rows(ctx),
-        "coverage": coverage(ev, status["G5"] == "pass"),
-        "redundancy": suite.redundancy(ev),
-        "comparison": comparison,
-        "agreement": _agreement_summary(ev),
-        "online": None,
-        "validity": _validity(agent),
-        "gates": gates,
-        "cases": None,
-        "next_actions": None,
+        "refused": base.refused,
+        "runs": base.run_ids,
+        "eval": eval_key(spec),
+        "spec": {**spec.as_dict(), "sha": part_hashes(spec, ev)},
+        "estimate": base.est,
+        "use_cases": base.rows(),
+        "design": design_key(base.s),
+        "measurement": base.meas,
+        # the evidence gates, keyed by part, on every run the report reads
+        "gates": evidence.gates(ev, base.manifests + (cand.manifests if cand else []), base.s.cases,
+                                base.s.untracked),
     }
-    report["sets"]["quality_estimate"]["weights_source"] = (
-        "categories.yaml observed_share" if status["G6"] == "pass" else None)
-    report["sets"]["quality_estimate"]["estimate"] = quality_estimate(ctx, status["G6"] == "pass")
-    report["sets"]["error_finding"]["note"] = "error-finding set — not a quality estimate"
-    for s in SETS:  # M7, from this run's within-case variance; M31, the same split as a G-study
-        rates_s = compare_mod.case_rates(ctx, set_name=s)
-        report["sets"][s]["mde_at_80_power"] = compare_mod.mde_from(ctx, rates_s)
-        by_case = defaultdict(list)
-        for a in ctx.finals():
-            if a.get("set") == s and a.get("passed") is not None and ctx.gated(a["case_id"]):
-                by_case[a["case_id"]].append(bool(a["passed"]))
-        report["sets"][s]["variance_components"] = stats.variance_components(list(by_case.values()))
-        report["sets"][s]["dependence"] = dependence(ctx, s)
-    report["coverage"]["authoring_queue"] = suite.authoring_queue(ev, report["coverage"]["cells"])
-
-    if status["G1"] == "fail":
-        report["refused"] = "G1: no condition record; only gates and conditions are reported"
-        return report
-    report["cases"] = case_rows(ctx)
-    report["next_actions"] = None
-    if status["G13"] == "fail":
-        report["refused"] = "G13: attempts missing or operational failures scored; plane A and B numbers withheld"
-        return report
-    report["categories"] = category_rows(ctx)
-    report["next_actions"] = next_actions(ev, report)
+    comparison = decision_mod.comparison(ev, base, cand) if cand else None
+    report["comparison"] = comparison
+    report["decision"] = decision_mod.decide(ev, base, cand, comparison)
     return report
 
 
-def dependence(ctx: Context, set_name: str) -> dict:
-    """§4.3: are outcomes as independent as the intervals assume? Cochran's Q across the
-    baseline's repeats (a shock that hit one repeat), and, when cases carry a cluster key, an
-    over-dispersion test of cases across clusters. Informational."""
-    ordered: dict[str, list[tuple]] = defaultdict(list)
-    for a in ctx.finals():
-        if a.get("set") == set_name and a.get("passed") is not None and ctx.gated(a["case_id"]):
-            ordered[a["case_id"]].append(((ctx.pass_of.get(a["run_id"]) or 0), a["trial"], bool(a["passed"])))
-    trials = {c: [x[2] for x in sorted(v)] for c, v in ordered.items()}
-    keys = _cluster_keys(ctx, list(trials))
-    over = None
-    if keys:
-        groups: dict = {}
-        for (c, v), g in zip(trials.items(), keys, strict=True):
-            groups.setdefault(g if g is not None else ("case", c), []).append(sum(v) / len(v))
-        over = stats.overdispersion_test(list(groups.values()), draws=1_000)
-    return {"cochran_q": stats.cochran_q(list(trials.values()), draws=1_000),
-            "overdispersion": over,
-            "clusters": stats.cluster_summary(keys) if keys else None,
-            "note": None if keys else "cases assumed independent: no case has a cluster key"}
-
-
-def _agreement_summary(ev: Evals) -> dict | None:
-    """C19 in brief: dev and holdout catch and clean pass rates, and how many disagreements."""
-    from . import agreement
-    res = load_json(agreement.result_path(ev))
-    if not res:
-        return None
-    return {"measured_at": res.get("measured_at"), "current": not any("stale" in p for p in
-                                                                      agreement.gate_problems(ev, res)),
-            "dev": res.get("dev"), "holdout": res.get("holdout"),
-            "disagreements": len(res.get("disagreements") or [])}
-
-
-def comparison_gates(c: dict) -> list[dict]:
-    """G7 and G11, decided by a comparison."""
-    if c.get("refused"):
-        g7 = _g("G7", False, c["refused"], ["comparison"])
-    else:
-        g7 = _g("G7", True, f"paired McNemar test; manifests differ only on {c.get('declared_variable') or 'nothing'}",
-                [])
-    regs = ((c.get("operational") or {}).get("regressions_beyond_budget")) or []
-    if c.get("refused") or c.get("verdict") is None:
-        g11 = _g("G11", None, "no verdict", [])
-    elif c["verdict"] == "trade":
-        g11 = _g("G11", False, "correctness improved but plane B regressed beyond budget: reported as a trade",
-                 ["better"])
-    else:
-        g11 = _g("G11", True, "no 'better' verdict with a plane-B regression beyond budget"
-                 + (f" ({len(regs)} budget regressions noted)" if regs else ""), [])
-    return [g7, g11]
-
-
-def next_actions(ev: Evals, r: dict) -> list[dict]:
-    """P13: what to do next, each with the command that clears it."""
-    from . import gates as gates_mod
-
-    acts = []
-    for g in gates_mod.evaluate(ev):
-        if g.status == "unmet" and g.id != "C18":
-            acts.append({"action": f"clear {g.id} {g.command}", "why": (g.problems or [""])[0],
-                         "command": f"skill {g.skill}"})
-    for q in (r.get("coverage") or {}).get("authoring_queue", [])[:5]:
-        acts.append({"action": f"author a case for {q['taxonomy_entry']} × {q['failure_mode']}",
-                     "why": "empty coverage cell (E8)", "command": "skill build (C6)"})
-    for c in r.get("checks") or []:
-        j = c.get("judge")
-        if j and j["status"] != "calibrated":
-            why = "; ".join(j["status_reasons"]) or "uncalibrated"
-            acts.append({"action": f"calibrate judge {c['id']}", "why": why,
-                         "command": f"aot-evals label queue --judge {c['id']}; aot-evals calibrate --judge {c['id']}"})
-    for row in r.get("categories") or []:
-        if row.get("flaky"):
-            acts.append({"action": f"explain {row['flaky']} flaky case(s) in {row['id']}",
-                         "why": "0 < passes < k (M4)", "command": "inspect P9 / P12"})
-        if row["operational"].get("budget_status") == "over":
-            acts.append({"action": f"{row['id']} is over budget",
-                         "why": ", ".join(b["budget"] for b in row["operational"]["budget_breaches"]),
-                         "command": "aot-evals ops"})
-        if row.get("excluded"):
-            acts.append({"action": f"screen {row['excluded']['n_cases']} case(s) in {row['id']}",
-                         "why": row["excluded"]["reason"], "command": "aot-evals screen"})
-    red = r.get("redundancy")
-    if red and red.get("below_threshold"):
-        acts.append({"action": f"prune {len(red['proposal']['prune'])} redundant case(s)",
-                     "why": f"discriminating fraction {red['discriminating_fraction']:.0%} < {red['threshold']:.0%}",
-                     "command": "aot-evals redundancy"})
-    if red is None:
-        acts.append({"action": "run a second agent version", "why": "redundancy needs at least two candidates",
-                     "command": "aot-evals run --purpose candidate --k 5 --variable KIND=VALUE"})
-    return acts
-
-
-def _judge_cost(ctx: Context) -> float | None:
-    costs = [line["cost_usd"] for line in ctx.check_lines
-             if line.get("type") == "judge" and line.get("cost_usd") is not None]
-    return sum(costs) if costs else None
-
-
-def _validity(agent: dict) -> dict:
-    v = agent.get("validity") or {}
-    stages = {k: v.get(k) for k in ("task", "simulator", "judge")}
-    known = [x for x in stages.values() if isinstance(x, (int, float))]
-    return {"stages": stages, "compounded": _prod(known) if known else None}
-
-
-def _prod(xs):
-    out = 1.0
-    for x in xs:
-        out *= x
-    return out
-
-
-def write(ev: Evals, report: dict) -> str:
+def write(ev: Eval, report: dict) -> str:
     path = ev.p("report", "report.json")
     write_json(path, report)
     return str(path)
+
+
+def measured(ev: Eval) -> dict:
+    """What a baseline has measured, for `plan`: θ̂, each use case's μ̂ and cost per trial, and
+    the clusters' design effect. Empty without a baseline run under the current spec."""
+    runs = default_runs(ev)
+    if not runs:
+        return {}
+    r = build(ev, runs)
+    if r["refused"]:
+        return {}
+    out = {"runs": r["runs"], "theta": r["estimate"]["theta"],
+           "design_effect": r["design"]["clusters"]["design_effect"], "use_cases": {}}
+    for row in r["use_cases"] or []:
+        if row["pool"] != "quality":
+            continue
+        out["use_cases"][row["id"]] = {"rate": (row["estimate"] or {}).get("point"),
+                                       "cost_per_trial": row["operational"].get("cost_per_run")}
+    return out
+

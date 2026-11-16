@@ -6,6 +6,70 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+## 2.0.0 — 2026-11-15
+
+Suites from earlier versions of aot-evals aren't read; `/aot-evals:start` offers to rebuild the evals from one.
+
+aot-evals 2.0.0 answers the questions a team asks about its agent: is this change safe to ship,
+can I trust this number, how many cases do I need, is our AI judge good enough to grade with. The
+answers come back in the same terms, with the next step ("not yet: about 40 more cases would show
+it"). Claude does the statistics and says what they mean for your work. The [README](README.md)
+walks through the workflow, and [docs/problems.md](docs/problems.md) shows the twelve traps it keeps
+you out of, each with a worked example.
+
+- **Three roles, working at the same time.** `/aot-evals:start` asks the owner three questions on
+  the first run (what decision the tests drive, which mistakes cost most, what a change must show)
+  and writes a discovery report; after that it says where each eval stands and who has the next
+  step. `/aot-evals:build` is engineering's: wiring, cases, checks, baselines and changes.
+  `/aot-evals:judge` and the grader application (`aot-evals serve`) are for the people who know
+  what good looks like: whole-run labels, rulings, rules for the labeling standard, AI judges. The
+  skills report what the statistics mean for the next step, not how they were computed.
+- **Four parts underneath.** Each eval is written down in one file, `eval.yaml`, as an estimator:
+  the **estimand** (what number, for which decision), the **sampling design** (which cases, drawn
+  how), the **measurement model** (how wrong the grader is) and the **decision rule** (when to act)
+  ([docs/estimators.md](docs/estimators.md)). [docs/method.md](docs/method.md) is the reference for
+  every command, file, field and gate, and [docs/statistics.md](docs/statistics.md) derives the
+  numbers.
+- **The eval spec.** `aot-evals --eval ID init [--component NAME]` creates an eval in
+  `evals/agents/<agent>/<eval>/`, beside the agent's shared sandbox, frames, labeling standard and
+  journal. `aot-evals validate` lists every missing and invalid field with the numbers it blocks;
+  an incomplete eval still runs, and its report nulls what depends on the missing fields.
+- **Estimand.** Use cases with shares and the cost of a failure, and weights (`traffic`, `cost` or
+  stated). The headline is the weighted θ̂, a Hájek estimate with a cluster-aware interval, with the
+  per-use-case table beside it.
+- **Sampling design.** `aot-evals plan` sizes each use case's quality set from the decision rule's
+  power, with each judge's error counted. `aot-evals draw` draws the quality set from a frame of
+  real traces, seeded and stratified, with each case's inclusion probability. The bug-finding set
+  is written by hand against a coverage list and never enters a rate.
+- **Measurement model.** Catch rate and clean pass rate, each with its interval, lower bound and
+  labels per kind. A judge counts when its errors cost no more cases than `max_inflation` allows,
+  read at the baseline's failure rate for a candidate. Rogan–Gladen and prediction-powered
+  corrections feed the estimate. The eval is held to people's labels, with floors read through a
+  margin and a label count fixed before looking. `trials: auto` takes k from the baseline's
+  variance split.
+- **Decision rules.** Superiority, non-inferiority and threshold tests per gate (the headline and
+  each use case gate), with an exact bound for rates and sign-flip tests per cluster for paired
+  comparisons. Each gate is `pass`, `fail`, `insufficient` (with the cases that would decide it) or
+  `unknown` with its reason; budgets make a passing change a `trade`, and under fixed looks a change
+  is decided once. `compare` refuses runs made under another estimand, design or measurement, and a
+  decision-rule change that wasn't on record first.
+- **Several evals per agent.** agent.yaml's `components` lists each subagent, route and step; a
+  component gets an eval of its own only at a context boundary and when it ships on its own.
+  `aot-evals --eval ID handoffs` extracts a component eval's frame from the end-to-end traces, and
+  a component change also has to pass the end-to-end eval (`also_requires`).
+- **Files.** `report.json` has schema `aot-evals/report@2`, with evidence and measurement gates
+  keyed by part; runs write `aot-evals/run-manifest@2`. `aot-evals status` gives each eval's trust
+  (untested, provisional, trusted), what changed since its baseline and the next step.
+- **The online store** (`examples/store/`, `aot-evals demo`): a support agent and its refund
+  subagent with an eval each. The demo runs both baselines, then a subagent change that improves
+  its own eval and breaks refunds end to end.
+- **The published method** (`evals.json`, schema `aot-evals/site@2`, and the method zip) is built
+  from docs/method.md, the three guiding documents and the store example.
+
+Not computed yet: sequential looks and the reusable holdout, interval estimates for budgets, a
+cost-based judge threshold, drift detection, and a family check on pairwise judges
+([docs/method.md §13](docs/method.md#13-not-computed-yet)).
+
 ## 1.1.0 — 2026-11-11
 
 - **The statistics behind the method** ([docs/statistics.md](docs/statistics.md)): for each decision

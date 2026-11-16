@@ -1,4 +1,4 @@
-# C1 inventory: the agent under test. Fill every field; `aot-evals status` names what is missing.
+# The agent under test. Fill every field; `aot-evals status` names what is missing.
 # Record each claim as confirmed or inferred, with its source. When config and runtime disagree,
 # trust the traces.
 
@@ -11,16 +11,25 @@ tools: []               # - {name: create_ticket, kind: write, credentials: [TIC
 harness:                # {name: <framework or runtime>, version: <version>}
 models: {}              # model actually used per call site, e.g. {main: claude-sonnet-5-5, router: claude-haiku-4-5}
 models_evidence:        # how `models` was observed (trace field, log line), not just what config says
-model_family:           # family of the main model, e.g. anthropic; judges must differ (G4)
+model_family:           # family of the main model, e.g. anthropic; judges must differ
 version_history: []     # - {date: 2026-08-01, change: "prompt: added refund policy", kind: prompt, source: <commit|ticket>}
 stable_window:
   since:                # date of the last behaviour-changing edit
   evidence:             # how that was established (commit log, runtime records, owner confirmed on <date>)
-validity:               # optional (M25): stated validity of each stage, 0-1, if known
-  task:
-  simulator:
-  judge:
-simulator:              # id of the simulated user, if any (G9); null when users are scripted
+
+# The parts of the system and their context boundaries (estimators §1, rule 3): one entry per
+# subagent, route and shared step. Each says where it is graded (`aot-evals components`). An agent
+# with one context writes `components: []`.
+# components:
+#   - id: refund-subagent
+#     kind: subagent        # subagent: gets a handoff the orchestrator writes | route: gets the user's
+#                           #   request as sent, picked by a router | step: runs in the orchestrator's context
+#     context: own          # own: starts from its handoff (a context boundary) | shared
+#     called_by: the orchestrator's refund route
+#     model: claude-haiku-5-5
+#     owner: refunds team
+#     ships_separately: true   # its own prompt, model or owner, changed on its own schedule
+#     use_case: refund      # the end-to-end use case whose requests reach it
 
 # How to invoke it: the agent contract (references/agent-contract.md in the plugin).
 invoke:

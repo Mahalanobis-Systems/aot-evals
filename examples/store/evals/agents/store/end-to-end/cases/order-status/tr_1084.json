@@ -1,0 +1,138 @@
+{
+  "id": "tr_1084",
+  "use_case": "order-status",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 9,
+    "inclusion_prob": 0.08571428571428572
+  },
+  "template": "order-status-t2",
+  "cluster": "order-status-t2",
+  "trigger": {
+    "text": "When will order A1169 arrive?",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0085",
+    "today": "2026-10-18"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1169": {
+        "address": "86 Cedar Court",
+        "customer": "c-0085",
+        "delivered": null,
+        "eta": "2026-10-22",
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "processing"
+      },
+      "A1170": {
+        "address": "13 Bay Street",
+        "customer": "c-0085",
+        "delivered": "2026-08-05",
+        "eta": null,
+        "items": [
+          {
+            "name": "kettle",
+            "price": 34.5,
+            "sku": "SKU-102"
+          },
+          {
+            "name": "chef's knife",
+            "price": 42.0,
+            "sku": "SKU-106"
+          },
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Order A1169 is processing; it should arrive on 2026-10-22.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1169": {
+          "address": "86 Cedar Court",
+          "customer": "c-0085",
+          "delivered": null,
+          "eta": "2026-10-22",
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "processing"
+        },
+        "A1170": {
+          "address": "13 Bay Street",
+          "customer": "c-0085",
+          "delivered": "2026-08-05",
+          "eta": null,
+          "items": [
+            {
+              "name": "kettle",
+              "price": 34.5,
+              "sku": "SKU-102"
+            },
+            {
+              "name": "chef's knife",
+              "price": 42.0,
+              "sku": "SKU-106"
+            },
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1084",
+    "synthetic": false
+  }
+}

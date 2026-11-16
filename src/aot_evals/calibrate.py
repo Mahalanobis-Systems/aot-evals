@@ -1,19 +1,21 @@
-"""C10 `calibrate` (E3) and E5 backend comparison: is each judge right, measured on human labels?
+"""`calibrate` (estimators §5, docs/method.md): is each judge right, measured on human labels?
 
 For every backend of a judge, on the same labels:
-- TPR = P(judge passes | human says pass) and TNR = P(judge fails | human says fail), separately,
-  with Wilson intervals. Raw agreement is never reported: an always-pass judge agrees 95% of the
-  time at a 95% base rate (M8).
+- the **catch rate** (of the labels a person failed, the share the judge failed) and the **clean
+  pass rate** (of the labels a person passed, the share the judge passed), each with its Wilson
+  interval, its one-sided lower bound and its count of labels of that kind, J, and the inflation
+  factor the lower bounds imply at a few failure rates. Raw agreement is never reported: an
+  always-pass judge agrees 95% of the time at a 95% base rate (M8).
 - Cohen's kappa, the confusion matrix, cost and latency per judgement, errors.
 - For a backend that returns a probability (System One), the decision threshold is chosen on the
-  labels, maximising TPR + TNR. The reported TPR/TNR use out-of-fold predictions (5-fold,
-  stratified), so the threshold is never scored on the labels it was fitted to. ECE and Brier
+  labels, maximising catch + clean (Youden's J). The reported rates use out-of-fold predictions
+  (5-fold, stratified), so the threshold is never scored on the labels it was fitted to. ECE and Brier
   score measure whether its probabilities mean anything; it is not trusted until they do.
 - The holdout split is reported separately.
 
-A judge is `calibrated` when its primary backend has >= 60 labels with both classes present and
-TPR and TNR at or above the judge's floors (`min_tpr`, `min_tnr`, default 0.75). Otherwise it
-may run but is greyed and excluded from headline numbers (G3).
+A judge is `calibrated` when its primary backend has labels of both kinds and a verdict on each.
+Whether it may count is the eval's floor, `measurement.max_inflation` at the eval's failure rate
+(`measurement.judge_floor`, read by `report`), since it depends on the eval's rate.
 
 Judgements are cached in `<check-id>.judgements.jsonl` (committed) by (backend, model, the
 judge's hash with only that backend's config, item), so re-measuring after a label change, or
@@ -30,22 +32,21 @@ from pathlib import Path
 from . import stats
 from .judges import Judgement, JudgeSpec, is_rate_limit, judge
 from .labels import labels_sha, load_labels
-from .repo import Evals
+from .repo import Eval
 from .util import append_jsonl, load_json, now_iso, read_jsonl, write_json
 
-MIN_LABELS = 60
 FOLDS = 5
 
 
-def judgements_path(ev: Evals, spec: JudgeSpec) -> Path:
+def judgements_path(ev: Eval, spec: JudgeSpec) -> Path:
     return ev.p("checks", "judge", f"{spec.id}.judgements.jsonl")
 
 
-def calibration_path(ev: Evals, spec: JudgeSpec) -> Path:
+def calibration_path(ev: Eval, spec: JudgeSpec) -> Path:
     return ev.p("checks", "judge", f"{spec.id}.calibration.json")
 
 
-def load_calibration(ev: Evals, spec: JudgeSpec) -> dict | None:
+def load_calibration(ev: Eval, spec: JudgeSpec) -> dict | None:
     return load_json(calibration_path(ev, spec))
 
 
@@ -54,7 +55,7 @@ def _cache_key(spec: JudgeSpec, backend: str, iid: str, run: int = 0) -> str:
     return f"{backend}|{model}|{spec.backend_sha(backend)}|{iid}|{run}"
 
 
-def cached(ev: Evals, spec: JudgeSpec) -> dict[str, dict]:
+def cached(ev: Eval, spec: JudgeSpec) -> dict[str, dict]:
     return {r["key"]: r for r in read_jsonl(judgements_path(ev, spec)) if r.get("score") is not None}
 
 
@@ -64,7 +65,7 @@ def group_errors(judged: dict[str, dict]) -> list[tuple[str, int]]:
     return counts.most_common()
 
 
-def get_judgements(ev: Evals, spec: JudgeSpec, backend: str, labels: list[dict], *, run: int = 0,
+def get_judgements(ev: Eval, spec: JudgeSpec, backend: str, labels: list[dict], *, run: int = 0,
                    call: bool = True, log=print) -> dict[str, dict]:
     """item_id -> judgement dict for one backend; calls the backend only for uncached items."""
     cache = cached(ev, spec)
@@ -113,7 +114,7 @@ def cap_warnings(spec: JudgeSpec, pending: dict[str, int]) -> list[str]:
     return out
 
 
-def pending_calls(ev: Evals, spec: JudgeSpec, backends: list[str]) -> dict[str, int]:
+def pending_calls(ev: Eval, spec: JudgeSpec, backends: list[str]) -> dict[str, int]:
     labels = load_labels(ev, spec)
     cache = cached(ev, spec)
     return {b: sum(1 for r in labels if _cache_key(spec, b, r["item_id"]) not in cache) for b in backends}
@@ -133,14 +134,14 @@ def confusion(pairs: list[tuple[bool, bool]]) -> dict:
 def rates(cm: dict) -> dict:
     pos, neg = cm["tp"] + cm["fn"], cm["tn"] + cm["fp"]
     n = pos + neg
-    tpr = cm["tp"] / pos if pos else None
-    tnr = cm["tn"] / neg if neg else None
+    clean = cm["tp"] / pos if pos else None
+    catch = cm["tn"] / neg if neg else None
     kappa = None
     if n:
         po = (cm["tp"] + cm["tn"]) / n
         pe = ((cm["tp"] + cm["fp"]) * pos + (cm["fn"] + cm["tn"]) * neg) / (n * n)
         kappa = (po - pe) / (1 - pe) if pe < 1 else None
-    return {"tpr": tpr, "tpr_ci": _ci(cm["tp"], pos), "tnr": tnr, "tnr_ci": _ci(cm["tn"], neg),
+    return {"catch": catch, "catch_ci": _ci(cm["tn"], neg), "clean": clean, "clean_ci": _ci(cm["tp"], pos),
             "kappa": kappa, "n": n, "n_pass": pos, "n_fail": neg}
 
 
@@ -150,7 +151,7 @@ def _ci(k, n):
 
 
 def best_threshold(scored: list[tuple[float, bool]]) -> float:
-    """Threshold maximising TPR + TNR (Youden's J); ties go to the one nearest 0.5."""
+    """Threshold maximising catch + clean (Youden's J); ties go to the one nearest 0.5."""
     cands = sorted({s for s, _ in scored} | {0.5})
     best, best_key = 0.5, None
     pos = sum(1 for _, h in scored if h)
@@ -209,7 +210,7 @@ def measure_backend(spec: JudgeSpec, backend: str, labels: list[dict], judged: d
             for r in fold:
                 oof[r["item_id"]] = score_of(r) >= t
         threshold = best_threshold([(score_of(r), r["label"]) for r in dev])
-        method = f"threshold chosen on dev labels; TPR/TNR from {FOLDS}-fold out-of-fold predictions"
+        method = f"threshold chosen on dev labels; catch and clean from {FOLDS}-fold out-of-fold predictions"
     else:
         threshold = 0.5 if not probabilistic else best_threshold([(score_of(r), r["label"]) for r in dev])
         oof = {r["item_id"]: score_of(r) >= threshold for r in dev}
@@ -222,49 +223,67 @@ def measure_backend(spec: JudgeSpec, backend: str, labels: list[dict], judged: d
     costs = [judged[r["item_id"]].get("cost_usd") for r in items if judged[r["item_id"]].get("cost_usd") is not None]
     lats = [judged[r["item_id"]].get("latency_ms") for r in items if judged[r["item_id"]].get("latency_ms") is not None]
     cfg = spec.backends[backend]
-    r_all = rates(cm_all)
-    # M35, informational: the floors read the point estimate; this says whether the labels behind
-    # each rate are enough to trust it (docs/statistics.md §5)
-    evidence = {"tpr": stats.floor_evidence(cm_all["tp"], r_all["n_pass"], spec.min_tpr),
-                "tnr": stats.floor_evidence(cm_all["tn"], r_all["n_fail"], spec.min_tnr)}
     return {
+        **catch_clean(cm_all),
         "backend": backend, "type": cfg.get("type"), "model": cfg.get("model"), "family": cfg.get("family"),
         "labels": len(items), "errors": errors, "probabilistic": probabilistic,
         "error_messages": [[msg, n] for msg, n in group_errors(
             {r["item_id"]: judged.get(r["item_id"], {"score": None, "error": "not judged"}) for r in labels})],
         "threshold": threshold if probabilistic else None, "method": method,
-        **r_all, "confusion": cm_all,
+        **rates(cm_all), "confusion": cm_all,
         "holdout": {**rates(cm_hold), "confusion": cm_hold},
-        "evidence": evidence,
         "confidence_calibration": {"ece": ece, "brier": brier},
         "cost_per_judgement": sum(costs) / len(costs) if costs else None,
         "latency_ms_mean": sum(lats) / len(lats) if lats else None,
     }
 
 
-def status_of(spec: JudgeSpec, m: dict | None) -> tuple[str, list[str]]:
+# The failure rates at which a calibration states its inflation factor (statistics §3.3's table).
+INFLATION_RATES = (0.5, 0.2, 0.1, 0.03)
+
+
+def catch_clean(cm: dict, alpha: float = 0.05) -> dict:
+    """A confusion matrix (positive class = pass) as the catch rate
+    (tn of the runs a person failed) and the clean pass rate (tp of the runs a person passed),
+    each with a two-sided 95% Wilson interval and a one-sided lower bound at `alpha`, the count
+    of labels of each kind, J = catch + clean - 1, and the inflation factor the lower bounds
+    imply at INFLATION_RATES (statistics §3.2-§3.4). Unknown values are None."""
+    n_fail, n_pass = cm["tn"] + cm["fp"], cm["tp"] + cm["fn"]
+    z1 = stats._z(1 - alpha)
+    catch = cm["tn"] / n_fail if n_fail else None
+    clean = cm["tp"] / n_pass if n_pass else None
+    lo_c = stats.wilson(cm["tn"], n_fail, z1)[0] if n_fail else None
+    lo_p = stats.wilson(cm["tp"], n_pass, z1)[0] if n_pass else None
+    j = catch + clean - 1 if catch is not None and clean is not None else None
+    infl = {str(p): (stats.judge_inflation(p, lo_c, lo_p) if lo_c is not None and lo_p is not None else None)
+            for p in INFLATION_RATES}
+    return {"catch": catch, "catch_ci": _ci(cm["tn"], n_fail), "catch_lower": lo_c, "catch_k": cm["tn"],
+            "clean": clean, "clean_ci": _ci(cm["tp"], n_pass), "clean_lower": lo_p, "clean_k": cm["tp"],
+            "labels_per_kind": {"fail": n_fail, "pass": n_pass}, "j": j,
+            "lower_bound": {"alpha": alpha, "sides": "one-sided Wilson"},
+            "inflation_at_lower_bounds": infl}
+
+
+def status_of(m: dict | None) -> tuple[str, list[str]]:
+    """No fixed floors: `calibrated` once the primary backend has labels of both kinds and a
+    verdict on each; the eval's max_inflation decides whether it counts."""
     if m is None:
         return "uncalibrated", ["primary backend not measured"]
     why = []
-    if m["labels"] < MIN_LABELS:
-        why.append(f"{m['labels']} labels < {MIN_LABELS}")
     if not m["n_pass"] or not m["n_fail"]:
-        why.append("labels need both passing and failing items")
-    if m["tpr"] is not None and m["tpr"] < spec.min_tpr:
-        why.append(f"TPR {m['tpr']:.2f} < {spec.min_tpr}")
-    if m["tnr"] is not None and m["tnr"] < spec.min_tnr:
-        why.append(f"TNR {m['tnr']:.2f} < {spec.min_tnr}")
+        why.append("labels need both kinds: runs a person failed (for the catch rate) and runs a "
+                   "person passed (for the clean pass rate)")
     if m["errors"]:
         top = (m.get("error_messages") or [[None]])[0][0]
         why.append(f"{m['errors']} item(s) without a verdict" + (f" (most: {top})" if top else ""))
     return ("uncalibrated" if why else "calibrated"), why
 
 
-def calibrate(ev: Evals, spec: JudgeSpec, backends: list[str] | None = None, *, call: bool = True,
+def calibrate(ev: Eval, spec: JudgeSpec, backends: list[str] | None = None, *, call: bool = True,
               log=print) -> dict:
     labels = load_labels(ev, spec)
     if not labels:
-        raise ValueError(f"judge {spec.id} has no labels (C9: aot-evals label queue/import)")
+        raise ValueError(f"judge {spec.id} has no labels (aot-evals label queue, then label import)")
     backends = backends or list(spec.backends)
     prior = load_calibration(ev, spec) or {}
     # Keep earlier backend measurements only if neither the judge nor the labels changed since.
@@ -273,67 +292,60 @@ def calibrate(ev: Evals, spec: JudgeSpec, backends: list[str] | None = None, *, 
         judged = get_judgements(ev, spec, b, labels, call=call, log=log)
         results[b] = measure_backend(spec, b, labels, judged)
     primary = spec.primary
-    st, why = status_of(spec, results.get(primary))
+    st, why = status_of(results.get(primary))
     record = {
         "judge": spec.id, "version": spec.version, "judge_sha": spec.sha(),
         "labels_sha": labels_sha(ev, spec), "labels": len(labels), "measured_at": now_iso(),
-        "primary": primary, "status": st, "status_reasons": why,
-        "min_tpr": spec.min_tpr, "min_tnr": spec.min_tnr, "backends": results,
-        "recommendation": recommend(spec, results),
+        "primary": primary, "status": st, "status_reasons": why, "backends": results,
+        "floor": ("measurement.max_inflation at the eval's failure rate, from the lower bounds on "
+                  "catch and clean (docs/method.md)"),
+        "recommendation": recommend(results),
     }
     write_json(calibration_path(ev, spec), record)
     return record
 
 
-def recommend(spec: JudgeSpec, results: dict) -> dict | None:
-    """E5: the cheapest backend that clears both floors; ties to the higher TPR + TNR."""
-    ok = [m for m in results.values() if m["tpr"] is not None and m["tnr"] is not None
-          and m["tpr"] >= spec.min_tpr and m["tnr"] >= spec.min_tnr and m["labels"] >= MIN_LABELS]
+def recommend(results: dict) -> dict | None:
+    """The backend whose lower bounds cost the fewest cases at a 3% failure rate (the rare,
+    costly failures a judge floor is set for, statistics §3.3); ties to the cheaper one."""
+    ok = [m for m in results.values()
+          if (m.get("inflation_at_lower_bounds") or {}).get("0.03") is not None]
     if not ok:
         return None
-    best = min(ok, key=lambda m: (m["cost_per_judgement"] if m["cost_per_judgement"] is not None else float("inf"),
-                                  -(m["tpr"] + m["tnr"])))
+    best = min(ok, key=lambda m: (m["inflation_at_lower_bounds"]["0.03"],
+                                  m["cost_per_judgement"] if m["cost_per_judgement"] is not None else float("inf")))
     return {"backend": best["backend"],
-            "why": "cheapest backend that clears both floors" + (
-                "" if best["cost_per_judgement"] is not None else " (cost unknown for some backends)")}
+            "why": f"costs the fewest cases at a 3% failure rate ({best['inflation_at_lower_bounds']['0.03']:.2f}x "
+                   "a code check, from its lower bounds)"}
 
 
-def is_current(ev: Evals, spec: JudgeSpec, cal: dict | None) -> bool:
+def is_current(ev: Eval, spec: JudgeSpec, cal: dict | None) -> bool:
     return bool(cal) and cal.get("judge_sha") == spec.sha() and cal.get("labels_sha") == labels_sha(ev, spec)
 
 
 def render(record: dict) -> str:
-    def f(v, pct=True):
-        if v is None:
-            return "-"
-        return f"{100 * v:.1f}%" if pct else f"{v:.3f}"
+    """calibrate's summary, in catch and clean pass rates."""
+    def f(v):
+        return "-" if v is None else f"{100 * v:.1f}%"
 
     def ci(c):
         return f"[{100 * c[0]:.0f}, {100 * c[1]:.0f}]" if c else ""
 
-    lines = [f"C10 calibrate {record['judge']} v{record['version']}: {record['labels']} labels — "
-             f"primary {record['primary']}: {record['status'].upper()}"
+    lines = [f"calibrate {record['judge']} v{record['version']}: {record['labels']} labels; primary "
+             f"{record['primary']}: {record['status']}"
              + (f" ({'; '.join(record['status_reasons'])})" if record["status_reasons"] else ""),
-             f"  {'backend':<12} {'family':<12} {'TPR':>7} {'95% CI':>10} {'TNR':>7} {'95% CI':>10} "
-             f"{'kappa':>6} {'thresh':>7} {'ECE':>6} {'$/judgement':>12} {'ms':>6} {'err':>4}"]
+             f"  {'backend':<12} {'catch':>7} {'95% CI':>10} {'fail lbl':>8} {'clean':>7} {'95% CI':>10} "
+             f"{'pass lbl':>8} {'J':>6}  inflation at 50/20/10/3% (lower bounds)"]
     for b, m in record["backends"].items():
-        cost = "-" if m["cost_per_judgement"] is None else f"${m['cost_per_judgement']:.5f}"
-        ms = "-" if m["latency_ms_mean"] is None else f"{m['latency_ms_mean']:.1f}"
-        lines.append(f"  {b:<12} {str(m['family']):<12} {f(m['tpr']):>7} {ci(m['tpr_ci']):>10} "
-                     f"{f(m['tnr']):>7} {ci(m['tnr_ci']):>10} {f(m['kappa'], False):>6} "
-                     f"{f(m['threshold'], False):>7} {f(m['confidence_calibration']['ece'], False):>6} "
-                     f"{cost:>12} {ms:>6} {m['errors']:>4}")
-        c, h = m["confusion"], m["holdout"]
-        lines.append(f"  {'':<12} all: tp {c['tp']} fn {c['fn']} fp {c['fp']} tn {c['tn']}; "
-                     f"holdout (n={h['n']}): TPR {f(h['tpr'])} TNR {f(h['tnr'])}")
-        for name, kind in (("tpr", "passing"), ("tnr", "failing")):
-            e = (m.get("evidence") or {}).get(name)
-            if e and e["meets_point"] and not e["meets_margin"]:
-                lines.append(f"  {'':<12} evidence: {name.upper()} {f(e['point'])} on {e['n']} {kind} labels clears "
-                             f"its floor, but its 95% lower bound is {f(e['lower'])}; about {e['n_needed']} {kind} "
-                             f"labels would put it within {100 * e['margin']:.0f} pts of the floor")
+        n = m.get("labels_per_kind") or {}
+        infl = m.get("inflation_at_lower_bounds") or {}
+        row = " / ".join("-" if infl.get(str(p)) is None else f"{infl[str(p)]:.1f}x" for p in INFLATION_RATES)
+        j = "-" if m.get("j") is None else f"{m['j']:.2f}"
+        lines.append(f"  {b:<12} {f(m.get('catch')):>7} {ci(m.get('catch_ci')):>10} {n.get('fail', 0):>8} "
+                     f"{f(m.get('clean')):>7} {ci(m.get('clean_ci')):>10} {n.get('pass', 0):>8} {j:>6}  {row}")
     rec = record.get("recommendation")
-    lines.append(f"  E5: {'use ' + rec['backend'] + ' — ' + rec['why'] if rec else 'no backend clears both floors'}")
+    lines.append("  floor: " + record["floor"])
+    lines.append(f"  use {rec['backend']}: {rec['why']}" if rec else "  no backend measured on both kinds")
     lines.append("  (raw agreement is not reported: it hides an always-pass judge)")
     return "\n".join(lines)
 

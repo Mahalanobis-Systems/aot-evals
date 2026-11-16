@@ -29,43 +29,59 @@ LINK = re.compile(r"\]\(([^)\s]+)\)")
 @pytest.fixture(scope="module")
 def built(tmp_path_factory):
     out = tmp_path_factory.mktemp("site")
-    build_site.main(["--out", str(out), "--today", "2026-11-02"])
+    build_site.main(["--out", str(out), "--today", "2026-11-14"])
     doc = json.loads((out / "evals.json").read_text())
     return out, doc
 
 
-def test_every_command_gate_measurement_experiment_and_panel_is_parsed(built):
+def test_the_parts_roles_commands_fields_keys_and_gates_are_parsed(built):
     _, doc = built
-    assert [c["id"] for c in doc["commands"]] == [f"C{i}" for i in [*range(13), 19, *range(13, 19)]]
-    assert [g["id"] for g in doc["gates"]] == [f"G{i}" for i in range(1, 15)]
-    assert {m["id"] for m in doc["measurements"]} == {f"M{i}" for i in range(1, 38)}
-    assert {e["id"] for e in doc["experiments"]} == {f"E{i}" for i in range(1, 17)}
-    assert [p["id"] for p in doc["panels"]] == [f"P{i}" for i in range(14)]
-    assert [p["id"] for p in doc["planes"]] == ["A", "B", "C"]
-    for rows, fields in [(doc["commands"], ("command", "does", "exit_gate")), (doc["gates"], ("condition", "refuses")),
-                         (doc["measurements"], ("name", "plane", "definition", "use")),
-                         (doc["experiments"], ("name", "design", "produces")), (doc["panels"], ("name", "shows"))]:
+    assert [p["part"] for p in doc["parts"]] == ["Estimand", "Sampling design", "Measurement model", "Decision rule"]
+    assert [r["role"] for r in doc["roles"]] == ["The owner", "Engineering", "Graders"]
+    assert "phases" not in doc
+    assert len(doc["principles"]) == 9 and all(p["title"] for p in doc["principles"])
+    for rows, fields in [(doc["commands"], ("command", "what_it_does")), (doc["gates"], ("part", "id", "fails_when")),
+                         (doc["spec_fields"], ("field", "part", "required")), (doc["report_keys"], ("key", "holds"))]:
+        assert rows
         for row in rows:
             assert all(row[f] for f in fields), row
-    assert len(doc["principles"]) == 9 and all(p["title"] for p in doc["principles"])
-    assert [s["number"] for s in doc["method"]["sections"]] == list(range(1, 11))
+    assert {g["id"] for g in doc["gates"]} >= {"manifest", "trials_complete", "screened", "committed",
+                                               "coverage_list", "independent_reference", "k", "judge_floor",
+                                               "people_floor"}
+    numbers = [s["number"] for s in doc["method"]["sections"]]
+    assert numbers == list(range(1, len(numbers) + 1))
 
 
-def test_guidance_only_items_are_flagged_and_their_mark_dropped(built):
+def test_the_commands_table_names_every_command_the_cli_has(built):
     _, doc = built
-    flagged = {r["id"] for key in ("commands", "measurements", "experiments", "panels") for r in doc[key]
-               if r["guidance_only"]}
-    assert {"C16", "C17", "M17", "M23", "M27", "M28", "E7", "E11", "E12", "E13", "P10", "P11"} == flagged
-    assert not any("†" in r["id"] for key in ("measurements", "experiments", "panels") for r in doc[key])
+    cli = (ROOT / "src" / "aot_evals" / "cli.py").read_text()
+    subcommands = set(re.findall(r'sub\.add_parser\("([\w-]+)"', cli))
+    assert {c["name"] for c in doc["commands"]} == subcommands
+    gone = {"checkpoint", "redundancy", "allocate"}
+    assert not gone & subcommands
+    assert not any(re.search(r"\b(checkpoint|redundancy|allocate|status --gates|report --html)\b", c["command"])
+                   for c in doc["commands"])
+
+
+def test_the_guiding_documents_terms_rules_and_example_are_whole(built):
+    _, doc = built
+    assert set(doc["docs"]) == {"estimators", "problems", "statistics"}
+    assert all(d["sections"] for d in doc["docs"].values())
+    terms = {t["term"] for t in doc["terms"]}
+    assert {"use case", "pool", "coverage", "plan", "catch rate", "clean pass rate"} <= terms
+    assert [r["number"] for r in doc["rules"]] == list(range(1, 28))
+    paths = {f["path"] for f in doc["example"]["files"]}
+    assert "examples/store/evals/agents/store/refund-subagent/eval.yaml" in paths
 
 
 def test_the_catalogs_and_the_release_are_whole(built):
     _, doc = built
-    assert doc["schema"] == "aot-evals/site@1"
+    assert doc["schema"] == "aot-evals/site@2"
     assert doc["version"] == build_site.version()
     assert doc["benchmarks"]["entries"] == benchmarks.load()
     assert doc["situations"] == benchmarks.situations()
     assert {s["name"] for s in doc["plugin"]["skills"]} == {p.name for p in (ROOT / "skills").iterdir() if p.is_dir()}
+    assert {s["name"] for s in doc["plugin"]["skills"]} == {"start", "build", "judge", "report"}
     tag = build_site.tag_for(doc["version"])
     assert doc["download"]["url"].endswith(f"/releases/download/{tag}/aot-evals-method-{doc['version']}.zip")
 
@@ -76,7 +92,7 @@ def test_markdown_links_are_absolute_or_anchors(built):
     for target in LINK.findall(text):
         assert target.startswith(("https://", "#")), target
     tag = build_site.tag_for(doc["version"])
-    assert f"https://github.com/Mahalanobis-Systems/aot-evals/blob/{tag}/references/benchmarks.md" in text
+    assert f"https://github.com/Mahalanobis-Systems/aot-evals/blob/{tag}/references/agent-contract.md" in text
 
 
 def test_the_zip_rebuilds_byte_for_byte_and_its_links_resolve(built, tmp_path):
@@ -88,9 +104,12 @@ def test_the_zip_rebuilds_byte_for_byte_and_its_links_resolve(built, tmp_path):
     z = zipfile.ZipFile(io.BytesIO((out / name).read_bytes()))
     top = f"aot-evals-method-{doc['version']}/"
     names = set(z.namelist())
-    for must in ("README.md", "LICENSE", "docs/method.md", "references/benchmarks.yaml", "templates/case.json"):
+    for must in ("README.md", "LICENSE", "docs/method.md", "docs/estimators.md", "docs/problems.md",
+                 "docs/statistics.md", "examples/store/README.md", "references/benchmarks.yaml",
+                 "templates/case.json"):
         assert top + must in names
     assert not any("__pycache__" in n or n.endswith(".pyc") for n in names)
+    assert not any("/references/process/" in n for n in names)
     for n in names:
         if not n.endswith(".md"):
             continue
@@ -98,7 +117,8 @@ def test_the_zip_rebuilds_byte_for_byte_and_its_links_resolve(built, tmp_path):
             if target.startswith(("http://", "https://", "mailto:", "#")):
                 continue
             resolved = _normalize(f"{Path(n).parent.as_posix()}/{target.partition('#')[0]}")
-            assert resolved in names, f"{n} links to {target}, which is not in the zip"
+            assert resolved in names or resolved + "/README.md" in names, \
+                f"{n} links to {target}, which is not in the zip"
 
 
 def _normalize(path: str) -> str:
@@ -108,7 +128,7 @@ def _normalize(path: str) -> str:
             parts.pop()
         elif p not in ("", "."):
             parts.append(p)
-    return "/".join(parts)
+    return "/".join(parts).rstrip("/")
 
 
 def test_a_broken_table_fails_the_build():
@@ -116,3 +136,8 @@ def test_a_broken_table_fails_the_build():
         build_site.table("| id | Condition | Refuses |\n|---|---|---|\n| G1 | only two |\n", "test")
     with pytest.raises(ValueError, match="no table"):
         build_site.table("no table here", "test")
+
+
+def test_an_escaped_pipe_stays_inside_its_cell():
+    rows = build_site.table("| Command | Does |\n|---|---|\n| `replay run\\|seed` | acts |\n", "test")
+    assert rows == [{"command": "`replay run|seed`", "does": "acts"}]

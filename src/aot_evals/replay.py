@@ -16,7 +16,7 @@ built after the fact, its recorded runs can still be graded through the ordinary
 
 and `records/<case-id>.start.json`, if present, the world before it (otherwise the case's
 `start_state`). Trials come from the run's `--k`: trial n replays `.t<n>`. A missing record is
-`no_output`, an operational outcome, never a correctness failure (G13). The world between hooks
+`no_output`, an operational outcome, never a correctness failure. The world between hooks
 is kept in `records/.replay-state.json`, so runs over one records directory must not overlap.
 """
 

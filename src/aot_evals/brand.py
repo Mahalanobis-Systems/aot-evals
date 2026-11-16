@@ -1,12 +1,10 @@
-"""The branded HTML pages (docs/method.md §9, brand/README.md).
+"""The branded HTML pages (brand/README.md).
 
-`page()` is the one template behind every HTML file the plugin writes: the report shell, the
-checkpoint pages and the activity log (checkpoint.py, journal.py).
-
-`aot-evals report --html` writes one self-contained file: embedded fonts and logo, the brand
-style sheet, a header and footer, and `report.json` inlined as `<script type="application/json"
-id="data">`. It makes no network requests and opens from the filesystem. Claude writes the panels
-into its `<main id="panels">`, shaped around the reader's question (report skill).
+`page()` is the one template behind every HTML file the plugin writes: the discovery page, the
+grader application and the activity log (start.py, serve.py, journal.py). Each page is one
+self-contained file (embedded fonts and logo, the brand style sheet, a header and footer) that
+makes no network requests and opens from the filesystem. The report skill writes its HTML from
+report.json itself.
 """
 
 from __future__ import annotations
@@ -30,7 +28,6 @@ FONTS = [  # (family, weight, file)
 ]
 LOGO = "aot-logo-128.png"
 COMPANY_URL = "https://mahalsystems.ai"
-PANELS_MARKER = "<!-- PANELS: write the report's panels here (report skill). -->"
 
 
 def _b64(path: Path) -> str | None:
@@ -63,7 +60,7 @@ def _esc(s: str) -> str:
 def page(title: str, eyebrow: str, sub: str, body: str, data: dict | None = None,
          script: str = "", footer_note: str = "") -> str:
     """One branded, self-contained page: embedded fonts and logo, the brand style sheet, header
-    and footer. Every HTML file the plugin writes (report, checkpoint, activity) goes through it."""
+    and footer. Every HTML file the plugin writes (report, discovery, grader, activity) goes through it."""
     logo = _b64(BRAND / LOGO)
     logo_tag = (f'<img class="logo" src="data:image/png;base64,{logo}" '
                 f'alt="AOT, the Agent Optimization Toolkit">' if logo else "")
@@ -108,27 +105,3 @@ def page(title: str, eyebrow: str, sub: str, body: str, data: dict | None = None
 {data_tag}{script_tag}</body>
 </html>
 """
-
-
-def shell(report: dict, title: str | None = None) -> str:
-    agent = (report.get("agent") or {}).get("id") or "agent"
-    title = title or f"Evals for {agent}"
-    runs = ", ".join(report.get("runs") or []) or "no runs"
-    sub = (f"{_esc(agent)} &middot; {_esc(human_date(report.get('generated')))} &middot; "
-           f"runs {_esc(runs)}")
-    note = f"\n  Schema {_esc(report.get('schema', ''))}; data inlined below."
-    return page(title, "AOT evals report", sub, PANELS_MARKER, data=report, footer_note=note)
-
-
-def write_shell(ev, report: dict, title: str | None = None, out: Path | None = None) -> Path:
-    """Write the shell. Never overwrites a report whose panels have already been written: the
-    next free name (report-<date>-2.html, ...) is used instead."""
-    date = (report.get("generated") or "")[:10] or "undated"
-    path = out or ev.p("report", f"report-{date}.html")
-    n = 2
-    while path.exists() and PANELS_MARKER not in path.read_text():
-        path = path.with_name(f"report-{date}-{n}.html")
-        n += 1
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(shell(report, title))
-    return path

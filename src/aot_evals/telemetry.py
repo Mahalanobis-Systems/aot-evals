@@ -1,7 +1,7 @@
 """Pseudonymous milestone telemetry: how many teams use aot-evals, and how far they get.
 
-One event per milestone (the assessment started, discovery report written, a checkpoint at a gate, a
-report built, the demo run), keyed by a random install id stored locally. It follows Claude
+One event per milestone (the assessment started, discovery report written, a report built, the demo run),
+keyed by a random install id stored locally. It follows Claude
 Code's own telemetry choice: anything that turns Claude Code's telemetry off turns this off too.
 Nothing about the agent, the repository, the cases or the answers is ever sent; the payload is
 built only from the allowlist below. Standard library only: a urllib POST on a daemon thread with
@@ -16,7 +16,6 @@ import json
 import os
 import platform
 import queue
-import re
 import ssl
 import sys
 import threading
@@ -33,8 +32,7 @@ from . import __version__
 ENDPOINT = "https://us.i.posthog.com/i/v0/e/"
 PROJECT_KEY = "phc_rfgtrNeUyCA7GUwknQVKTEcDZfZKbRDKdr9AtHzU8hqL"
 
-EVENTS = frozenset({"phase1_started", "discovery_written", "checkpoint", "report_built", "demo_run"})
-_GATE = re.compile(r"^C(?:[0-9]|1[0-8])$")
+EVENTS = frozenset({"phase1_started", "discovery_written", "report_built", "demo_run"})
 _TIMEOUT = 1.0  # seconds per send
 _FLUSH_BUDGET = 1.0  # seconds, total, at exit
 
@@ -46,7 +44,7 @@ _CLOUD_PROVIDER_VARS = ("CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CL
 
 DISCLOSURE = (
     "aot-evals sends pseudonymous usage telemetry: a random install id, the milestone reached "
-    "(the assessment started, discovery written, a checkpoint at a gate, a report built), the gate id, "
+    "(the assessment started, discovery report written, a report built, the demo run), "
     "the aot-evals version, your OS name and a timestamp. Never your code, agent, repository, "
     "cases, answers, file paths or IP address. It is off whenever Claude Code's telemetry is off. "
     "See it with `aot-evals telemetry show`; turn it off with `aot-evals telemetry off`, "
@@ -153,11 +151,9 @@ def _notice() -> None:
         pass
 
 
-def payload(event: str, install: str, gate: str | None = None) -> dict:
+def payload(event: str, install: str) -> dict:
     """The exact event, built only from allowlisted fields."""
     props: dict[str, object] = {"version": __version__, "os": platform.system()}
-    if gate and _GATE.match(gate):
-        props["gate"] = gate
     props["$ip"] = None  # PostHog: don't record the request IP or derive a location from it
     props["$geoip_disable"] = True
     props["$process_person_profile"] = False  # count events; build no person profile
@@ -165,7 +161,7 @@ def payload(event: str, install: str, gate: str | None = None) -> dict:
             "properties": props, "timestamp": datetime.now(UTC).isoformat()}
 
 
-def emit(event: str, gate: str | None = None) -> None:
+def emit(event: str) -> None:
     """Queue one milestone event. Never raises."""
     try:
         if _suppressed or event not in EVENTS or not enabled():
@@ -174,7 +170,7 @@ def emit(event: str, gate: str | None = None) -> None:
         install = _install_id()
         if install is None:
             return
-        _get_sender().submit(json.dumps(payload(event, install, gate)).encode())
+        _get_sender().submit(json.dumps(payload(event, install)).encode())
     except Exception:  # noqa: BLE001 - telemetry never breaks a command
         pass
 
@@ -234,8 +230,8 @@ def status_text() -> str:
 
 
 def show_text() -> str:
-    """The exact event a checkpoint would send. Sends nothing and creates no id."""
-    return json.dumps(payload("checkpoint", _read_id() or "<created on the first event>", "C3"), indent=2)
+    """The exact event a built report would send. Sends nothing and creates no id."""
+    return json.dumps(payload("report_built", _read_id() or "<created on the first event>"), indent=2)
 
 
 def turn_off() -> None:

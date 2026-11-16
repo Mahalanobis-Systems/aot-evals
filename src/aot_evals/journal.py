@@ -1,12 +1,14 @@
-"""The activity log (docs/method.md §9): what Claude and the CLI did, in order, for the person to watch.
+"""The activity log (docs/method.md): what Claude and the CLI did, in order, for the person to watch.
 
-`evals/journal/activity.jsonl` is append-only. Every CLI command logs itself (cli.main); the
-skills add the steps, findings, decisions and questions between commands with `aot-evals log`.
-Every append re-renders `evals/journal/activity.html`, a branded page that reloads itself, so
-the person can keep it open in a browser tab and watch the work instead of the terminal.
+The agent system's `journal/activity.jsonl` is append-only, and shared by its evals
+(docs/method.md): an entry about one eval goes into the same log. Every CLI command logs
+itself (cli.main); the skills add the steps, findings, decisions and questions between commands
+with `aot-evals log`. Every append re-renders `journal/activity.html`, a branded page that
+reloads itself, so the person can keep it open in a browser tab and watch the work instead of
+the terminal.
 
 The directory carries its own `.gitignore` (`*`): the log is a working record for the people in
-the session and may quote unreviewed trace text, so it never enters git (docs/method.md §1, principle 5). The
+the session and may quote unreviewed trace text, so it never enters git (docs/method.md, principle 8). The
 committed record of each decision is the file the decision changed.
 """
 
@@ -24,26 +26,33 @@ KINDS = ("step", "finding", "decision", "question", "command", "progress", "mile
 WAITING_KINDS = ("question", "milestone")
 KIND_LABEL = {"step": "doing", "finding": "found", "decision": "decided", "question": "asked you",
               "command": "ran", "progress": "progress", "milestone": "checkpoint"}
-# Which gate a CLI command works on, for commands that are about one gate.
-COMMAND_GATE = {"import": "C0", "allocate": "C5", "screen": "C7", "label": "C9", "calibrate": "C10",
-                "reliability": "C11", "judge": "C10", "compare": "C13", "coverage": "C14",
-                "redundancy": "C15", "report": "C18", "agreement": "C19", "init": "C0"}
-RUN_GATE = {"smoke": "C1", "baseline": "C12", "candidate": "C13", "drift": "C16"}
+# Which part of an eval a CLI command works on (an entry's `gate`), for commands about one part.
+COMMAND_GATE = {"import": "design", "draw": "design", "handoffs": "design", "screen": "design",
+                "coverage": "design", "label": "measurement", "calibrate": "measurement",
+                "reliability": "measurement", "judge": "measurement", "agreement": "measurement",
+                "compare": "decision_rule"}
+RUN_GATE = {"smoke": "agent_contract", "baseline": "decision_rule", "candidate": "decision_rule",
+            "drift": "decision_rule"}
 RELOAD_MS = 4000
 _PROGRESS_EVERY_S = 2.0
 _last_render = 0.0
 
 
+def _system(ev) -> Evals:
+    """The agent system's folder: an eval logs to the journal its agent system shares."""
+    return getattr(ev, "agent_system", ev)
+
+
 def directory(ev: Evals) -> Path:
-    return ev.p("journal")
+    return _system(ev).p("journal")
 
 
 def log_path(ev: Evals) -> Path:
-    return ev.p("journal", "activity.jsonl")
+    return directory(ev) / "activity.jsonl"
 
 
 def html_path(ev: Evals) -> Path:
-    return ev.p("journal", "activity.html")
+    return directory(ev) / "activity.html"
 
 
 def _ensure_dir(ev: Evals) -> None:
@@ -51,7 +60,7 @@ def _ensure_dir(ev: Evals) -> None:
     d.mkdir(parents=True, exist_ok=True)
     ignore = d / ".gitignore"
     if not ignore.exists():
-        ignore.write_text("# aot-evals activity log: a working record, never committed (docs/method.md §9)\n*\n")
+        ignore.write_text("# aot-evals activity log: a working record, never committed (docs/method.md)\n*\n")
 
 
 def entries(ev: Evals) -> list[dict]:
@@ -100,36 +109,10 @@ def _collapse_progress(items: list[dict]) -> list[dict]:
     return out
 
 
-def roadmap_html(snapshot: list[dict] | None, focus: str | None = None) -> str:
-    """The C0-C19 strip: one cell per gate, grouped by stage, the focus gate outlined."""
-    from .checkpoint import STAGES
-
-    if not snapshot:
-        return ""
-    status = {g["id"]: g["status"] for g in snapshot}
-    groups = []
-    for stage in STAGES:
-        cells = []
-        for gid in stage["gates"]:
-            st = status.get(gid, "unmet")
-            cls = {"met": "met", "unmet": "unmet", "not_applicable": "na",
-                   "not_implemented": "later"}.get(st, "unmet")
-            mark = " focus" if gid == focus else ""
-            cells.append(f'<span class="gate {cls}{mark}" title="{gid} {_esc(st)}">{gid}</span>')
-        groups.append(f'<div class="stage"><span class="stage-name">{_esc(stage["name"])}</span>'
-                      f'<span class="gates">{"".join(cells)}</span></div>')
-    return ('<div class="roadmap" aria-label="Gates C0 to C19">' + "".join(groups) +
-            '</div><p class="caption legend"><span class="gate met">C0</span> met '
-            '<span class="gate unmet">C0</span> open <span class="gate na">C0</span> does not apply '
-            '<span class="gate later">C0</span> not yet automated</p>')
-
-
 def activity_page(ev: Evals, items: list[dict]) -> str:
     agent = ev.agent_name
     last = items[-1] if items else None
     milestones = [e for e in items if e.get("kind") == "milestone"]
-    snapshot = milestones[-1].get("gates") if milestones else None
-    focus = milestones[-1].get("gate") if milestones else None
 
     parts = []
     if last and last.get("kind") in WAITING_KINDS:
@@ -148,12 +131,6 @@ def activity_page(ev: Evals, items: list[dict]) -> str:
     else:
         parts.append('<div class="banner">Nothing logged yet. The log fills in as Claude works.</div>')
 
-    if snapshot:
-        parts.append('<h2>Where the evals stand</h2>')
-        parts.append(roadmap_html(snapshot, focus))
-        parts.append('<p class="caption">As of the latest checkpoint. Each gate is one step of '
-                     'the method (C0 import … C18 report); the checkpoint pages explain each.</p>')
-
     if milestones:
         rows = []
         for m in reversed(milestones):
@@ -162,7 +139,7 @@ def activity_page(ev: Evals, items: list[dict]) -> str:
                         f'<span class="t" data-ts="{_esc(m["ts"])}">{_esc(_clock(m["ts"]))}</span></td>'
                         f'<td>{_esc(m.get("gate") or "")}</td>'
                         f'<td><a href="{href}">{_esc(m.get("text", ""))}</a></td></tr>')
-        parts.append('<h2>Checkpoints</h2><table><thead><tr><th>When</th><th>Gate</th>'
+        parts.append('<h2>Checkpoints</h2><table><thead><tr><th>When</th><th>Part</th>'
                      '<th>Checkpoint</th></tr></thead><tbody>' + "".join(rows) + '</tbody></table>')
 
     rows = []
@@ -188,9 +165,9 @@ def activity_page(ev: Evals, items: list[dict]) -> str:
                     f'<td class="kind">{_esc(KIND_LABEL.get(kind, kind))}</td><td>{text}</td></tr>')
     parts.append('<h2>Activity, newest first</h2>')
     if rows:
-        parts.append('<table class="full log"><colgroup><col style="width:7em"><col style="width:4em">'
+        parts.append('<table class="full log"><colgroup><col style="width:7em"><col style="width:8em">'
                      '<col style="width:7em"><col></colgroup><thead><tr><th class="num">Time</th>'
-                     '<th>Gate</th><th>What</th><th></th></tr></thead><tbody>' + "".join(rows) +
+                     '<th>Part</th><th>What</th><th></th></tr></thead><tbody>' + "".join(rows) +
                      '</tbody></table>')
     else:
         parts.append('<p class="muted">No activity yet.</p>')

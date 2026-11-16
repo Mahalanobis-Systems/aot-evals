@@ -1,13 +1,14 @@
 """Intervals and sizing arithmetic. Standard library only.
 
 Every function returns `None` rather than a number when the input cannot support one: the
-report's rule is that unknown values are `null`, never `0` (docs/method.md §8).
+report's rule is that unknown values are `null`, never `0` (docs/method.md).
 """
 
 from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from statistics import NormalDist
 
 Z95 = 1.959963984540054
 Z80_POWER = 0.8416212335729143
@@ -90,7 +91,7 @@ def weighted_estimate(strata: Sequence[tuple[float, float, int]]) -> dict | None
     """Share-weighted pass rate over strata (weight, passes, n) with a normal interval. `passes`
     may be fractional (the sum of per-case pass rates when n counts cases).
 
-    Used for the quality estimate (M14): weights are each category's observed share of traffic.
+    Used for the quality estimate (M14): weights are each use case's observed share of traffic.
     """
     usable = [(w, s, n) for w, s, n in strata if n > 0 and w > 0]
     if not usable:
@@ -108,6 +109,150 @@ def weighted_estimate(strata: Sequence[tuple[float, float, int]]) -> dict | None
     se = math.sqrt(var)
     return {"point": point, "ci": [max(0.0, point - Z95 * se), min(1.0, point + Z95 * se)],
             "weights": {}, "n": sum(n for _, _, n in usable)}
+
+
+def hajek_mean(values: Sequence[float], inclusion_probs: Sequence[float],
+               clusters: Sequence[str | None] | None = None) -> dict | None:
+    """The Hájek mean of one use case's quality cases: Horvitz-Thompson normalized by its own
+    weights, sum(y_i / pi_i) / sum(1 / pi_i) (Hájek 1971; docs/statistics.md §2.1, estimators §7).
+
+    y_i is case i's outcome averaged over its trials (and corrected, where a correction applies);
+    pi_i is its recorded inclusion probability. Dividing by the sum of the weights rather than by
+    the frame size makes it approximately unbiased and more stable than Horvitz-Thompson itself.
+    With equal pi it is the plain mean.
+
+    `se` is the linearized (Taylor) standard error, treating the draw as with replacement (no
+    finite-population correction, so it errs wide), and `n_effective` is Kish's effective sample
+    size (sum w)^2 / sum w^2: how many equally weighted cases the weighted ones are worth. With
+    `clusters` (one key per case; None for a case alone), the residuals are summed per cluster
+    before squaring, so cases that pass or fail together count as one piece of evidence
+    (statistics §2.4, rule 9), and `n_effective` is at most the number of clusters. None when
+    there is no case, or a pi is missing or outside (0, 1]: a case without a recorded pi does not
+    enter a rate (rule 5).
+    """
+    ys, ps = list(values), list(inclusion_probs)
+    if not ys or len(ys) != len(ps):
+        return None
+    if any(not isinstance(p, (int, float)) or not 0 < p <= 1 for p in ps):
+        return None
+    if any(not isinstance(y, (int, float)) for y in ys):
+        return None
+    keys = list(clusters) if clusters is not None else [None] * len(ys)
+    if len(keys) != len(ys):
+        return None
+    w = [1 / p for p in ps]
+    sw = sum(w)
+    point = sum(wi * yi for wi, yi in zip(w, ys, strict=True)) / sw
+    n = len(ys)
+    sums: dict = {}
+    for i, (wi, yi, g) in enumerate(zip(w, ys, keys, strict=True)):
+        k = ("g", g) if g is not None else ("c", i)
+        sums[k] = sums.get(k, 0.0) + wi * (yi - point)
+    g_ = len(sums)
+    se = None
+    if g_ > 1:
+        se = math.sqrt(g_ / (g_ - 1) * sum(s * s for s in sums.values())) / sw
+    n_eff = sw ** 2 / sum(wi * wi for wi in w)
+    out = {"point": point, "se": se, "n": n, "sum_weights": sw,
+           "n_effective": min(n_eff, g_) if clusters is not None else n_eff, "estimator": "hajek",
+           "se_method": ("linearized over clusters, with replacement" if clusters is not None
+                         else "linearized, with replacement")}
+    if clusters is not None:
+        out["n_clusters"] = g_
+    return out
+
+
+def stratified_hajek(strata: dict[str, dict], z: float = Z95) -> dict | None:
+    """theta-hat = sum_s w_s * mu-hat_s, each mu-hat_s a Hájek mean (`hajek_mean`), with a normal
+    interval (estimators §7; statistics §2.1, §2.3).
+
+    `strata` maps a use case to {"weight": w_s, "values": [...], "inclusion_probs": [...],
+    "clusters": [...] or None}. The weights are the estimand's (traffic or cost), normalized here;
+    a use case with weight 0 may have no cases. Use cases are drawn independently, so
+    Var(theta-hat) = sum w_s^2 Var(mu-hat_s).
+
+    Each use case's variance is floored at the binomial variance of an Agresti-Caffo-style
+    adjusted rate at its effective size, p~(1 - p~) / n_eff with p~ = (n_eff mu-hat + 1) /
+    (n_eff + 2), so a use case at 0% or 100%, or one cluster, never contributes zero variance
+    (statistics §2.3). Values outside [0, 1] (not rates) are not floored. The interval is clipped to
+    [0, 1] for rates. Below about 30 cases read it as a minimum width. `n_effective` is Kish's
+    effective size over every case's design weight in theta-hat, (w_s / sum w) * (1/pi_i) /
+    sum_{j in s} 1/pi_j, capped at the number of clusters as in `hajek_mean`: the n at which a
+    threshold test on a rate counts its cases (`rate_bound_test`).
+
+    None when a weight is missing or negative, the weights sum to 0, or a use case with weight
+    above 0 has no usable case: theta is then unknown, never estimated without it. `missing`
+    names those use cases.
+    """
+    if not strata:
+        return None
+    weights = {s: (v or {}).get("weight") for s, v in strata.items()}
+    if any(not isinstance(w, (int, float)) or w < 0 for w in weights.values()):
+        return None
+    total = sum(weights.values())
+    if total <= 0:
+        return None
+    per, missing = {}, []
+    for s, v in strata.items():
+        if weights[s] == 0:
+            continue
+        h = hajek_mean(v.get("values") or [], v.get("inclusion_probs") or [], v.get("clusters"))
+        if h is None:
+            missing.append(s)
+            continue
+        per[s] = h
+    if missing:
+        return {"point": None, "ci": None, "se": None, "missing": sorted(missing), "per_use_case": per}
+    point, var = 0.0, 0.0
+    rates = all(0 <= v <= 1 for s in per for v in strata[s]["values"])
+    for s, h in per.items():
+        w = weights[s] / total
+        point += w * h["point"]
+        v = h["se"] ** 2 if h["se"] is not None else 0.0
+        if rates:
+            m = h["n_effective"]
+            pa = (m * h["point"] + 1) / (m + 2)
+            v = max(v, pa * (1 - pa) / m)
+        h["variance_used"] = v
+        var += w * w * v
+    se = math.sqrt(var)
+    lo, hi = point - z * se, point + z * se
+    if rates:
+        lo, hi = max(0.0, lo), min(1.0, hi)
+    unit, keys = [], set()
+    for s in per:
+        inv = [1 / p for p in strata[s]["inclusion_probs"]]
+        tot = sum(inv)
+        unit += [weights[s] / total * x / tot for x in inv]
+        cl = strata[s].get("clusters") or [None] * len(inv)
+        keys |= {("g", g) if g is not None else ("c", s, i) for i, g in enumerate(cl)}
+    n_eff = min(kish_n(unit) or 0.0, len(keys)) if unit else None
+    return {"point": point, "ci": [lo, hi], "se": se, "missing": [], "per_use_case": per,
+            "n_effective": n_eff,
+            "ci_method": ("normal, linearized Hájek variance per use case"
+                          + (" over clusters" if any("n_clusters" in h for h in per.values()) else "")
+                          + (", floored at an Agresti-Caffo-adjusted binomial variance" if rates else ""))}
+
+
+def allocation_design_effect(weights: dict[str, float], allocation: dict[str, int]) -> float | None:
+    """How much an allocation that departs from the weights widens theta-hat's interval, at equal
+    spreads: n * sum_s w_s^2 / n_s (Kish's design effect for unequal weighting). 1 when n_s is
+    proportional to w_s; above 1 when a use case is oversampled beyond its weight. A plan needs
+    N = n_independent * this to reach the precision of n_independent equally weighted cases.
+    None when a use case with weight above 0 has no cases."""
+    n = sum(allocation.get(s, 0) for s in weights)
+    tw = sum(w for w in weights.values() if isinstance(w, (int, float)))
+    if n <= 0 or tw <= 0:
+        return None
+    acc = 0.0
+    for s, w in weights.items():
+        if not w:
+            continue
+        ns = allocation.get(s, 0)
+        if ns <= 0:
+            return None
+        acc += (w / tw) ** 2 / ns
+    return n * acc
 
 
 def sample_size_for_halfwidth(halfwidth: float, p: float = 0.5) -> int:
@@ -186,7 +331,8 @@ def cases_to_surface(rate: float, probability: float = 0.95) -> int | None:
 
 def labels_for_halfwidth(rate: float, halfwidth: float = 0.10, limit: int = 100_000) -> int | None:
     """The fewest items of one kind for a Wilson 95% interval no wider than +/- halfwidth at
-    `rate`. TPR and TNR are each measured on one kind of label, so this is per class."""
+    `rate`. The catch rate is measured only on runs a person failed and the clean pass rate only
+    on runs a person passed, so this is per kind (docs/statistics.md §3.4)."""
     if not 0 <= rate <= 1 or halfwidth <= 0:
         return None
     for n in range(1, limit + 1):
@@ -215,7 +361,7 @@ def floor_evidence(k: int, n: int, floor: float, margin: float = 0.10, limit: in
     need = None
     if point >= floor:
         for m in range(n, limit + 1):
-            c = wilson(round(point * m), m)
+            c = wilson(point * m, m)  # today's rate exactly; rounding the count would flatter it
             if c and c[0] >= floor - margin:
                 need = m
                 break
@@ -255,29 +401,251 @@ def agreement_stats(pairs: Sequence[tuple[bool, bool]]) -> dict | None:
 
 # ---- correcting a rate for a measured judge (M32) -------------------------------------------
 
-def rogan_gladen(q_k: int, q_n: int, tpr_k: int, tpr_n: int, tnr_k: int, tnr_n: int) -> dict | None:
-    """The true rate of the positive class, corrected for a judge's measured error
-    (Rogan & Gladen 1978), with a delta-method 95% interval.
+def rogan_gladen(fail_k: float, n: int, catch_k: float, catch_n: int, clean_k: float, clean_n: int) -> dict | None:
+    """The true failure rate, corrected for a grader's measured error (Rogan & Gladen 1978), with a
+    delta-method 95% interval (docs/statistics.md §3.2).
 
-    q = q_k / q_n is the share of items the judge calls positive; TPR = P(judge positive | truly
-    positive) and TNR = P(judge negative | truly negative), measured on human labels. Then
-    pi = (q + TNR - 1) / (TPR + TNR - 1). The interval carries the uncertainty of all three
-    inputs, so a judge calibrated on few labels gives a wide one. Undefined (None) unless
-    TPR + TNR > 1: a judge no better than chance cannot be corrected.
+    f_obs = fail_k / n is the share of runs the grader fails. The catch rate (catch_k of the
+    catch_n runs a person failed, the grader failed too) and the clean pass rate (clean_k of the
+    clean_n runs a person passed, the grader passed too) are measured on labels. Then
+    f = (f_obs + clean - 1) / J, with J = catch + clean - 1. The interval carries the uncertainty
+    of all three inputs, so a judge calibrated on few labels gives a wide one. Undefined (None)
+    unless J > 0: a grader no better than chance cannot be corrected.
+
+    Failure is the positive class here, as everywhere in aot-evals; the corrected pass rate is one
+    minus this one.
     """
-    if min(q_n, tpr_n, tnr_n) <= 0:
+    if min(n, catch_n, clean_n) <= 0:
         return None
-    q, tpr, tnr = q_k / q_n, tpr_k / tpr_n, tnr_k / tnr_n
-    j = tpr + tnr - 1
+    f_obs = fail_k / n
+    out = rogan_gladen_rate(f_obs, f_obs * (1 - f_obs) / n, catch_k, catch_n, clean_k, clean_n)
+    if out is None:
+        return None
+    out["method"] = "rogan_gladen_delta"
+    return out
+
+
+def rogan_gladen_rate(observed: float, var_observed: float, catch_k: float, catch_n: int,
+                      clean_k: float, clean_n: int, z: float = Z95) -> dict | None:
+    """Rogan-Gladen for a rate that was estimated, not counted: `observed` is the failure rate the
+    grader reports and `var_observed` its sampling variance under the design (a weighted Hájek
+    mean over use cases and clusters, say, rather than k of n). The correction is linear,
+    f = (observed + clean - 1) / J, so a weighted mean of graded outcomes corrects as a whole
+    (estimators §7). The delta-method variance adds the calibration's own uncertainty, which
+    shrinks only with more labels (statistics §3.2, §3.3):
+
+      Var f = (var_observed + (1 - f)^2 clean(1 - clean) / clean_n + f^2 catch(1 - catch) / catch_n) / J^2
+
+    `rogan_gladen` is the counted case, var_observed = f_obs(1 - f_obs) / n. None unless J > 0
+    and both kinds of label exist."""
+    if min(catch_n, clean_n) <= 0 or var_observed is None or var_observed < 0:
+        return None
+    if not 0 <= observed <= 1:
+        return None
+    catch, clean = catch_k / catch_n, clean_k / clean_n
+    j = catch + clean - 1
     if j <= 0:
         return None
-    pi = (q + tnr - 1) / j
-    var = (q * (1 - q) / q_n + (1 - pi) ** 2 * tnr * (1 - tnr) / tnr_n
-           + pi ** 2 * tpr * (1 - tpr) / tpr_n) / j ** 2
+    f = (observed + clean - 1) / j
+    var_labels = ((1 - f) ** 2 * clean * (1 - clean) / clean_n + f ** 2 * catch * (1 - catch) / catch_n) / j ** 2
+    var = var_observed / j ** 2 + var_labels
     se = math.sqrt(max(var, 0.0))
-    point = min(1.0, max(0.0, pi))
-    return {"point": point, "ci": [max(0.0, pi - Z95 * se), min(1.0, pi + Z95 * se)],
-            "observed": q, "youden_j": j, "method": "rogan_gladen_delta"}
+    point = min(1.0, max(0.0, f))
+    return {"point": point, "ci": [max(0.0, f - z * se), min(1.0, f + z * se)], "se": se,
+            "se_from_labels": math.sqrt(max(var_labels, 0.0)),
+            "observed": observed, "catch": catch, "clean": clean, "j": j,
+            "method": "rogan_gladen, delta-method interval with the calibration's uncertainty"}
+
+
+def ppi_weighted(theta_f: float, var_f: float, y: Sequence[float], f: Sequence[float],
+                 weights: Sequence[float], z: float = Z95) -> dict | None:
+    """Prediction-powered estimate of a design-weighted mean (PPI++ with power tuning:
+    Angelopoulos et al. 2023; Angelopoulos, Duchi & Zrnic 2026), for an eval whose graded outcomes
+    are weighted by use case and inclusion probability.
+
+    `theta_f`, `var_f`: the grader's estimate over every scored trial and its design variance
+    (the Hájek θ̂ and its se², which already carry the clusters and use cases). `y`, `f`,
+    `weights`: on the trials a person labeled, the person's value, the grader's value and each
+    trial's design weight (w_s / π_i, shared by its trials). The estimate is
+
+      ȳ_L + λ (θ_f - f̄_L),
+
+    the labels' weighted mean corrected by how far the grader's verdicts on the labeled trials
+    sit from its verdicts on all of them. λ minimizes the variance
+    λ² var_f + (s²_y - 2λ c_yf + λ² s²_f) / n_eff and is clipped to [0, 1]; at 0 it is the
+    labels alone, so it is never meaningfully worse than them. n_eff is Kish's effective size of
+    the labeled weights. The labeled trials are treated as independent of the rest, which holds
+    as their share shrinks. Valid when the labeled trials are a random sample of the scored ones
+    (statistics §3.6): labels come from a queue that draws them, never from picking. None with
+    fewer than two labeled trials or a weight at or below 0."""
+    ys, fs, ws = [float(v) for v in y], [float(v) for v in f], [float(v) for v in weights]
+    n = len(ys)
+    if n < 2 or len(fs) != n or len(ws) != n or any(w <= 0 for w in ws) or var_f is None or var_f < 0:
+        return None
+    sw = sum(ws)
+    wn = [w / sw for w in ws]
+    n_eff = 1 / sum(w * w for w in wn)
+    my = sum(w * v for w, v in zip(wn, ys, strict=True))
+    mf = sum(w * v for w, v in zip(wn, fs, strict=True))
+    adj = n_eff / (n_eff - 1) if n_eff > 1 else 1.0
+    s_y = adj * sum(w * (v - my) ** 2 for w, v in zip(wn, ys, strict=True))
+    s_f = adj * sum(w * (v - mf) ** 2 for w, v in zip(wn, fs, strict=True))
+    c = adj * sum(w * (a - my) * (b - mf) for w, a, b in zip(wn, ys, fs, strict=True))
+    denom = var_f + s_f / n_eff
+    lam = 0.0 if denom <= 0 else min(1.0, max(0.0, (c / n_eff) / denom))
+    point = my + lam * (theta_f - mf)
+    var = lam ** 2 * var_f + (s_y - 2 * lam * c + lam ** 2 * s_f) / n_eff
+    se = math.sqrt(max(var, 0.0))
+    se_lab = math.sqrt(max(s_y / n_eff, 0.0))
+    return {"point": min(1.0, max(0.0, point)), "ci": [max(0.0, point - z * se), min(1.0, point + z * se)],
+            "se": se, "lambda": lam, "n_labeled": n, "n_effective_labeled": n_eff,
+            "labels_only": {"point": my, "se": se_lab,
+                            "ci": [max(0.0, my - z * se_lab), min(1.0, my + z * se_lab)]},
+            "grader": {"point": theta_f, "se": math.sqrt(var_f)},
+            "method": "ppi++ (power-tuned), design-weighted, normal interval"}
+
+
+# ---- what a grader's error costs in cases (docs/statistics.md §3.3) --------------------------
+
+def judge_inflation(p: float, catch: float, clean: float) -> float | None:
+    """How many times more cases a grader's errors cost at a true failure rate p, compared with a
+    grader that never errs: q(1 - q) / (J^2 p(1 - p)), where q = (1 - clean) + J p is the rate
+    the grader reports and J = catch + clean - 1 (Bross 1954; Rubin, Rosenbaum & Cobb 1956).
+
+    Near p = 50% it is about 1 / J^2; for rare failures it is far larger, because false flags
+    on good runs swamp the few real failures: catch 0.90 and clean 0.90 cost 1.6x at 50% and
+    5.8x at 3%. A code check (catch = clean = 1) costs 1x. None when J <= 0 (the grader is no
+    better than chance) or p is not strictly between 0 and 1.
+
+    Pass lower confidence bounds on catch and clean for the conservative reading a judge floor
+    uses (docs/method.md). It treats the rates as known: their own uncertainty adds a term
+    that shrinks only with more labels (statistics §3.3, third caution).
+    """
+    if not 0 < p < 1 or not (0 <= catch <= 1 and 0 <= clean <= 1):
+        return None
+    j = catch + clean - 1
+    if j <= 0:
+        return None
+    q = (1 - clean) + j * p
+    return q * (1 - q) / (j ** 2 * p * (1 - p))
+
+
+def cases_needed(n: int, p: float, catch: float = 1.0, clean: float = 1.0) -> int | None:
+    """A case count sized for an error-free grader (a code check or a person), multiplied by the
+    inflation factor of the grader that will actually grade the cases at failure rate p
+    (`judge_inflation`), rounded up. This is how every count in statistics §4.1 takes the
+    grader's error into account. For a threshold test, `threshold_n` writes the judge's error
+    into the test itself, which is exact rather than a variance ratio at one rate."""
+    if n is None or n < 0:
+        return None
+    factor = judge_inflation(p, catch, clean)
+    return None if factor is None else math.ceil(n * factor - 1e-9)
+
+
+# ---- the threshold test: a rate against a fixed bar (docs/statistics.md §3.3, §4.1) ----------
+
+def _z(p: float) -> float:
+    return NormalDist().inv_cdf(p)
+
+
+def binom_cdf(k: int, n: int, p: float) -> float:
+    """P(X <= k) for X ~ Binomial(n, p), through the incomplete beta function."""
+    if k < 0:
+        return 0.0
+    if k >= n:
+        return 1.0
+    if p <= 0:
+        return 1.0
+    if p >= 1:
+        return 0.0
+    return betainc_regularized(n - k, k + 1, 1 - p)
+
+
+def _bisect(f, lo: float = 0.0, hi: float = 1.0, steps: int = 100) -> float:
+    """The root of a function that is positive at lo and negative at hi."""
+    for _ in range(steps):
+        mid = (lo + hi) / 2
+        if f(mid) > 0:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def _grader_scale(rate: float, catch: float, clean: float) -> float:
+    """The rate a grader reports when the true failure rate is `rate`: (1 - clean) + J * rate."""
+    return (1 - clean) + (catch + clean - 1) * rate
+
+
+def threshold_test(failures: int, n: int, bar: float, alpha: float = 0.05, catch: float = 1.0,
+                   clean: float = 1.0, side: str = "below") -> dict | None:
+    """One-sided exact binomial test of a failure rate against a fixed bar, with the grader's
+    error written into the test (statistics §3.3; Feng et al. 2026 for the judge-aware form).
+
+    `failures` of `n` independent cases were failed by the grader. side "below" tests that the
+    true failure rate is under `bar` (H0: rate >= bar), as in "refunds break the policy less than
+    5% of the time"; "above" tests that it is over (H0: rate <= bar). A pass-rate bar is the
+    same test on the failure rate 1 - bar.
+
+    A grader with catch rate c and clean pass rate s reports failures at q = (1 - s) + J * rate,
+    so the test runs on the reported rate against q0 = (1 - s) + J * bar. With a code check
+    (c = s = 1) and no failures, it is the zero-failure rule: 59 clean cases clear a 5% bar.
+    A judge that wrongly flags good runs never returns a clean run, so it needs this form; see
+    `threshold_n` for how many cases it takes.
+
+    `bound` is the one-sided 1 - alpha Clopper-Pearson bound on the true rate (upper for
+    "below", lower for "above"), mapped through the grader; `estimate` is the Rogan-Gladen point.
+    `passed` is p <= alpha, which is the same as the bound clearing the bar. catch and clean are
+    taken as known; pass their lower confidence bounds for a conservative test. Cases must be
+    independent: with clusters, pass counts of clusters (docs/statistics.md §2.4). None when the
+    inputs cannot support a test, including J <= 0.
+    """
+    if side not in ("below", "above") or n <= 0 or not 0 <= failures <= n or not 0 < bar < 1:
+        return None
+    if not 0 < alpha < 1 or not (0 <= catch <= 1 and 0 <= clean <= 1):
+        return None
+    j = catch + clean - 1
+    if j <= 0:
+        return None
+    q0 = _grader_scale(bar, catch, clean)
+    k = failures
+    if side == "below":
+        p = binom_cdf(k, n, q0)
+        q_bound = 1.0 if k == n else _bisect(lambda u: binom_cdf(k, n, u) - alpha)
+    else:
+        p = 1 - binom_cdf(k - 1, n, q0)
+        q_bound = 0.0 if k == 0 else _bisect(lambda u: alpha - (1 - binom_cdf(k - 1, n, u)))
+    observed = k / n
+    estimate = min(1.0, max(0.0, (observed - (1 - clean)) / j))
+    bound = min(1.0, max(0.0, (q_bound - (1 - clean)) / j))
+    return {"test": "threshold", "side": side, "bar": bar, "alpha": alpha, "n": n, "failures": k,
+            "observed": observed, "estimate": estimate, "bound": bound, "p": p, "passed": p <= alpha,
+            "catch": catch, "clean": clean, "j": j, "grader_bar": q0,
+            "method": "exact binomial on the grader's scale" if j < 1 else "exact binomial"}
+
+
+def threshold_n(bar: float, rate: float, alpha: float = 0.05, power: float = 0.80, catch: float = 1.0,
+                clean: float = 1.0) -> int | None:
+    """Cases a threshold test needs: power `power` to show the failure rate is on the right side
+    of `bar` when it truly is `rate`, at one-sided level `alpha`, through a grader with the given
+    catch and clean pass rates (statistics §3.3, §4.1).
+
+    The normal approximation on the grader's scale: with q0 and q1 the reported rates at the bar
+    and at the true rate, n = ((z_a sqrt(q0(1 - q0)) + z_b sqrt(q1(1 - q1))) / (q0 - q1))^2,
+    rounded up. A bar of 5% at a true rate of 1% takes 123 cases with a code check, 863 with a
+    judge at catch 0.80 and clean 0.90, and 176 at catch 0.95 and clean 0.99. The test is exact
+    binomial, whose power saw-tooths in n around this value, so read it as the size to plan for,
+    not a guarantee at every n. The side is set by whether `rate` is below or above `bar`.
+    """
+    if not (0 < bar < 1 and 0 < rate < 1) or rate == bar:
+        return None
+    if not (0 < alpha < 1 and 0 < power < 1) or not (0 <= catch <= 1 and 0 <= clean <= 1):
+        return None
+    if catch + clean - 1 <= 0:
+        return None
+    q0, q1 = _grader_scale(bar, catch, clean), _grader_scale(rate, catch, clean)
+    num = _z(1 - alpha) * math.sqrt(q0 * (1 - q0)) + _z(power) * math.sqrt(q1 * (1 - q1))
+    return math.ceil((num / (q0 - q1)) ** 2 - 1e-9)
 
 
 # ---- combining a few human labels with many automatic verdicts (M33) ------------------------
@@ -365,20 +733,87 @@ def variance_components(trials_by_case: Sequence[Sequence[float]]) -> dict | Non
             "method": "one-way random effects (ANOVA), unequal k"}
 
 
+def trials_for_split(between: float, within: float, case_cost: float = 1.0, k_min: int = 3,
+                     k_max: int = 10) -> dict | None:
+    """Trials per case from the measured variance split (rule 16; statistics §3.7, a D-study).
+
+    With N cases of k trials, SE² = between / N + within / (N k), and a case costs `case_cost`
+    trials' worth on top of its own trials (drawing it, screening it, a person reading it). For a
+    fixed budget the SE is smallest at k* = sqrt(case_cost × within / between), the classic
+    two-stage optimum (Cochran 1977, §10.6). It is clamped to [k_min, k_max]: k = 3 is the
+    smallest k that gives a majority and a within-case estimate (statistics §3.7), and k_max
+    stops a split with almost no between-case variance from asking for an unbounded k. With
+    case_cost = 1 (the default when nothing says otherwise) a case is worth one more trial.
+    None for a split that is not a variance."""
+    if between is None or within is None or between < 0 or within < 0 or case_cost <= 0:
+        return None
+    if between == 0:
+        k_star = math.inf if within > 0 else float(k_min)
+    else:
+        k_star = math.sqrt(case_cost * within / between)
+    k = int(min(k_max, max(k_min, math.ceil(k_star - 1e-9)))) if math.isfinite(k_star) else k_max
+    return {"k": k, "k_optimum": k_star if math.isfinite(k_star) else None, "case_cost": case_cost,
+            "k_min": k_min, "k_max": k_max,
+            "bound": "k_min" if k_star <= k_min else "k_max" if k_star > k_max else None}
+
+
 # ---- tests for comparisons -------------------------------------------------------------------
 
 WEBB = (-math.sqrt(1.5), -1.0, -math.sqrt(0.5), math.sqrt(0.5), 1.0, math.sqrt(1.5))
 
 
-def _cluster_sums(deltas: Sequence[float], clusters: Sequence[str | None] | None, mu: float = 0.0) -> list[float]:
-    """Sum of (delta - mu) per cluster; a case without a key is its own cluster."""
+def _unit_weights(n: int, case_weights: Sequence[float] | None) -> list[float]:
+    """Case weights scaled to average 1, so that the weighted mean of the deltas is
+    sum(w_i * d_i) / n. None means every case weighs the same."""
+    if case_weights is None:
+        return [1.0] * n
+    w = [float(x) for x in case_weights]
+    if len(w) != n or any(x < 0 for x in w) or sum(w) <= 0:
+        raise ValueError("case_weights must be one non-negative weight per delta, not all zero")
+    total = sum(w)
+    return [x * n / total for x in w]
+
+
+def _cluster_sums(deltas: Sequence[float], clusters: Sequence[str | None] | None, mu: float = 0.0,
+                  case_weights: Sequence[float] | None = None) -> list[float]:
+    """Sum of w_i * (delta_i - mu) per cluster; a case without a key is its own cluster. With
+    design weights (scaled to average 1) each case's delta counts as much as its share of the
+    estimate, and under the null each unit's weighted, shifted delta is symmetric about zero."""
+    w = _unit_weights(len(deltas), case_weights)
     if clusters is None:
-        return [d - mu for d in deltas]
+        return [wi * (d - mu) for d, wi in zip(deltas, w, strict=True)]
     sums: dict = {}
-    for i, (d, g) in enumerate(zip(deltas, clusters, strict=True)):
+    for i, (d, g, wi) in enumerate(zip(deltas, clusters, w, strict=True)):
         key = ("g", g) if g is not None else ("c", i)
-        sums[key] = sums.get(key, 0.0) + (d - mu)
+        sums[key] = sums.get(key, 0.0) + wi * (d - mu)
     return list(sums.values())
+
+
+def weighted_mean_delta(deltas: Sequence[float], case_weights: Sequence[float] | None = None,
+                        clusters: Sequence[str | None] | None = None) -> dict | None:
+    """The design-weighted mean of paired deltas, sum(W_i d_i) with the W_i summing to 1, and its
+    standard error over clusters: with u_g = sum over cluster g of w_i d_i (w scaled to average
+    1) and n cases, Var = G/(G - 1) * sum_g (u_g - m_g * mean)^2 / n^2, where m_g is the cluster's
+    total weight. With equal weights and no clusters it is the usual sd/sqrt(n). With design
+    weights from a stratified Hájek estimate the mean is the change in theta-hat itself
+    (statistics §2.3, §4.3). None on fewer than two units."""
+    n = len(deltas)
+    if n == 0:
+        return None
+    w = _unit_weights(n, case_weights)
+    mean = sum(wi * d for wi, d in zip(w, deltas, strict=True)) / n
+    units: dict = {}
+    for i, (d, wi) in enumerate(zip(deltas, w, strict=True)):
+        g = clusters[i] if clusters is not None else None
+        key = ("g", g) if g is not None else ("c", i)
+        u = units.setdefault(key, [0.0, 0.0])
+        u[0] += wi * d
+        u[1] += wi
+    g_ = len(units)
+    if g_ < 2:
+        return {"mean": mean, "se": None, "n": n, "n_clusters": g_}
+    ss = sum((s - m * mean) ** 2 for s, m in units.values())
+    return {"mean": mean, "se": math.sqrt(g_ / (g_ - 1) * ss) / n, "n": n, "n_clusters": g_}
 
 
 def min_attainable_p(n_clusters: int) -> float | None:
@@ -406,7 +841,8 @@ def _flip_p(sums: Sequence[float], patterns: list[list[float]], exact: bool) -> 
 
 
 def sign_flip_test(deltas: Sequence[float], draws: int = 20_000, seed: int = 0,
-                   clusters: Sequence[str | None] | None = None, weights: str | None = None) -> float | None:
+                   clusters: Sequence[str | None] | None = None, weights: str | None = None,
+                   case_weights: Sequence[float] | None = None) -> float | None:
     """Two-sided paired permutation (sign-flip) test of a zero mean per-case delta.
 
     Under no effect each case's delta is as likely to have either sign, so the observed mean is
@@ -420,10 +856,13 @@ def sign_flip_test(deltas: Sequence[float], draws: int = 20_000, seed: int = 0,
     six-point weights, for 6 to 9 clusters, where +/-1 has too few distinct patterns; Webb
     2023); by default Webb is used for 6 <= G < 10 and Rademacher otherwise. At G <= 5 the test
     cannot reach 5% (see `min_attainable_p`).
+
+    `case_weights` (design weights, one per case) make it a test of the weighted mean delta, so
+    a stratified estimate's change is tested as estimated (`weighted_mean_delta`).
     """
     if not deltas:
         return None
-    sums = [x for x in _cluster_sums(deltas, clusters) if x != 0]
+    sums = [x for x in _cluster_sums(deltas, clusters, case_weights=case_weights) if x != 0]
     if not sums:
         return 1.0
     g = len(_cluster_sums(deltas, clusters))
@@ -433,14 +872,16 @@ def sign_flip_test(deltas: Sequence[float], draws: int = 20_000, seed: int = 0,
 
 
 def sign_flip_interval(deltas: Sequence[float], clusters: Sequence[str | None] | None = None,
-                       alpha: float = 0.05, draws: int = 4_000, seed: int = 0) -> list[float] | None:
+                       alpha: float = 0.05, draws: int = 4_000, seed: int = 0,
+                       case_weights: Sequence[float] | None = None) -> list[float] | None:
     """A confidence interval for the mean per-case delta, by inverting the sign-flip test: every
     mu at which flipping the signs of (delta - mu) per case, or per cluster, is not rejected.
 
     It assumes only that each unit's delta is symmetric about mu, not that the mean is normal,
     so it holds its coverage on small suites near a ceiling where the percentile bootstrap does
     not. The same sign patterns are reused at every mu, so the bounds are deterministic. None
-    when there are too few units for any interval at this alpha (2 / 2^G >= alpha).
+    when there are too few units for any interval at this alpha (2 / 2^G >= alpha). With
+    `case_weights` it is an interval for the weighted mean (`weighted_mean_delta`).
     """
     n = len(deltas)
     if n < 2:
@@ -450,10 +891,11 @@ def sign_flip_interval(deltas: Sequence[float], clusters: Sequence[str | None] |
         return None
     w = "webb" if clusters is not None and 6 <= g < 10 else "rademacher"
     patterns, exact = _sign_patterns(g, draws, seed, w)
-    mean = sum(deltas) / n
+    uw = _unit_weights(n, case_weights)
+    mean = sum(wi * d for wi, d in zip(uw, deltas, strict=True)) / n
 
     def accepted(mu: float) -> bool:
-        return _flip_p(_cluster_sums(deltas, clusters, mu), patterns, exact) > alpha
+        return _flip_p(_cluster_sums(deltas, clusters, mu, case_weights), patterns, exact) > alpha
 
     def bound(direction: int) -> float:
         inside, outside = mean, mean + direction * (max(abs(d) for d in deltas) + 1.0)
@@ -468,6 +910,198 @@ def sign_flip_interval(deltas: Sequence[float], clusters: Sequence[str | None] |
         return inside
 
     return [bound(-1), bound(+1)]
+
+
+def _one_sided_flip(deltas: Sequence[float], null: float, clusters: Sequence[str | None] | None,
+                    case_weights: Sequence[float] | None, draws: int, seed: int) -> dict:
+    """One-sided sign-flip p-value for H1: mean delta > `null`: the observed sum of the units'
+    weighted (delta - null) against its sum under every sign pattern."""
+    units = _cluster_sums(deltas, clusters, mu=null, case_weights=case_weights)
+    g = len(units)
+    sums = [x for x in units if x != 0]
+    w = "webb" if clusters is not None and 6 <= g < 10 else "rademacher"
+    if not sums:
+        p = 1.0
+    else:
+        patterns, exact = _sign_patterns(len(sums), draws, seed, w)
+        obs = sum(sums)
+        eps = 1e-12 * (1 + abs(obs))
+        hits = sum(sum(s * x for s, x in zip(pat, sums, strict=True)) >= obs - eps for pat in patterns)
+        p = hits / len(patterns) if exact else (hits + 1) / (len(patterns) + 1)
+    return {"p": p, "n_clusters": g, "weights": w}
+
+
+def superiority_test(deltas: Sequence[float], alpha: float = 0.05,
+                     clusters: Sequence[str | None] | None = None,
+                     case_weights: Sequence[float] | None = None, draws: int = 20_000,
+                     seed: int = 0) -> dict | None:
+    """Is the candidate better than the baseline? A one-sided sign-flip test of H0: mean delta
+    <= 0 on paired per-case deltas (statistics §4.3, §4.4; rule 18).
+
+    `deltas` are candidate minus baseline per case, higher is better. The margin of a
+    superiority rule (the smallest change that matters) sizes the test and its detectable
+    effect; it does not move the null, so a real gain smaller than the margin can still pass,
+    as in the standard design. `lower` is the one-sided 1 - alpha bound from the inverted
+    sign-flip interval at 2 * alpha. With `clusters`, signs flip per cluster; with
+    `case_weights`, it tests the design-weighted mean (`weighted_mean_delta`).
+    """
+    if not deltas or not 0 < alpha < 0.5:
+        return None
+    r = _one_sided_flip(deltas, 0.0, clusters, case_weights, draws, seed)
+    interval = sign_flip_interval(deltas, clusters=clusters, alpha=2 * alpha, seed=seed,
+                                  case_weights=case_weights)
+    mean = weighted_mean_delta(deltas, case_weights)["mean"]
+    return {"test": "superiority", "alpha": alpha, "mean": mean, "lower": interval[0] if interval else None,
+            "interval": interval, "p": r["p"], "passed": r["p"] <= alpha, "n": len(deltas),
+            "n_clusters": r["n_clusters"], "min_attainable_p": 1 / 2 ** r["n_clusters"], "weights": r["weights"],
+            "method": "one-sided sign-flip, per cluster" if clusters is not None else "one-sided sign-flip"}
+
+
+def bound_test(point: float, se: float, boundary: float, side: str, alpha: float = 0.05) -> dict | None:
+    """One-sided normal test that an estimate lies on one side of a fixed `boundary` (a
+    threshold rule on theta-hat: statistics §4.1, §4.2). side "below": H1 theta < boundary;
+    "above": H1 theta > boundary. `bound` is the one-sided 1 - alpha bound on the side that must
+    clear; `interval` the two-sided 1 - 2 alpha interval, whose far end decides "shown on the
+    wrong side". For a stratified Hájek estimate with its floored variance (`stratified_hajek`)
+    this is the test the interval implies; below about 30 cases read it as approximate."""
+    if side not in ("below", "above") or se is None or se <= 0 or not 0 < alpha < 0.5:
+        return None
+    z = _z(1 - alpha)
+    lo, hi = point - z * se, point + z * se
+    t = (boundary - point) / se if side == "below" else (point - boundary) / se
+    p = 1 - NormalDist().cdf(t)
+    bound, far = (hi, lo) if side == "below" else (lo, hi)
+    shown_wrong = (lo >= boundary) if side == "below" else (hi <= boundary)
+    return {"p": p, "passed": p <= alpha, "shown_wrong_side": shown_wrong, "bound": bound,
+            "interval": [lo, hi], "side": side, "boundary": boundary, "alpha": alpha}
+
+
+def kish_n(weights: Sequence[float]) -> float | None:
+    """Kish's effective sample size, (sum w)^2 / sum w^2: how many equally weighted cases a set of
+    weighted ones is worth (Kish 1965). None for no weight or all zero."""
+    sq = sum(w * w for w in weights)
+    return sum(weights) ** 2 / sq if sq > 0 else None
+
+
+def _cdf_le(x: float, n: float, p: float) -> float:
+    """P(X <= x), X ~ Binomial(n, p), continued to real x and n through the incomplete beta
+    function, as the Clopper-Pearson bounds use it."""
+    if x >= n or p <= 0:
+        return 1.0
+    if x < 0 or p >= 1:
+        return 0.0
+    return betainc_regularized(n - x, x + 1, 1 - p)
+
+
+def _sf_ge(x: float, n: float, p: float) -> float:
+    """P(X >= x), continued to real x and n as `_cdf_le`."""
+    if x <= 0 or p >= 1:
+        return 1.0
+    if x > n or p <= 0:
+        return 0.0
+    return betainc_regularized(x, n - x + 1, p)
+
+
+def rate_bound_test(rate: float, n_eff: float, boundary: float, side: str, alpha: float = 0.05) -> dict | None:
+    """One-sided exact test that a rate estimated from weighted, clustered cases lies on one side
+    of a fixed `boundary` (a threshold rule on theta-hat: statistics §4.1, §4.2).
+
+    Korn & Graubard's (1998) interval for a survey proportion: the Clopper-Pearson (1934) bound at
+    an effective size, here Kish's `n_eff` (`stratified_hajek`'s `n_effective`), with the count
+    set to rate * n_eff. Exact binomial at equal weights, so 0 failures in 59 cases clear a 5% bar
+    and 0 in 32 do not (the zero-failure rule, §4.1); a normal bound passes both. Keys as
+    `bound_test`, plus `n_effective` and `count`. side "below": H1 rate < boundary; "above": H1
+    rate > boundary. None when the inputs cannot support a test."""
+    if side not in ("below", "above") or not 0 < alpha < 0.5 or not 0 < boundary < 1:
+        return None
+    if n_eff is None or n_eff <= 0 or rate is None or not 0 <= rate <= 1:
+        return None
+    n, x = float(n_eff), rate * n_eff
+    hi = 1.0 if x >= n else _bisect(lambda u: _cdf_le(x, n, u) - alpha)
+    lo = 0.0 if x <= 0 else _bisect(lambda u: alpha - _sf_ge(x, n, u))
+    p = _cdf_le(x, n, boundary) if side == "below" else _sf_ge(x, n, boundary)
+    bound = hi if side == "below" else lo
+    shown_wrong = (lo >= boundary) if side == "below" else (hi <= boundary)
+    return {"p": p, "passed": p <= alpha, "shown_wrong_side": shown_wrong, "bound": bound,
+            "interval": [lo, hi], "side": side, "boundary": boundary, "alpha": alpha,
+            "n_effective": n, "count": x}
+
+
+def cases_for_rate_bound(rate: float, boundary: float, side: str, alpha: float = 0.05,
+                         design_effect: float = 1.0, limit: int = 1_000_000) -> int | None:
+    """Cases a `rate_bound_test` needs to clear `boundary` if the rate stays at `rate`: the
+    smallest n whose effective size n / `design_effect` passes, found by doubling then
+    bisection (the exact test saw-tooths in n, so read it as the size to plan for). 59 at a rate
+    of 0 against a 5% bar. None when the rate is on the wrong side of the boundary."""
+    if not 0 < boundary < 1 or rate is None or design_effect is None or design_effect <= 0:
+        return None
+    if (side == "below" and rate >= boundary) or (side == "above" and rate <= boundary):
+        return None
+
+    def ok(m: int) -> bool:
+        r = rate_bound_test(rate, m / design_effect, boundary, side, alpha)
+        return bool(r and r["passed"])
+
+    hi = 1
+    while not ok(hi):
+        hi *= 2
+        if hi > limit:
+            return None
+    lo = hi // 2
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        lo, hi = (lo, mid) if ok(mid) else (mid, hi)
+    return hi
+
+
+def cases_for_spread(n: int, se: float | None, effect: float | None, alpha: float = 0.05,
+                     power: float = 0.80) -> int | None:
+    """Cases a one-sided test at `alpha` needs for power `power` against a true distance
+    `effect` from its null, at the spread `n` cases measured (standard error `se`): the n at
+    which (z_(1-alpha) + z_power) * se * sqrt(n_now / n) = effect. It carries whatever made the
+    spread, unequal weights, clusters, flips and a judge's noise, so it answers "how many cases
+    like these" after a run, where `paired_n` and `threshold_n` plan before one."""
+    if n <= 0 or se is None or se <= 0 or effect is None or effect <= 0:
+        return None
+    if not (0 < alpha < 0.5 and 0 < power < 1):
+        return None
+    return math.ceil(n * ((_z(1 - alpha) + _z(power)) * se / effect) ** 2 - 1e-9)
+
+
+def non_inferiority_test(deltas: Sequence[float], margin: float, alpha: float = 0.05,
+                         clusters: Sequence[str | None] | None = None, draws: int = 20_000,
+                         seed: int = 0, case_weights: Sequence[float] | None = None) -> dict | None:
+    """Is the candidate no worse than the baseline by more than `margin`? A one-sided sign-flip
+    test on paired per-case deltas (statistics §4.4, §4.5; rule 19).
+
+    `deltas` are candidate minus baseline per case, on a scale where higher is better (a pass
+    rate; negate failure-rate deltas). H0: mean delta <= -margin. Under H0's boundary each case's
+    delta + margin is symmetric about zero, so the observed sum of (delta + margin) is compared
+    with its sum under every sign pattern, one-sided: exact up to 16 units, Monte Carlo above.
+    With `clusters`, signs flip per cluster, with Webb weights at 6-9 clusters (§2.4).
+
+    "No significant difference" is not this test: 4 fixes and 4 breaks on 50 cases give an
+    interval of about +/-11 points, which shows nothing about a 5-point margin.
+
+    `passed` is p <= alpha. `lower` is the lower end of the inverted sign-flip interval at
+    2 * alpha (a one-sided 1 - alpha bound), shown beside it; it is None when there are too few
+    clusters for any interval. A one-sided test on G units cannot return p below 1 / 2^G
+    (`min_attainable_p`), so at four clusters or fewer it cannot pass at 5%. With `case_weights`
+    it tests the design-weighted mean (`weighted_mean_delta`): each unit's weighted
+    w_i (delta_i + margin) is symmetric under H0's boundary.
+    """
+    if not deltas or margin is None or margin <= 0 or not 0 < alpha < 0.5:
+        return None
+    n = len(deltas)
+    r = _one_sided_flip(deltas, -margin, clusters, case_weights, draws, seed)
+    interval = sign_flip_interval(deltas, clusters=clusters, alpha=2 * alpha, seed=seed,
+                                  case_weights=case_weights)
+    mean = weighted_mean_delta(deltas, case_weights)["mean"]
+    return {"test": "non_inferiority", "margin": margin, "alpha": alpha, "mean": mean,
+            "lower": interval[0] if interval else None, "interval": interval, "p": r["p"],
+            "passed": r["p"] <= alpha, "n": n, "n_clusters": r["n_clusters"],
+            "min_attainable_p": 1 / 2 ** r["n_clusters"], "weights": r["weights"],
+            "method": "one-sided sign-flip, per cluster" if clusters is not None else "one-sided sign-flip"}
 
 
 def mcnemar_midp(gains: int, losses: int) -> float:
@@ -506,6 +1140,18 @@ def cases_for_flip_rate(flip_rate: float, effect: float, power_z: float = Z80_PO
     if effect <= 0 or not 0 < flip_rate <= 1:
         return None
     return math.ceil((Z95 + power_z) ** 2 * flip_rate / effect ** 2)
+
+
+def paired_n(flip_rate: float, margin: float, alpha: float = 0.05, power: float = 0.80) -> int | None:
+    """Cases a one-sided paired test needs (a superiority test of a gain of `margin`, or a
+    non-inferiority test with margin `margin` when the true difference is 0), at one-sided level
+    `alpha` and power `power`, when a share `flip_rate` of cases flip between versions:
+    (z_(1-alpha) + z_power)^2 d / margin^2 (statistics §4.1, §4.5). At alpha 0.025 it equals
+    `cases_for_flip_rate`; showing a cheaper model within 5 points at a 16% flip rate takes 503
+    cases at 0.025 and 396 at 0.05."""
+    if margin <= 0 or not 0 < flip_rate <= 1 or not 0 < alpha < 0.5 or not 0 < power < 1:
+        return None
+    return math.ceil((_z(1 - alpha) + _z(power)) ** 2 * flip_rate / margin ** 2 - 1e-9)
 
 
 # ---- correlated cases: clusters (docs/statistics.md §4.3) -----------------------------------
@@ -634,8 +1280,8 @@ def cochran_q(trials_by_case: Sequence[Sequence[bool]], draws: int = 5_000, seed
 
 def benjamini_hochberg(pvalues: Sequence[float | None]) -> list[float | None]:
     """Benjamini-Hochberg adjusted p-values (false discovery rate), None left in place. Use when
-    several categories are each tested: at 10 categories and alpha 0.05, two suites in five with
-    no real change would show at least one "significant" category by chance."""
+    several use cases are each tested: at 10 use cases and alpha 0.05, two suites in five with
+    no real change would show at least one "significant" use case by chance."""
     idx = [(p, i) for i, p in enumerate(pvalues) if p is not None]
     m = len(idx)
     out: list[float | None] = [None] * len(pvalues)
@@ -643,6 +1289,22 @@ def benjamini_hochberg(pvalues: Sequence[float | None]) -> list[float | None]:
     for rank, (p, i) in reversed(list(enumerate(sorted(idx), start=1))):
         running = min(running, p * m / rank)
         out[i] = min(1.0, running)
+    return out
+
+
+def holm(pvalues: Sequence[float | None]) -> list[float | None]:
+    """Holm step-down adjusted p-values (Holm 1979), None left in place: the familywise error
+    rate, the chance of any false alarm among the gates, held at alpha with no assumption about
+    how the p-values depend on each other. Stricter than Benjamini-Hochberg, which controls only
+    the share of false alarms among the gates that fire (statistics §4.6; rule 22). The i-th
+    smallest of m p-values is adjusted to max over j <= i of (m - j + 1) * p_(j), capped at 1."""
+    idx = sorted((p, i) for i, p in enumerate(pvalues) if p is not None)
+    m = len(idx)
+    out: list[float | None] = [None] * len(pvalues)
+    running = 0.0
+    for rank, (p, i) in enumerate(idx, start=1):
+        running = max(running, min(1.0, (m - rank + 1) * p))
+        out[i] = running
     return out
 
 
@@ -707,12 +1369,12 @@ def t_quantile(p: float, df: float) -> float | None:
     return (lo + hi) / 2
 
 
-# ---- what the score is for: category weights (docs/statistics.md §1.1, §2.2) ---------------
+# ---- what the score is for: use case weights (docs/statistics.md §1.1, §2.2) ---------------
 
 def objective_weights(shares: dict[str, float | None], weights: dict[str, float | None]) -> dict[str, float] | None:
     """Normalized weights of the headline objective, sum(share x weight x pass rate) /
-    sum(share x weight). `weights` is how much a failure in each category matters, as a ratio;
-    equal weights give the traffic-weighted score as the special case. None when a category
+    sum(share x weight). `weights` is how much a failure in each use case matters, as a ratio;
+    equal weights give the traffic-weighted score as the special case. None when a use case
     lacks a share or a weight: an unstated weight is unknown, not 1."""
     if not shares or any(not isinstance(shares.get(c), (int, float)) for c in shares):
         return None
@@ -724,10 +1386,10 @@ def objective_weights(shares: dict[str, float | None], weights: dict[str, float 
 
 
 def blind_spot(objective_weight: float, smallest_drop: float, overall_mde: float | None) -> dict | None:
-    """Can the headline score see a regression in this category? A drop of `smallest_drop` in a
-    category moves the objective by objective_weight x smallest_drop. If that is below the
-    comparison's detectable effect, the score is blind to it, and the category needs a guardrail
-    of its own: a non-inferiority test on that category alone. A 2% category that drops 10
+    """Can the headline score see a regression in this use case? A drop of `smallest_drop` in a
+    use case moves the objective by objective_weight x smallest_drop. If that is below the
+    comparison's detectable effect, the score is blind to it, and the use case needs a guardrail
+    of its own: a non-inferiority test on that use case alone. A 2% use case that drops 10
     points moves a traffic-weighted score by 0.2 points; a 100-case comparison detects about 11."""
     if overall_mde is None or objective_weight < 0 or smallest_drop <= 0:
         return None
@@ -739,7 +1401,7 @@ def cases_per_arm(p1: float, p2: float, power_z: float = Z80_POWER) -> int | Non
     """Cases per version to detect a change from pass rate p1 to p2, unpaired, two-sided 5%:
     (z_a + z_b)^2 (p1 q1 + p2 q2) / (p1 - p2)^2. Pairing lowers it. Halving a failure rate takes
     55 cases at 50% failure, 118 at 30%, 431 at 10% and 4,665 at 1%: improvement is sized by the
-    change worth seeing, not by how hard the category is."""
+    change worth seeing, not by how hard the use case is."""
     if p1 == p2 or not (0 <= p1 <= 1 and 0 <= p2 <= 1):
         return None
     return math.ceil((Z95 + power_z) ** 2 * (p1 * (1 - p1) + p2 * (1 - p2)) / (p1 - p2) ** 2)
@@ -749,20 +1411,20 @@ def allocation_target(state: str, *, smallest_change: float | None = None, flip_
                       tolerated_drop: float | None = None, costly_mode_rates: Sequence[float] = (),
                       guardrail_drop: float | None = None, floor: int = 3,
                       probability: float = 0.95) -> dict | None:
-    """One category's case target, from its state and its costly failure modes.
+    """One use case's case target, from its state and its costly failure modes.
 
     - state "improve" (room to improve): cases to see a net change of `smallest_change` given the
-      category's `flip_rate` (cases_for_flip_rate);
+      use case's `flip_rate` (cases_for_flip_rate);
     - state "solved" (the remaining failures explained): a regression guard that surfaces a
       `tolerated_drop` with `probability` (cases_to_surface: 29 for 10 points, 59 for 5,
       149 for 2, 299 for 1, past which a check on every production run beats offline cases);
     - on top, in either state: each rare, costly failure mode at its rate needs enough cases to
       surface it (one entry in `costly_mode_rates` per mode);
-    - if the blind-spot check fired, the cases a non-inferiority guardrail on the category alone
+    - if the blind-spot check fired, the cases a non-inferiority guardrail on the use case alone
       needs to see `guardrail_drop` (taken as a detection need, the conservative reading).
 
     The target is the largest of the needs (the same cases serve every job), never below
-    `floor`. Weights enter through the inputs: a heavier category gets a smaller smallest_change,
+    `floor`. Weights enter through the inputs: a heavier use case gets a smaller smallest_change,
     tolerated_drop and guardrail_drop, and more of its failure modes count as costly.
     """
     needs: dict[str, int | None] = {}
@@ -784,8 +1446,8 @@ def allocation_target(state: str, *, smallest_change: float | None = None, flip_
 
 def neyman_allocation(strata: dict[str, tuple[float, float]], total: int, floor: int = 0) -> dict[str, int] | None:
     """Split `total` cases across strata in proportion to objective weight x standard deviation
-    (Neyman 1934), with weight = share x category weight: the narrowest interval on the weighted
-    objective for a fixed budget. `strata` maps a category to (objective weight, expected pass
+    (Neyman 1934), with weight = share x use case weight: the narrowest interval on the weighted
+    objective for a fixed budget. `strata` maps a use case to (objective weight, expected pass
     rate). A stratum near 0% or 100% still gets `floor`. Rounded by largest remainder."""
     if total <= 0 or not strata:
         return None
@@ -802,23 +1464,108 @@ def neyman_allocation(strata: dict[str, tuple[float, float]], total: int, floor:
     return out
 
 
-def stratified_draw(population: dict[str, Sequence[str]], n_by_stratum: dict[str, int], seed: int) -> dict:
-    """A seeded simple random draw within each stratum, recorded with each item's inclusion
-    probability n_h / N_h, so the quality-estimate set is a stratified random sample rather than
-    a quota the author fills, and Horvitz-Thompson weights (1 / probability) are known. Skips
-    after the draw must be recorded with a reason; replace a skip with the next item of a
-    second seeded draw, never by hand."""
+def optimum_allocation(strata: dict[str, dict], total: int,
+                       minimums: dict[str, int] | None = None) -> dict | None:
+    """Split a budget of `total` cases across use cases by optimum allocation, n_s proportional
+    to w_s * sigma_s / sqrt(c_s) (Neyman 1934, with unequal costs, Cochran 1977 §5.5), around
+    each use case's minimum (statistics §2.3; rule 8).
+
+    `strata` maps a use case to {"weight": w, "pass_rate": p, "cost": c}: its weight in theta, its
+    expected pass rate (sigma = sqrt(p(1 - p)), floored at 0.05 so a use case at 0% or 100% is
+    not starved), and the cost of running one of its cases. Before a baseline the spreads are
+    unknown: when any pass rate is missing, all spreads are taken as equal, which is proportional
+    allocation (n_s proportional to w_s). Likewise when any cost is missing, costs are taken as
+    equal. The result says which was assumed.
+
+    `minimums` are the counts each gated use case's decision rule needs (§4.1). A use case the
+    formula gives less than its minimum is fixed at its minimum and the rest of the budget is
+    spread by the same formula over the others, repeated until every minimum holds: the
+    narrowest interval on theta the budget allows, given the minimums. Counts are whole cases,
+    rounded by largest remainder. When the minimums alone exceed the budget, each use case gets
+    its minimum and `shortfall` says how many cases over budget that is.
+
+    None when a weight is missing or negative (an unstated weight is unknown, never 1), or the
+    budget is negative.
+    """
+    if not strata or total is None or total < 0:
+        return None
+    mins = {s: int((minimums or {}).get(s) or 0) for s in strata}
+    if any(v < 0 for v in mins.values()):
+        return None
+    weights = {s: (v or {}).get("weight") for s, v in strata.items()}
+    if any(not isinstance(w, (int, float)) or w < 0 for w in weights.values()):
+        return None
+    rates = {s: (v or {}).get("pass_rate") for s, v in strata.items()}
+    costs = {s: (v or {}).get("cost") for s, v in strata.items()}
+    spread_known = all(isinstance(p, (int, float)) and 0 <= p <= 1 for p in rates.values())
+    cost_known = all(isinstance(c, (int, float)) and c > 0 for c in costs.values())
+    score = {}
+    for s in strata:
+        sigma = math.sqrt(max(rates[s] * (1 - rates[s]), 0.0025)) if spread_known else 1.0
+        score[s] = weights[s] * sigma / (math.sqrt(costs[s]) if cost_known else 1.0)
+    base = {"spread": "measured" if spread_known else "assumed_equal",
+            "cost": "measured" if cost_known else "assumed_equal"}
+    need = sum(mins.values())
+    if need >= total:
+        return {"allocation": dict(mins), "at_minimum": sorted(strata), "shortfall": need - total,
+                **base, "method": "minimums only: the budget does not cover them"}
+    free, fixed = set(strata), set()
+    while True:
+        budget = total - sum(mins[s] for s in fixed)
+        s_free = sum(score[s] for s in free)
+        raw = {s: (budget * score[s] / s_free if s_free > 0 else budget / len(free)) for s in free}
+        under = {s for s in free if raw[s] < mins[s]}
+        if not under:
+            break
+        fixed |= under
+        free -= under
+    out = {s: mins[s] for s in fixed}
+    out.update({s: math.floor(raw[s]) for s in free})
+    rest = total - sum(out.values())
+    for s in sorted(free, key=lambda s: (-(raw[s] - math.floor(raw[s])), s))[:max(rest, 0)]:
+        out[s] += 1
+    return {"allocation": out, "at_minimum": sorted(fixed), "shortfall": 0, **base,
+            "method": "optimum allocation (Neyman, unequal costs) with minimums"}
+
+
+def draw_order(items: Sequence[str], seed: int, stratum: str) -> list[str]:
+    """A seeded random order of one stratum's items, the same on every machine and Python 3.11+
+    (string seeds hash with SHA-512). Each stratum has its own stream, so changing how many are
+    drawn from one never changes another's draw, and the first n of the order are a simple random
+    sample of n: drawing more later extends the same draw (an expansion, estimators §9)."""
     import random as _random
-    rng = _random.Random(seed)
-    drawn, probs = {}, {}
+    order = sorted(set(items))
+    _random.Random(f"aot-evals-draw|{seed}|{stratum}").shuffle(order)
+    return order
+
+
+def stratified_draw(population: dict[str, Sequence[str]], n_by_stratum: dict[str, int], seed: int,
+                    skip: Sequence[str] = ()) -> dict:
+    """A seeded simple random draw within each stratum, recorded with each item's inclusion
+    probability n_h / N_h, so the quality set is a stratified random sample rather than a quota
+    the author fills, and Hájek weights (1 / probability) are known (statistics §2.2; rule 6).
+
+    Each stratum is drawn as the first n_h of its `draw_order`. A skipped item (recorded with its
+    reason, outside this function) leaves the frame: the draw passes over it and takes the next
+    item of the same seeded order, never one picked by hand, and N_h counts the items that remain.
+    `index` is each drawn item's position in its stratum's order. `replaced` lists the skipped
+    items the draw passed over."""
+    skipped = set(skip)
+    drawn, probs, index, sizes, replaced = {}, {}, {}, {}, {}
     for stratum in sorted(population):
-        items = sorted(population[stratum])
-        n = min(n_by_stratum.get(stratum, 0), len(items))
-        pick = rng.sample(items, n) if n else []
+        order = draw_order(population[stratum], seed, stratum)
+        pos = {it: i for i, it in enumerate(order)}
+        left = [it for it in order if it not in skipped]
+        n = min(n_by_stratum.get(stratum, 0), len(left))
+        pick = left[:n]
         drawn[stratum] = sorted(pick)
+        sizes[stratum] = len(left)
+        replaced[stratum] = sorted(it for it in order[:pos[pick[-1]] + 1] if it in skipped) if pick else []
         for it in pick:
-            probs[it] = n / len(items)
-    return {"seed": seed, "drawn": drawn, "inclusion_probability": probs, "method": "stratified simple random"}
+            probs[it] = n / len(left)
+            index[it] = pos[it]
+    return {"seed": seed, "drawn": drawn, "inclusion_probability": probs, "index": index,
+            "frame_size": sizes, "replaced": replaced, "method": "stratified simple random"}
 
 
 # ---- are failures equally costly? (docs/statistics.md §1.2) ---------------------------------
@@ -840,12 +1587,12 @@ def failure_severity(*, writes: bool, reversible: bool | None, noticed: bool | N
 
 
 def cost_flags(failures: Sequence[tuple[str, str | None]], declared: dict[str, str | None]) -> dict:
-    """The uneven-cost check on real failures. `failures` is (category, severity) for each
-    baseline failure or triaged disagreement; `declared` is each category's declared cost
-    (low, medium, high) from the owner. A category is flagged when its failures span more than
+    """The uneven-cost check on real failures. `failures` is (use case, severity) for each
+    baseline failure or triaged disagreement; `declared` is each use case's declared cost
+    (low, medium, high) from the owner. A use case is flagged when its failures span more than
     one severity with a high one among them (uneven), or when any failure is worse than its
-    declared cost (e.g. a read-only request that wrote to a record, in a category the owner
-    rated low). `even` is true only when no category is flagged and every severity is known."""
+    declared cost (e.g. a read-only request that wrote to a record, in a use case the owner
+    rated low). `even` is true only when no use case is flagged and every severity is known."""
     by_cat: dict[str, list[str | None]] = {}
     for cat, sev in failures:
         by_cat.setdefault(cat, []).append(sev)
@@ -861,5 +1608,5 @@ def cost_flags(failures: Sequence[tuple[str, str | None]], declared: dict[str, s
         out[cat] = {"failures": len(sevs), "severities": {s: known.count(s) for s in SEVERITY if s in known},
                     "worst": worst, "declared": decl, "uneven": uneven, "exceeds_declared": exceeds,
                     "flag": uneven or exceeds}
-    return {"categories": out, "unknown_severity": unknown,
+    return {"use_cases": out, "unknown_severity": unknown,
             "even": bool(out) and unknown == 0 and not any(v["flag"] for v in out.values())}

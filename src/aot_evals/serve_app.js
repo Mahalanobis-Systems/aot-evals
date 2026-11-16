@@ -1,5 +1,5 @@
 /* The grader application (serve.py). Plain JavaScript, no build step. Every write goes through
-   POST /api/act/<action> with the session token; the server writes the suite's files. */
+   POST /api/act/<action> with the session token; the server writes the eval's files. */
 (function () {
   "use strict";
   const TOKEN = __TOKEN__;
@@ -84,19 +84,21 @@
 
   // ---- overview -------------------------------------------------------------------------------
   function overview(st) {
-    const ph = st.phase;
-    let h = `<section class="panel"><h2>${esc(ph.name)}</h2><p>${esc(ph.about)}</p>
-      <p><strong>Next:</strong> ${esc(st.next.what)}</p></section>`;
-    h += `<section class="panel"><h2>Trust per category</h2><p class="muted">Untested: no baseline covers it. Provisional: its numbers print, but the suite hasn't been held to people's verdicts yet. Validated: the suite agrees with people on its runs (floors: catch ${pct(st.floors.min_catch)}, clean pass ${pct(st.floors.min_clean)}).</p>
-      <div class="ga-wrap"><table><thead><tr><th>Category</th><th>Trust</th><th>Cases</th><th>Labelled runs</th><th>Catch</th><th>Clean pass</th><th>Why</th></tr></thead><tbody>` +
-      st.trust.map((r) => `<tr><td>${esc(r.category)}</td><td><span class="ga-tag ${r.level}">${r.level}</span></td><td>${r.n_cases}</td><td>${r.labelled_runs}</td><td>${pct(r.catch)}</td><td>${pct(r.clean)}</td><td>${esc(r.why)}</td></tr>`).join("") +
+    const sp = st.spec, dec = st.decision || {};
+    const fields = sp.invalid.map((f) => f + " (invalid)").concat(sp.missing);
+    let h = `<section class="panel"><h2>${esc(st.eval)}</h2><p class="muted">An eval of ${esc(st.agent)}${st.evals.length > 1 ? " (its evals: " + esc(st.evals.join(", ")) + ")" : ""}.${dec.action ? " It decides: " + esc(dec.action) + (dec.owner ? ", for " + esc(dec.owner) : "") + "." : ""}</p>
+      <p><strong>The spec:</strong> ${sp.complete ? "complete." : `${fields.length} field(s) to fill in eval.yaml: ${esc(fields.slice(0, 8).join(", "))}${fields.length > 8 ? "…" : ""}.`}</p>
+      <p><strong>Baseline:</strong> ${st.baseline.length ? esc(st.baseline.join(" + ")) : "none yet: ask an engineer to run one, so there are runs to label."}${st.candidate ? ` <strong>Latest candidate:</strong> ${esc(st.candidate)}.` : ""}</p></section>`;
+    const pe = st.people, fl = pe.floors;
+    const floor = (v) => (v == null ? "from max_inflation" : pct(v));
+    h += `<section class="panel"><h2>The eval against people</h2><p class="muted">Catch: of the runs people failed, the share the eval failed too. Clean pass: of the runs people passed, the share the eval passed. Floors: catch ${floor(fl.catch)}, clean pass ${floor(fl.clean)}, read with a margin of ${pct(pe.margin)}. Labels so far: ${pe.labels.fail} failing${pe.labels_needed.fail ? " of " + pe.labels_needed.fail : ""}, ${pe.labels.pass} passing${pe.labels_needed.pass ? " of " + pe.labels_needed.pass : ""}.</p>` +
+      (pe.problems.length ? `<p><strong>Not held to people yet:</strong></p><ul>${pe.problems.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>` : `<p><strong>The eval agrees with people</strong> on its labelled runs.</p>`) +
+      `<div class="ga-wrap"><table><thead><tr><th>Use case</th><th>Cases</th><th>In the baseline</th><th>Labelled runs</th><th>Catch</th><th>Clean pass</th></tr></thead><tbody>` +
+      st.use_cases.map((r) => `<tr><td>${esc(r.id)}${r.in_spec ? "" : ' <span class="muted">(not in the spec)</span>'}</td><td>${r.cases}</td><td>${r.in_baseline}</td><td>${r.labelled_runs}</td><td>${pct(r.catch)}</td><td>${pct(r.clean)}</td></tr>`).join("") +
       `</tbody></table></div></section>`;
-    if (st.changes.length) {
-      h += `<section class="panel"><h2>Since the baseline</h2>` + st.changes.map((c) => `<div class="ga-item"><strong>${esc(c.what)}</strong><ul>${c.path.map((p) => `<li>${esc(p)}</li>`).join("")}</ul></div>`).join("") + `</section>`;
-    }
     const word = { done: "In place", partial: "Partly", todo: "Not yet", later: "Not automated yet", "n/a": "Doesn't apply" };
     let group = null;
-    h += `<section class="panel"><h2>The components</h2><p class="muted">The parts an optimization loop needs around the agent, read from the suite.</p><div class="ga-wrap"><table><tbody>` +
+    h += `<section class="panel"><h2>The components</h2><p class="muted">The parts an optimization loop needs around the agent, read from its evals.</p><div class="ga-wrap"><table><tbody>` +
       st.components.map((c) => { const g = c.group !== group ? `<tr><th colspan="3">${esc((group = c.group))}</th></tr>` : "";
         return g + `<tr><td>${esc(c.name)}</td><td><span class="ga-tag ${c.state === "done" ? "validated" : c.state === "partial" ? "provisional" : "untested"}">${word[c.state]}</span></td><td class="muted">${esc(c.why)}</td></tr>`; }).join("") +
       `</tbody></table></div></section>`;
@@ -112,7 +114,7 @@
     const it = S.queue[S.qi];
     if (!it) return h + `<section class="panel"><p>Nothing left in this queue. Try another, or ask an engineer to run a new baseline or candidate.</p></section>`;
     const v = it.view || {};
-    h += `<section class="panel"><p class="muted"><span class="ga-tag">${esc(it.mode)}</span>${esc(it.category)} · run ${S.qi + 1} of ${S.queue.length} · ${esc(it.item_id)}</p>
+    h += `<section class="panel"><p class="muted"><span class="ga-tag">${esc(it.mode)}</span>${esc(it.use_case)} · run ${S.qi + 1} of ${S.queue.length} · ${esc(it.item_id)}</p>
       <h2>Did the agent do what was asked, correctly?</h2>
       <p class="muted">Judge it from scratch: no check's verdict and no expected answer is shown. For a fail, say what went wrong.</p>
       <div class="ga-fields">` + Object.keys(v).map((k) => `<div class="ga-field"><h3>${esc(k)}</h3><pre>${esc(show(v[k]))}</pre></div>`).join("") + `</div>
@@ -148,10 +150,10 @@
       `</ul><div class="ga-actions"><textarea class="ga-text" data-ruling-note placeholder="Why: this becomes the reason others see in their warm-up"></textarea><button data-rule="pass">Rule pass</button><button data-rule="fail">Rule fail</button></div></div>`).join("") : `<p class="muted">None.</p>`);
     h += `</section>`;
     const s = st.suite;
-    h += `<section class="panel"><h2>The suite against people</h2><div class="ga-row"><button class="ga-btn solid" data-measure>Re-grade the labelled runs</button><span class="muted">${s.measured_at ? "Last measured " + esc(s.measured_at) + (s.stale ? " (stale: something changed since)" : "") : "Not measured yet."} Re-grading reads the recorded runs: no agent runs and no judge calls.</span></div>`;
+    h += `<section class="panel"><h2>The eval against people</h2><div class="ga-row"><button class="ga-btn solid" data-measure>Re-grade the labelled runs</button><span class="muted">${s.measured_at ? "Last measured " + esc(s.measured_at) + (s.stale ? " (stale: something changed since)" : "") : "Not measured yet."} Re-grading reads the recorded runs: no agent runs and no judge calls.</span></div>`;
     if (s.dev) h += `<p>Dev: catch <strong>${pct(s.dev.catch.rate)}</strong> of the runs people failed, clean pass <strong>${pct(s.dev.clean.rate)}</strong> of the runs they passed, on ${s.dev.runs} runs. Holdout: ${s.holdout.runs ? `catch ${pct(s.holdout.catch.rate)}, clean pass ${pct(s.holdout.clean.rate)}` : "no runs yet"}.</p>`;
     const dev = s.items.filter((d) => d.split === "dev");
-    h += `<h3>Disagreements to explain (${dev.length})</h3>` + (dev.length ? dev.map((d) => `<div class="ga-item" data-item="${esc(d.item)}"><p><strong>${esc(d.case_id)}</strong>: person <strong>${d.human}</strong>, suite <strong>${d.suite == null ? "no verdict" : d.suite}</strong> <span class="muted">${esc(d.item)}</span></p>` +
+    h += `<h3>Disagreements to explain (${dev.length})</h3>` + (dev.length ? dev.map((d) => `<div class="ga-item" data-item="${esc(d.item)}"><p><strong>${esc(d.case_id)}</strong>: person <strong>${d.human}</strong>, eval <strong>${d.suite == null ? "no verdict" : d.suite}</strong> <span class="muted">${esc(d.item)}</span></p>` +
       (d.note ? `<p>Their note: ${esc(d.note)}</p>` : "") + (d.failing.length ? `<p class="muted">Failing: ${d.failing.map(esc).join("; ")}</p>` : "") +
       `<div class="ga-actions"><select data-cause>${Object.keys(st.causes).map((c) => `<option value="${c}" ${d.triage && d.triage.cause === c ? "selected" : ""}>${c}</option>`).join("")}</select>
       <textarea class="ga-text" data-triage-note placeholder="Why">${esc((d.triage && d.triage.note) || "")}</textarea><button data-triage>Save the cause</button>` +
@@ -162,29 +164,29 @@
 
   // ---- rules ----------------------------------------------------------------------------------
   function rules(st) {
-    let h = `<section class="panel"><h2>The labelling standard</h2>` + (st.standard.rules.length ? `<ul>` + st.standard.rules.map((r) => `<li><strong>${esc(r.id)}</strong>: ${esc(r.says)} <span class="muted">${esc((r.categories || ["*"]).join(", "))}${r.from ? " · " + esc(r.from) : ""}</span></li>`).join("") + `</ul>` : `<p class="muted">No rules yet.</p>`) + `</section>`;
+    let h = `<section class="panel"><h2>The labelling standard</h2>` + (st.standard.rules.length ? `<ul>` + st.standard.rules.map((r) => `<li><strong>${esc(r.id)}</strong>: ${esc(r.says)} <span class="muted">${esc((r.use_cases || ["*"]).join(", "))}${r.from ? " · " + esc(r.from) : ""}</span></li>`).join("") + `</ul>` : `<p class="muted">No rules yet.</p>`) + `</section>`;
     const open = st.proposals.filter((p) => p.status === "proposed");
     h += `<section class="panel"><h2>Proposed rules (${open.length})</h2><p class="muted">When rulings keep going the same way, propose the pattern as a rule. The owner accepts it into the standard, and the runs it could flip are listed for a recheck.</p>` +
-      st.proposals.map((p) => `<div class="ga-item" data-rule-id="${esc(p.id)}"><p><strong>${esc(p.says)}</strong></p><p class="muted">${esc(p.categories.join(", "))} · proposed by ${esc(p.by)} on ${esc(p.at)} · ${esc(p.status)}${p.decided_by ? " by " + esc(p.decided_by) : ""}</p>` +
+      st.proposals.map((p) => `<div class="ga-item" data-rule-id="${esc(p.id)}"><p><strong>${esc(p.says)}</strong></p><p class="muted">${esc((p.use_cases || ["*"]).join(", "))} · proposed by ${esc(p.by)} on ${esc(p.at)} · ${esc(p.status)}${p.decided_by ? " by " + esc(p.decided_by) : ""}</p>` +
         (p.status === "proposed" ? `<div class="ga-actions"><button data-decide="yes" class="solid">Accept into the standard</button><button data-decide="no">Decline</button></div>` : "") +
         (p.status === "accepted" ? `<button class="ga-btn" data-recheck>Runs to recheck</button> ${S.recheck[p.id] ? `<span>${S.recheck[p.id].length} run(s): ${esc(S.recheck[p.id].slice(0, 8).join(", "))}${S.recheck[p.id].length > 8 ? "…" : ""}</span>` : ""}` : "") + `</div>`).join("") +
       `<h3>Propose a rule</h3><textarea class="ga-text" id="ga-says" placeholder="e.g. A rounded amount passes when its scale and unit are right ($1.41M for $1,413,000)."></textarea>
-      <div class="ga-actions"><input id="ga-cats" class="ga-text" placeholder="categories it applies to, comma separated (blank: all)"><button class="solid" data-propose>Propose</button></div></section>`;
+      <div class="ga-actions"><input id="ga-cats" class="ga-text" placeholder="use cases it applies to, comma separated (blank: all)"><button class="solid" data-propose>Propose</button></div></section>`;
     return h;
   }
 
   // ---- judges ---------------------------------------------------------------------------------
   function judges(st) {
-    if (!st.judges.length) return `<section class="panel"><h2>Judges</h2><p>This suite has no AI judges: every check is code. Nothing to calibrate.</p></section>`;
+    if (!st.judges.length) return `<section class="panel"><h2>Judges</h2><p>This eval has no AI judges: every check is code. Nothing to calibrate.</p></section>`;
     let h = st.judges.map((j) => `<section class="panel" data-judge="${esc(j.id)}"><h2>${esc(j.id)} <span class="muted">v${esc(j.version)}</span></h2><p><strong>${esc(j.question || "")}</strong></p>
-      <p>${j.labels} labels (${j.pass} pass, ${j.fail} fail)${j.labellers.length ? " by " + esc(j.labellers.join(", ")) : ""}. Calibration: <strong>${esc(j.calibration || "none")}</strong>${j.tpr != null ? ` · passes good work ${pct(j.tpr)}, catches failures ${pct(j.tnr)}` : ""}.</p>
-      ${j.missing_categories.length ? `<p class="muted">No labels yet in: ${esc(j.missing_categories.join(", "))}</p>` : ""}
+      <p>${j.labels} labels (${j.pass} pass, ${j.fail} fail)${j.labellers.length ? " by " + esc(j.labellers.join(", ")) : ""}. Calibration: <strong>${esc(j.calibration || "none")}</strong>${j.clean != null ? ` · passes good work ${pct(j.clean)}, catches failures ${pct(j.catch)}` : ""}.</p>
+      ${j.missing_use_cases.length ? `<p class="muted">No labels yet in the use cases: ${esc(j.missing_use_cases.join(", "))}</p>` : ""}
       <div class="ga-actions"><button data-jlabel>Label items for this judge</button><button data-calibrate>Recalibrate</button></div>
       ${S.confirm && S.confirm.judge === j.id ? `<div class="ga-flash">${esc(S.confirm.message)} <button class="ga-btn solid" data-confirm>Confirm: ${S.confirm.calls} call(s)</button></div>` : ""}</section>`).join("");
     const q = S.judgeQ, it = q && q.items[q.i];
     if (q) {
       const j = st.judges.find((x) => x.id === q.judge);
-      h += `<section class="panel"><h2>Labelling for ${esc(q.judge)}</h2>` + (it ? `<p class="muted">Item ${q.i + 1} of ${q.items.length} · ${esc(it.category)} · ${esc(it.case_id)}</p><p><strong>${esc(j.question)}</strong></p>
+      h += `<section class="panel"><h2>Labelling for ${esc(q.judge)}</h2>` + (it ? `<p class="muted">Item ${q.i + 1} of ${q.items.length} · ${esc(it.use_case)} · ${esc(it.case_id)}</p><p><strong>${esc(j.question)}</strong></p>
         <p class="muted">Pass means this item does not show the failure this judge is for; fail means it does.</p>
         <div class="ga-fields">` + Object.keys(it.input).map((k) => `<div class="ga-field"><h3>${esc(k)}</h3><pre>${esc(show(it.input[k]))}</pre></div>`).join("") +
         `</div><div class="ga-actions"><button data-jl="pass">Pass</button><button data-jl="fail">Fail</button><textarea id="ga-jnote" placeholder="Note"></textarea></div>` : `<p>Nothing left to label for this judge.</p>`) + `</section>`;
@@ -194,10 +196,10 @@
 
   // ---- inbox ----------------------------------------------------------------------------------
   function inbox(st) {
-    let h = `<section class="panel"><h2>Waiting on engineering (${st.inbox.length})</h2><p class="muted">What only an engineer can do: fix a check or a case, finish a drafted case, run the agent after it changed. Everything else happens here.</p>` +
+    let h = `<section class="panel"><h2>Waiting on engineering (${st.inbox.length})</h2><p class="muted">What only an engineer can do: fix a check or a case, finish a drafted case. Everything else happens here.</p>` +
       (st.inbox.length ? st.inbox.map((x) => `<div class="ga-item"><p><span class="ga-tag">${esc(x.kind)}</span><strong>${esc(x.what)}</strong></p><p>${esc(x.note)}</p><p class="muted">${esc([x.case, x.item, x.by].filter(Boolean).join(" · "))}</p></div>`).join("") : `<p class="muted">Nothing.</p>`) + `</section>`;
     h += `<section class="panel"><h2>Draft a new case</h2><p class="muted">Write a new request in the shape of an existing case. An engineer sets its start and expected end state before it is graded.</p>
-      <div class="ga-fields"><label>Like case <select id="ga-like">${st.cases.map((c) => `<option value="${esc(c.id)}">${esc(c.id)} (${esc(c.category)})</option>`).join("")}</select></label>
+      <div class="ga-fields"><label>Like case <select id="ga-like">${st.cases.map((c) => `<option value="${esc(c.id)}">${esc(c.id)} (${esc(c.use_case)})</option>`).join("")}</select></label>
       <textarea class="ga-text" id="ga-req" placeholder="The request, as a user would send it"></textarea>
       <textarea class="ga-text" id="ga-ans" placeholder="A correct answer, if it has one (optional)"></textarea>
       <label><input type="checkbox" id="ga-nochange"> Nothing should change</label>
@@ -241,7 +243,7 @@
     }));
     app.querySelectorAll("[data-propose]").forEach((b) => (b.onclick = async () => {
       const says = document.getElementById("ga-says").value, cats = document.getElementById("ga-cats").value.split(",").map((x) => x.trim()).filter(Boolean);
-      await act("propose", { says, categories: cats.length ? cats : ["*"] }); S.flash = "Proposed. The owner accepts or declines it here."; reload();
+      await act("propose", { says, use_cases: cats.length ? cats : ["*"] }); S.flash = "Proposed. The owner accepts or declines it here."; reload();
     }));
     app.querySelectorAll("[data-jlabel]").forEach((b) => (b.onclick = async () => {
       const id = b.closest("[data-judge]").dataset.judge;

@@ -6,11 +6,11 @@ A code check is a module with one function:
 
 `start` and `end` have the same shape: {"world": <observed state or None>, "output": <the
 agent's deliverable text, or None before the run>}. A check decides from the world wherever the
-world can decide (docs/method.md §1, principle 3); it reads `output` only when the output is itself the
-deliverable. It never reads the agent's claim that it succeeded (G10): the screen (C7) tests
+world can decide (docs/method.md, principle 3); it reads `output` only when the output is itself the
+deliverable. It never reads the agent's claim that it succeeded (`independent_reference`): the screen tests
 for that by running every check against an unchanged world plus a confident success claim.
 
-A module may set `USES_AGENT_REPORT = True` to declare that it trusts the agent's report; G10
+A module may set `USES_AGENT_REPORT = True` to declare that it trusts the agent's report; `independent_reference`
 then refuses it.
 """
 

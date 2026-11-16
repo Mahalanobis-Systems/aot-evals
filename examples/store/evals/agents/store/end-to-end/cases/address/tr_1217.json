@@ -1,0 +1,108 @@
+{
+  "id": "tr_1217",
+  "use_case": "address",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 3,
+    "inclusion_prob": 0.26666666666666666
+  },
+  "template": "address-t1",
+  "cluster": "address-t1",
+  "trigger": {
+    "text": "Please send order A1435 to 778 Elm Street instead.",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0218",
+    "today": "2026-10-01"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1435": {
+        "address": "51 Bay Street",
+        "customer": "c-0218",
+        "delivered": null,
+        "eta": "2026-10-04",
+        "items": [
+          {
+            "name": "blender",
+            "price": 49.99,
+            "sku": "SKU-101"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "processing"
+      },
+      "A1436": {
+        "address": "31 Harbor Road",
+        "customer": "c-0218",
+        "delivered": "2026-08-11",
+        "eta": null,
+        "items": [
+          {
+            "name": "toaster",
+            "price": 29.99,
+            "sku": "SKU-103"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Order A1435 will now go to 778 Elm Street.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1435": {
+          "address": "778 Elm Street",
+          "customer": "c-0218",
+          "delivered": null,
+          "eta": "2026-10-04",
+          "items": [
+            {
+              "name": "blender",
+              "price": 49.99,
+              "sku": "SKU-101"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "processing"
+        },
+        "A1436": {
+          "address": "31 Harbor Road",
+          "customer": "c-0218",
+          "delivered": "2026-08-11",
+          "eta": null,
+          "items": [
+            {
+              "name": "toaster",
+              "price": 29.99,
+              "sku": "SKU-103"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1217",
+    "synthetic": false
+  }
+}

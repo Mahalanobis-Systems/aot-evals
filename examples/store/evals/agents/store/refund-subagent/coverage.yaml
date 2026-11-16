@@ -1,0 +1,14 @@
+name: The store's support topics and refund policy
+source:
+  document: The store's help center topics and refund policy
+  kind: help-center
+  path: docs/help-center.md
+read_on: 2026-10-02
+template: null
+entries:
+  - {id: full-refund, title: Refund a whole order}
+  - {id: partial-refund, title: Refund some items}
+  - {id: gift-card, title: Refund to a gift card}
+  - {id: not-allowed, title: A refund the policy refuses}
+  - {id: window-edge, title: The 30th and 31st day after delivery}
+  - {id: missing-information, title: A handoff with no order number}

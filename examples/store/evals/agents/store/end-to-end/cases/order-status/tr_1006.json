@@ -1,0 +1,108 @@
+{
+  "id": "tr_1006",
+  "use_case": "order-status",
+  "pool": "quality",
+  "draw": {
+    "frame": "support-requests-2026-10",
+    "seed": 2026,
+    "index": 3,
+    "inclusion_prob": 0.08571428571428572
+  },
+  "template": "order-status-t1",
+  "cluster": "order-status-t1",
+  "trigger": {
+    "text": "Where is my order A1013?",
+    "type": "message"
+  },
+  "inputs": {
+    "customer": "c-0007",
+    "today": "2026-10-11"
+  },
+  "start_state": {
+    "log": [],
+    "orders": {
+      "A1013": {
+        "address": "10 Elm Street",
+        "customer": "c-0007",
+        "delivered": null,
+        "eta": "2026-10-14",
+        "items": [
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "shipped"
+      },
+      "A1014": {
+        "address": "87 Elm Street",
+        "customer": "c-0007",
+        "delivered": "2026-07-19",
+        "eta": null,
+        "items": [
+          {
+            "name": "french press",
+            "price": 27.99,
+            "sku": "SKU-108"
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "status": "delivered"
+      }
+    },
+    "refunds": [],
+    "returns": []
+  },
+  "expected_end_state": {
+    "output": "Order A1013 is shipped; it should arrive on 2026-10-14.",
+    "world": {
+      "log": [],
+      "orders": {
+        "A1013": {
+          "address": "10 Elm Street",
+          "customer": "c-0007",
+          "delivered": null,
+          "eta": "2026-10-14",
+          "items": [
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "shipped"
+        },
+        "A1014": {
+          "address": "87 Elm Street",
+          "customer": "c-0007",
+          "delivered": "2026-07-19",
+          "eta": null,
+          "items": [
+            {
+              "name": "french press",
+              "price": 27.99,
+              "sku": "SKU-108"
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "status": "delivered"
+        }
+      },
+      "refunds": [],
+      "returns": []
+    }
+  },
+  "provenance": {
+    "source": "export:support-requests-2026-10",
+    "export": "support-requests-2026-10",
+    "trace_ref": "tr_1006",
+    "synthetic": false
+  }
+}

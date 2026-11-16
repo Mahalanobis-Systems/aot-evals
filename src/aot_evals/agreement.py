@@ -1,31 +1,36 @@
-"""C19 `agreement`: does the suite's verdict on a whole run agree with a person's?
+"""`agreement`: does the eval's verdict on a whole run agree with a person's? (rule 15)
 
-Every other screen looks at a part: C7 at one case's states, C10 at one judge on its one
-question. None of them asks whether the suite, all checks together, fails the runs a person
-would fail and passes the runs a person would pass. A suite can clear every part and still miss
-what matters: a requirement no check looks at (a list presented as complete when it isn't, a
+Every other screen looks at a part: `screen` at one case's states, `calibrate` at one judge on
+its one question. None of them asks whether the eval, all checks together, fails the runs a
+person would fail and passes the runs a person would pass. An eval can clear every part and still
+miss what matters: a requirement no check looks at (a list presented as complete when it isn't, a
 task left unlinked, junk left behind), an expected answer that only matches one wording, a code
 check with a bug. This measures the whole.
 
 1. `agreement label queue --run R`: a sample of final attempts, one per case first, written to a
    local page (git-ignored: it carries agent output). A person judges each whole run from
    scratch, pass or fail with a note, seeing the request, the agent's answer and what changed,
-   never the checks or the expected state. `labels/standard.md`, if present, is shown as the
-   labelling guidance.
-2. `agreement label import --csv F`: labels go to `labels/runs.jsonl` (committed; label and
-   note only, no agent output). Each run is assigned to dev or holdout by a hash of its id.
-3. `agreement`: re-grades every labelled run with the suite as it is now, from the run's raw
-   record (`runs/<id>/raw/`), so labels outlive suite versions: fix a check, measure again,
-   without re-running the agent. The verdict is the report's: code checks always count, a judge
-   only once calibrated. A check that raises, or a counted judge with no verdict, leaves the run
-   with no verdict, which counts as wrong either way.
+   never the checks or the expected state. The agent system's `labels/standard.md`, if present,
+   is shown as the labelling guidance.
+2. `agreement label import --csv F`: labels go to `<eval>/labels/runs.jsonl` (committed; label
+   and note only, no agent output). Each run is assigned to dev or holdout by a hash of its id.
+3. `agreement`: re-grades every labelled run with the eval as it is now, from the run's raw
+   record (`runs/<id>/raw/`), so labels outlive changes to the checks: fix a check, measure
+   again, without re-running the agent. The verdict is the eval's counted checks' (rule 12),
+   judges included; whether a judge may count toward θ̂ is its floor, read by the report. A
+   check that raises, or a counted judge with no verdict, leaves the run with no verdict, which
+   counts as wrong either way.
 4. Every dev disagreement gets a cause in `labels/triage.yaml`, so each one turns into a fix:
-   a missing requirement (C6/C8), a wrong expectation (C6), a check bug (C8), a judge error
-   (C10), out of scope, or accepted with a reason.
+   a missing requirement, a wrong expectation, a check bug, a judge error, out of scope, or
+   accepted with a reason.
 
-Writes `report/agreement.json`. Gate C19: enough labels of both kinds, a measurement that is
-current for this suite and these labels, dev catch rate and clean pass rate at or above their
-floors, and every dev disagreement triaged. Holdout is reported, never iterated on.
+Writes `report/agreement.json`. The floors come from the spec (`measurement.people`): a stated
+floor is read with the non-inferiority margin (statistics §4.2), a null one from `max_inflation`
+at the eval's failure rate, as for a judge. Labels are counted per kind against the count each
+kind needs, fixed in advance (`labels_per_kind`). Holdout is reported, never iterated on.
+agreement.json's `gates` lists one entry per gate that is not met, each with its id
+(`people_labels`, `people_disputes`, `people_stale`, `people_floor`, `people_triage`) so a
+fixture can trigger exactly one.
 """
 
 from __future__ import annotations
@@ -40,53 +45,60 @@ from pathlib import Path
 from . import stats
 from .checks import run_check
 from .labels import parse_label, split_for
-from .repo import Evals
+from .repo import Eval
 from .scrub import scan
 from .util import append_jsonl, load_json, load_yaml, now_iso, read_jsonl, write_json
 
-MIN_RUNS = 60
-MIN_EACH = 15  # labelled runs of each kind: below this, one rate's interval is too wide to act on
-MIN_CATCH = 0.85
-MIN_CLEAN = 0.85
 CAUSES = {
-    "missing-requirement": "no check looks at what the person failed it for (C6 requirements, C8 check)",
-    "wrong-expectation": "the case's expected answer or state is wrong or too narrow (C6)",
-    "check-bug": "a check exists but decides wrongly (C8)",
-    "judge-error": "a judge decided wrongly (C10: iterate the judge on its dev errors)",
+    "missing-requirement": "no check looks at what the person failed it for (a requirement, a check)",
+    "wrong-expectation": "the case's expected answer or state is wrong or too narrow",
+    "check-bug": "a check exists but decides wrongly",
+    "judge-error": "a judge decided wrongly (iterate the judge on its dev errors, then calibrate)",
     "out-of-scope": "the suite deliberately doesn't test this; say why",
     "accepted": "known and left as is; say why",
 }
-LABEL_FIELDS = ["item_id", "case_id", "category", "run", "trial", "attempt", "label", "labeller", "note", "input"]
+LABEL_FIELDS = ["item_id", "case_id", "use_case", "run", "trial", "attempt", "label", "labeller", "note", "input"]
 
 
-def labels_path(ev: Evals) -> Path:
+def labels_path(ev: Eval) -> Path:
     return ev.p("labels", "runs.jsonl")
 
 
-def triage_path(ev: Evals) -> Path:
+def triage_path(ev: Eval) -> Path:
     return ev.p("labels", "triage.yaml")
 
 
-def result_path(ev: Evals) -> Path:
+def result_path(ev: Eval) -> Path:
     return ev.p("report", "agreement.json")
 
 
-def floors(ev: Evals) -> dict:
-    """`labels/floors.yaml` may set min_catch, min_clean, min_runs, min_each."""
-    f = load_yaml(ev.p("labels", "floors.yaml")) or {}
-    return {"min_catch": float(f.get("min_catch", MIN_CATCH)), "min_clean": float(f.get("min_clean", MIN_CLEAN)),
-            "min_runs": int(f.get("min_runs", MIN_RUNS)), "min_each": int(f.get("min_each", MIN_EACH))}
+def load_result(ev: Eval) -> dict | None:
+    return load_json(result_path(ev))
+
+
+def is_stale(ev: Eval, result: dict, labels: list[dict] | None = None) -> bool:
+    """The eval (cases, checks, judges, their calibrations, the spec) or the labels changed since
+    agreement.json was measured."""
+    labels = load_labels(ev) if labels is None else labels
+    return result.get("suite_sha") != suite_sha(ev) or result.get("labels_sha") != labels_sha(labels)
+
+
+def floors(ev: Eval) -> dict:
+    """The eval's floors against people, its margin and labels per kind (`measurement.people`)."""
+    from .measurement import people_settings
+
+    return people_settings(ev.spec())
 
 
 def item_key(run_id: str, case_id: str, trial: int, attempt: int) -> str:
     return f"{run_id}/{case_id}.t{trial}.a{attempt}"
 
 
-def rulings_path(ev: Evals) -> Path:
+def rulings_path(ev: Eval) -> Path:
     return ev.p("labels", "rulings.jsonl")
 
 
-def per_labeller(ev: Evals) -> dict[str, dict[str, dict]]:
+def per_labeller(ev: Eval) -> dict[str, dict[str, dict]]:
     """item_id -> labeller -> that labeller's latest label (a re-label by the same person replaces
     their earlier one; another person's label sits beside it)."""
     out: dict[str, dict[str, dict]] = defaultdict(dict)
@@ -95,7 +107,7 @@ def per_labeller(ev: Evals) -> dict[str, dict[str, dict]]:
     return out
 
 
-def load_rulings(ev: Evals) -> dict[str, dict]:
+def load_rulings(ev: Eval) -> dict[str, dict]:
     """item_id -> the latest ruling: the verdict a person settled on where labellers differed."""
     latest: dict[str, dict] = {}
     for rec in read_jsonl(rulings_path(ev)):
@@ -103,7 +115,7 @@ def load_rulings(ev: Evals) -> dict[str, dict]:
     return latest
 
 
-def add_ruling(ev: Evals, item: str, label: bool, by: str, note: str = "", rule: str | None = None) -> dict:
+def add_ruling(ev: Eval, item: str, label: bool, by: str, note: str = "", rule: str | None = None) -> dict:
     if not by:
         raise ValueError("a ruling needs the name of the person making it")
     rec = {"item_id": item, "label": bool(label), "by": by, "note": (note or "").strip(),
@@ -113,7 +125,7 @@ def add_ruling(ev: Evals, item: str, label: bool, by: str, note: str = "", rule:
     return rec
 
 
-def disputes(ev: Evals) -> list[dict]:
+def disputes(ev: Eval) -> list[dict]:
     """Runs whose labellers disagree and that have no ruling yet."""
     ruled = load_rulings(ev)
     out = []
@@ -127,7 +139,7 @@ def disputes(ev: Evals) -> list[dict]:
     return out
 
 
-def load_labels(ev: Evals) -> list[dict]:
+def load_labels(ev: Eval) -> list[dict]:
     """The verdict per labelled run: a ruling where there is one; otherwise the labellers' label when
     they all agree (the latest record, with every labeller listed). A run the labellers disagree on
     has no verdict until someone rules (`disputes`), so it counts toward nothing."""
@@ -144,7 +156,7 @@ def load_labels(ev: Evals) -> list[dict]:
     return out
 
 
-def labeller_agreement(ev: Evals) -> list[dict]:
+def labeller_agreement(ev: Eval) -> list[dict]:
     """For each pair of labellers: the runs both labelled, how often they agreed, and Cohen's κ."""
     by_person: dict[str, dict[str, bool]] = defaultdict(dict)
     for iid, by in per_labeller(ev).items():
@@ -175,11 +187,11 @@ def labels_sha(labels: list[dict]) -> str:
     return hashlib.sha256(json.dumps(body).encode()).hexdigest()[:16]
 
 
-def suite_sha(ev: Evals) -> str:
-    """What the verdict depends on: cases, checks, judge specs and their calibrations."""
+def suite_sha(ev: Eval) -> str:
+    """What the verdict depends on: cases, checks, judge specs and their calibrations, the spec."""
     h = hashlib.sha256()
     for sub, pattern in (("cases", "**/*.json"), ("checks/code", "*.py"), ("checks/judge", "*.md"),
-                         ("checks/judge", "*.calibration.json"), (".", "failure_modes.yaml")):
+                         ("checks/judge", "*.calibration.json"), (".", "eval.yaml")):
         base = ev.p(*sub.split("/"))
         for p in sorted(base.glob(pattern)) if base.exists() else []:
             h.update(str(p.relative_to(ev.evals_dir)).encode())
@@ -187,11 +199,11 @@ def suite_sha(ev: Evals) -> str:
     return h.hexdigest()[:16]
 
 
-def _raw(ev: Evals, run_id: str, a: dict) -> dict | None:
+def _raw(ev: Eval, run_id: str, a: dict) -> dict | None:
     return load_json(ev.p("runs", run_id, "raw", f"{a['case_id']}.t{a['trial']}.a{a['attempt']}.json"))
 
 
-def finals(ev: Evals, run_ids: list[str]) -> list[dict]:
+def finals(ev: Eval, run_ids: list[str]) -> list[dict]:
     """Final, scorable attempts with a raw record and a known case."""
     cases = {c["id"] for c in ev.cases() if c.get("id")}
     out = []
@@ -216,7 +228,7 @@ def _public_request(case: dict) -> dict:
     return out
 
 
-def run_view(ev: Evals, run_id: str, a: dict, case: dict) -> dict:
+def run_view(ev: Eval, run_id: str, a: dict, case: dict) -> dict:
     from .runner import state_diff
 
     raw = _raw(ev, run_id, a) or {}
@@ -225,7 +237,7 @@ def run_view(ev: Evals, run_id: str, a: dict, case: dict) -> dict:
             "what changed": "\n".join(changed) if changed else "no change"}
 
 
-def make_queue(ev: Evals, run_ids: list[str], per_case: int = 1, n: int | None = None,
+def make_queue(ev: Eval, run_ids: list[str], per_case: int = 1, n: int | None = None,
                seed: int = 0, only_cases: set[str] | None = None) -> tuple[Path, list[dict]]:
     """Runs not yet labelled, `per_case` per case (cases with fewest labels first), shuffled. With
     `only_cases`, only those cases (after a change: the ones whose verdict moved)."""
@@ -252,7 +264,8 @@ def make_queue(ev: Evals, run_ids: list[str], per_case: int = 1, n: int | None =
     if n is not None:
         picked = picked[:n]
     items = [{"item_id": item_key(a["run_id"], a["case_id"], a["trial"], a["attempt"]),
-              "case_id": a["case_id"], "category": cases[a["case_id"]].get("category") or "",
+              "case_id": a["case_id"],
+              "use_case": cases[a["case_id"]].get("use_case") or "",
               "run": a["run_id"], "trial": a["trial"], "attempt": a["attempt"], "label": "", "labeller": "",
               "note": "", "input": run_view(ev, a["run_id"], a, cases[a["case_id"]])} for a in picked]
     path = ev.p("data", "agreement", "queue.json")
@@ -260,7 +273,7 @@ def make_queue(ev: Evals, run_ids: list[str], per_case: int = 1, n: int | None =
     return path, items
 
 
-def write_page(ev: Evals) -> Path:
+def write_page(ev: Eval) -> Path:
     from .brand import _esc, page
     from .label_page import SCRIPT
     from .markdown import render as md
@@ -339,7 +352,7 @@ def _record(row: dict, label: bool, labeller: str) -> dict:
             "split": split_for(row["item_id"]), "at": now_iso()}
 
 
-def import_rows(ev: Evals, rows: list[dict], default_labeller: str | None, run_id: str | None = None) -> dict:
+def import_rows(ev: Eval, rows: list[dict], default_labeller: str | None, run_id: str | None = None) -> dict:
     """With `run_id`, rows that give only case_id and trial (labels made outside this tool) are
     attached to that run's final attempt of the case and trial."""
     added = skipped = 0
@@ -372,12 +385,12 @@ def import_rows(ev: Evals, rows: list[dict], default_labeller: str | None, run_i
     return {"added": added, "skipped_unlabelled": skipped, "problems": problems}
 
 
-def import_csv(ev: Evals, path: Path, labeller: str | None, run_id: str | None = None) -> dict:
+def import_csv(ev: Eval, path: Path, labeller: str | None, run_id: str | None = None) -> dict:
     with path.open(newline="") as f:
         return import_rows(ev, list(csv.DictReader(f)), labeller, run_id)
 
 
-def add(ev: Evals, item: str, label: str, labeller: str, note: str | None) -> dict:
+def add(ev: Eval, item: str, label: str, labeller: str, note: str | None) -> dict:
     run_id, rest = item.split("/", 1)
     case_id, t, a = rest.rsplit(".", 2)
     row = {"item_id": item, "run": run_id, "case_id": case_id, "trial": t.lstrip("t"), "attempt": a.lstrip("a"),
@@ -392,9 +405,9 @@ class Grader:
     reused from the run's own lines, or from the re-grade cache, when the judge's sha and backend
     match; otherwise the judge is called only when `call_judges` is set."""
 
-    def __init__(self, ev: Evals, call_judges: bool = False, log=print):
+    def __init__(self, ev: Eval, call_judges: bool = False, log=print):
         from .judging import JudgeRunner
-        from .report import judge_states
+        from .results import judge_states
 
         self.ev = ev
         self.call_judges = call_judges
@@ -427,12 +440,15 @@ class Grader:
         start = {"world": raw.get("start_world"), "output": None}
         end = {"world": raw.get("end_world"), "output": raw.get("output")}
         lines = []
-        for cid, _ in self.ev.checks_for_case(case, check_type="code"):
+        for cid, fm in self.ev.checks_for_case(case, check_type="code"):
             cr = run_check(cid, self.ev.code_check_path(cid), start, end, case)
-            lines.append({"check_id": cid, "type": "code", "counted": True, "passed": cr.passed, "detail": cr.detail})
+            lines.append({"check_id": cid, "type": "code", "counted": self.ev.counted(cid, fm),
+                          "passed": cr.passed, "detail": cr.detail})
         for cid, fm in self.ev.checks_for_case(case, check_type="judge"):
             st = self.judges.get(cid) or {}
-            counted = bool(st.get("calibrated"))
+            # the eval is measured as it is built, every counted check included; whether a judge
+            # may count toward θ̂ is its floor, read by the report (measurement.judge_floor)
+            counted = self.ev.counted(cid, fm)
             line = self._judge_line(run_id, a, key, case, cid, fm, st, start, end) if st.get("spec") else None
             if line is None:
                 lines.append({"check_id": cid, "type": "judge", "counted": counted, "passed": None,
@@ -469,13 +485,13 @@ class Grader:
         return line
 
 
-def regrade(ev: Evals, run_id: str, call_judges: bool = False, log=print) -> list[dict]:
+def regrade(ev: Eval, run_id: str, call_judges: bool = False, log=print) -> list[dict]:
     """Every final attempt of a run, graded by the suite as it is now."""
     g = Grader(ev, call_judges=call_judges, log=log)
     return [g.grade(run_id, a) for a in finals(ev, [run_id])]
 
 
-def reproduces(ev: Evals, run_id: str) -> dict:
+def reproduces(ev: Eval, run_id: str) -> dict:
     """Do the code checks give the same verdicts on the raw records as they did during the run? A
     check that differs reads something besides (start, end, case), such as the live system at
     grading time, and can't be re-graded or trusted on a recorded run."""
@@ -514,7 +530,7 @@ def _rates(rows: list[dict]) -> dict:
     return out
 
 
-def measure(ev: Evals, call_judges: bool = False, log=print) -> dict:
+def measure(ev: Eval, call_judges: bool = False, log=print) -> dict:
     labels = load_labels(ev)
     g = Grader(ev, call_judges=call_judges, log=log)
     triage = load_yaml(triage_path(ev)) or {}
@@ -529,8 +545,9 @@ def measure(ev: Evals, call_judges: bool = False, log=print) -> dict:
             continue
         res = g.grade(run_id, a)
         human = "pass" if lab["label"] else "fail"
+        case = g.cases.get(lab["case_id"]) or {}
         rows.append({"item": lab["item_id"], "case_id": lab["case_id"],
-                     "category": (g.cases.get(lab["case_id"]) or {}).get("category"),
+                     "use_case": case.get("use_case"),
                      "split": lab.get("split") or split_for(lab["item_id"]),
                      "human": human, "suite": res["verdict"], "note": lab.get("note") or "",
                      "failing": [f"{c['check_id']}: {c['detail'][:200]}" for c in res["checks"]
@@ -538,46 +555,51 @@ def measure(ev: Evals, call_judges: bool = False, log=print) -> dict:
     dev = [r for r in rows if r["split"] == "dev"]
     hold = [r for r in rows if r["split"] == "holdout"]
     disagreements = [{**r, "triage": triage.get(r["item"])} for r in rows if r["suite"] != r["human"]]
-    by_cat = {}
+    by_uc = {}
     for r in rows:
-        by_cat.setdefault(r["category"], []).append(r)
-    categories = {cat: {"dev": _rates([r for r in rs if r["split"] == "dev"]),
-                        "holdout": _rates([r for r in rs if r["split"] == "holdout"])}
-                  for cat, rs in sorted(by_cat.items(), key=lambda kv: str(kv[0]))}
+        by_uc.setdefault(r["use_case"], []).append(r)
+    per_use_case = {uc: {"dev": _rates([r for r in rs if r["split"] == "dev"]),
+                         "holdout": _rates([r for r in rs if r["split"] == "holdout"])}
+                    for uc, rs in sorted(by_uc.items(), key=lambda kv: str(kv[0]))}
     result = {"measured_at": now_iso(), "suite_sha": suite_sha(ev), "labels_sha": labels_sha(labels),
-              "floors": floors(ev), "dev": _rates(dev), "holdout": _rates(hold), "all": _rates(rows),
-              "categories": categories,
+              "dev": _rates(dev), "holdout": _rates(hold), "all": _rates(rows),
+              "use_cases": per_use_case,
               "judge_calls": g.calls, "labels_without_a_run": missing,
               "disagreements": sorted(disagreements, key=lambda d: (d["split"], d["human"], d["case_id"]))}
-    result["evidence"] = evidence(result)
     result["human_anchored"] = human_anchored(ev, g, rows, labels)
+    result.update(people(ev, result, labels))
     result["problems"] = gate_problems(ev, result, labels)
     write_json(result_path(ev), result)
     return result
 
 
-def evidence(result: dict, margin: float = 0.10) -> dict:
-    """M35, informational: does each dev rate clear its floor with enough runs behind it?
+def people(ev: Eval, result: dict, labels: list[dict]) -> dict:
+    """agreement.json's floors from the spec, labels per kind against the count
+    each kind needs, and the margin-based evidence the gate reads (measurement.people_floor)."""
+    from . import measurement as ms
+    from .report import Scored, default_runs
+    from .spec import use_case_weights
 
-    The gate reads the point estimate. This adds the non-inferiority reading proposed in
-    docs/statistics.md: the 95% lower bound within `margin` of the floor, and how many runs of
-    that kind a rate at today's level would need to get there. Suite-wide and per category.
-    """
-    f = result.get("floors") or {}
+    spec = ev.spec()
+    n_fail = sum(not r["label"] for r in labels)
+    need = ms.labels_needed(spec)
+    runs = default_runs(ev)
+    rate = None
+    if runs:
+        s = Scored(ev, runs)
+        weights, _ = use_case_weights(spec)
+        rate = ms.weighted_rate(s, weights,
+                                lambda a: None if a.get("passed") is None else (0.0 if a["passed"] else 1.0))
+    dev = result.get("dev") or {}
+    fl = ms.people_floor(spec, dev.get("catch") or {}, dev.get("clean") or {}, rate)
+    ps = ms.people_settings(spec)
+    return {"floors": {**ps["floors"], "margin": ps["margin"], "labels_per_kind": ps["labels_per_kind"],
+                       "source": "measurement.people (eval.yaml)"},
+            "labels_per_kind": {"fail": n_fail, "pass": len(labels) - n_fail},
+            "labels_needed": need, "eval_failure_rate": rate, "evidence": {**fl, "split": "dev"}}
 
-    def one(block: dict | None) -> dict:
-        out = {}
-        for name, floor in (("catch", f.get("min_catch", MIN_CATCH)), ("clean", f.get("min_clean", MIN_CLEAN))):
-            r = (block or {}).get(name) or {}
-            out[name] = stats.floor_evidence(r.get("k", 0), r.get("n", 0), floor, margin)
-        return out
 
-    return {"margin": margin, "dev": one(result.get("dev")),
-            "categories": {c: one((v or {}).get("dev")) for c, v in (result.get("categories") or {}).items()},
-            "note": "informational; the gate reads the point estimate (docs/statistics.md §6)"}
-
-
-def human_anchored(ev: Evals, g: Grader, rows: list[dict], labels: list[dict]) -> dict | None:
+def human_anchored(ev: Eval, g: Grader, rows: list[dict], labels: list[dict]) -> dict | None:
     """M33: the pass rate a person would give the labeled runs' whole population, from a few
     labels and the suite's verdict on every run (PPI++, stats.ppi_mean).
 
@@ -610,41 +632,54 @@ def human_anchored(ev: Evals, g: Grader, rows: list[dict], labels: list[dict]) -
             "assumption": "labeled attempts are a random sample of these runs' final attempts"}
 
 
-def gate_problems(ev: Evals, result: dict | None, labels: list[dict] | None = None) -> list[str]:
-    labels = load_labels(ev) if labels is None else labels
-    f = floors(ev)
-    problems = []
+def gates(ev: Eval, result: dict | None, labels: list[dict]) -> list[dict]:
+    """The eval-against-people gates, one entry per gate that is not met."""
+    out = []
     n_fail = sum(not r["label"] for r in labels)
-    n_pass = sum(bool(r["label"]) for r in labels)
-    if len(labels) < f["min_runs"] or min(n_fail, n_pass) < f["min_each"]:
-        problems.append(f"{len(labels)} whole runs labelled ({n_fail} fail, {n_pass} pass); needs "
-                        f"{f['min_runs']} with at least {f['min_each']} of each (aot-evals agreement label queue)")
+    have = {"fail": n_fail, "pass": len(labels) - n_fail}
+    if result and result.get("labels_needed"):
+        need = result["labels_needed"]
+    else:
+        from .measurement import labels_needed
+
+        need = labels_needed(ev.spec())
+    short = [f"{have[k]} of {need[k]['n']} {'failing' if k == 'fail' else 'passing'}" for k in ("fail", "pass")
+             if (need.get(k) or {}).get("n") and have[k] < need[k]["n"]]
+    if short:
+        out.append({"id": "people_labels", "detail": "whole-run labels per kind: " + ", ".join(short)
+                    + " (fixed before looking: measurement.people.labels_per_kind; aot-evals agreement label queue)"})
     open_disputes = disputes(ev)
     if open_disputes:
-        problems.append(f"{len(open_disputes)} labelled run(s) where labellers disagree and nobody has "
-                        f"ruled, e.g. {open_disputes[0]['item_id']} (aot-evals serve, or aot-evals agreement rule)")
+        out.append({"id": "people_disputes", "detail": f"{len(open_disputes)} labelled run(s) where labellers "
+                    f"disagree and nobody has ruled, e.g. {open_disputes[0]['item_id']} (aot-evals agreement rule)"})
     if result is None:
-        problems.append("agreement not measured (aot-evals agreement)")
-        return problems
-    if result.get("suite_sha") != suite_sha(ev) or result.get("labels_sha") != labels_sha(labels):
-        problems.append("agreement is stale: the suite or the labels changed since it was measured "
-                        "(aot-evals agreement)")
-    dev = result.get("dev") or {}
-    for name, floor in (("catch", f["min_catch"]), ("clean", f["min_clean"])):
-        r = (dev.get(name) or {}).get("rate")
-        if r is not None and r < floor:
-            label = "catch rate" if name == "catch" else "clean pass rate"
-            problems.append(f"dev {label} {r:.0%} is below its floor {floor:.0%}")
+        return out
+    if is_stale(ev, result, labels):
+        out.append({"id": "people_stale", "detail": "agreement is stale: the eval or the labels changed since "
+                    "it was measured (aot-evals agreement)"})
+    ev_ = result.get("evidence") or {}
+    if ev_.get("status") == "below":
+        out.append({"id": "people_floor", "detail": "; ".join(ev_.get("reasons") or [])})
     untriaged = [d["item"] for d in result.get("disagreements") or []
                  if d["split"] == "dev" and (d.get("triage") or {}).get("cause") not in CAUSES]
     if untriaged:
-        problems.append(f"{len(untriaged)} dev disagreement(s) without a cause in labels/triage.yaml, "
-                        f"e.g. {untriaged[0]}")
-    return problems
+        out.append({"id": "people_triage", "detail": f"{len(untriaged)} dev disagreement(s) without a cause in "
+                    f"labels/triage.yaml, e.g. {untriaged[0]}"})
+    return out
 
 
-def status(ev: Evals) -> tuple[list[str], list[str]]:
-    """(problems, info) for gate C19."""
+def gate_problems(ev: Eval, result: dict | None, labels: list[dict] | None = None) -> list[str]:
+    """Each unmet gate's detail (and records the gates on `result`)."""
+    labels = load_labels(ev) if labels is None else labels
+    gs = gates(ev, result, labels)
+    if result is not None:
+        result["gates"] = gs
+    unmeasured = [] if result is not None else ["agreement not measured (aot-evals agreement)"]
+    return [g["detail"] for g in gs] + unmeasured
+
+
+def status(ev: Eval) -> tuple[list[str], list[str]]:
+    """(problems, info): the unmet gates, and the rates measured on each split."""
     result = load_json(result_path(ev))
     problems = gate_problems(ev, result)
     info = []
@@ -678,12 +713,6 @@ def render(result: dict) -> str:
             ci = x["ci95"]
             return "n/a" if x["rate"] is None else f"{x['rate']:.0%} ({x['k']}/{x['n']}, 95% {ci[0]:.0%}–{ci[1]:.0%})"
         lines.append(f"{split}: {s['runs']} runs · catch {fmt(c)} · clean pass {fmt(p)} · no verdict {s['no_verdict']}")
-    for name, label in (("catch", "catch rate"), ("clean", "clean pass rate")):
-        e = ((result.get("evidence") or {}).get("dev") or {}).get(name)
-        if e and e["meets_point"] and not e["meets_margin"]:
-            lines.append(f"evidence: dev {label} {e['point']:.0%} clears its floor on {e['n']} runs, but its 95% "
-                         f"lower bound is {e['lower']:.0%}; about {e['n_needed']} runs of that kind would put it "
-                         f"within {e['margin']:.0%} of the floor (informational, docs/statistics.md §6)")
     h = result.get("human_anchored")
     if h:
         lines.append(f"human-anchored pass rate: {h['point']:.0%} (95% {h['ci'][0]:.0%}–{h['ci'][1]:.0%}) from "
@@ -701,5 +730,11 @@ def render(result: dict) -> str:
     hold = sum(d["split"] == "holdout" for d in result["disagreements"])
     if hold:
         lines.append(f"holdout disagreements: {hold} (not listed: fix dev errors only)")
-    lines += [f"problem: {p}" for p in result["problems"]] or ["C19 met"]
+    have, need = result["labels_per_kind"], result["labels_needed"]
+    lines.append(f"labels per kind: {have['fail']} failing of {need['fail']['n']}, {have['pass']} passing of "
+                 f"{need['pass']['n']} ({need['fail']['source']})")
+    e = result.get("evidence") or {}
+    lines.append(f"against its floors (dev, margin {e.get('margin', 0):.0%}): {e.get('status')}")
+    lines += [f"problem: [{g['id']}] {g['detail']}" for g in result.get("gates") or []] or [
+        "the eval meets people's labels"]
     return "\n".join(lines)

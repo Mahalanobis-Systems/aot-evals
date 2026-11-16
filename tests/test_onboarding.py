@@ -9,18 +9,22 @@ import pytest
 from aot_evals import cli
 
 
-def test_demo_runs_the_whole_loop_without_forcing_a_gate(tmp_path, capsys):
+def test_demo_runs_the_whole_loop_on_the_store(tmp_path, capsys):
+    """The demo (examples/store): a baseline and a candidate of each eval, and the decision on the
+    refund subagent's change, which improves its own eval and breaks refunds end to end."""
     dest = tmp_path / "demo"
     assert cli.main(["demo", str(dest)]) == 0
-    suite = dest / "evals/agents/calendar"
-    runs = [json.loads(p.read_text()) for p in (suite / "runs").glob("*/manifest.json")]
-    assert sorted(m["purpose"] for m in runs) == ["baseline", "candidate", "smoke"]
-    assert all(m["finished"] and not m["forced_past_gates"] for m in runs)
-    comparison = json.loads(next((suite / "report/comparisons").glob("*.json")).read_text())
-    assert comparison["losses"] == ["book-002", "book-003"] and comparison["refused"] is None
-    assert (suite / "report/report.json").exists() and list((suite / "report/checkpoints").glob("*.html"))
-    page = (suite / "discovery.html").read_text()  # the Assess report, with its grid
-    assert "Congrats!" in page and "Where the cases are" in page and page.count('class="cell none"') == 7
+    agent = dest / "evals/agents/store"
+    for e in ("end-to-end", "refund-subagent"):
+        runs = [json.loads(p.read_text()) for p in (agent / e / "runs").glob("*/manifest.json")]
+        assert sorted(m["purpose"] for m in runs) == ["baseline", "candidate"]
+        assert all(m["finished"] for m in runs)
+        assert (agent / e / "report/report.json").exists()
+    e2e = json.loads(next((agent / "end-to-end/report/comparisons").glob("*.json")).read_text())
+    assert e2e["refused"] is None and e2e["losses"] and not e2e["gains"] and e2e["net"] < 0
+    sub = json.loads(next((agent / "refund-subagent/report/comparisons").glob("*.json")).read_text())
+    assert sub["refused"] is None and sub["gains"] and not sub["losses"] and sub["net"] > 0
+    assert (agent / "journal/activity.html").exists()
     assert "Demo ready" in capsys.readouterr().out
 
 
@@ -31,18 +35,31 @@ def test_demo_refuses_a_folder_that_is_not_empty(tmp_path):
     assert (tmp_path / "keep.txt").read_text() == "mine\n"
 
 
-def test_doctor_reports_the_environment_and_never_a_secret(make_repo, monkeypatch, capsys):
-    repo = make_repo()
+def test_doctor_reports_the_environment_and_never_a_secret(store_repo, monkeypatch, capsys):
+    s = store_repo
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-secret-value")
-    (repo.evals / "checks/judge").mkdir(parents=True, exist_ok=True)
-    (repo.evals / "checks/judge/j.md").write_text(
+    (s.agent / "end-to-end/checks/judge").mkdir(parents=True, exist_ok=True)
+    (s.agent / "end-to-end/checks/judge/j.md").write_text(
         "---\nid: j\nfailure_mode: x\nversion: 1\nquestion_type: noul\nquestion: q\ndetects: pass\n"
         "inputs: [end.output]\nbackends:\n  claude: {type: anthropic, model: m, family: anthropic}\n---\n")
     capsys.readouterr()
-    assert cli.main(["--evals", str(repo.evals), "doctor"]) == 0
+    assert cli.main(["--evals", str(s.agent), "doctor"]) == 0
     out = capsys.readouterr().out
-    assert "aot-evals" in out and "suite" in out and "invoke.cwd" in out
+    assert "aot-evals" in out and "agent" in out and "invoke.cwd" in out
+    assert "eval end-to-end" in out and "60 cases" in out and "eval refund-subagent" in out and "71 cases" in out
+    assert "refund-subagent invoke.cwd" in out  # a component eval invokes its component itself
+    assert "judge end-to-end/j/claude" in out
     assert "ANTHROPIC_API_KEY is set" in out and "sk-ant-secret-value" not in out
+
+
+def test_doctor_flags_an_invoke_cwd_that_does_not_exist(store_repo, capsys):
+    s = store_repo
+    path = s.agent / "agent.yaml"
+    path.write_text(path.read_text().replace("cwd: .", "cwd: no-such-dir"))
+    capsys.readouterr()
+    assert cli.main(["--evals", str(s.agent), "doctor"]) == 1
+    out = capsys.readouterr().out
+    assert "FAIL  invoke.cwd" in out and "'no-such-dir'" in out
 
 
 REPORT = """---
@@ -137,19 +154,6 @@ def test_discovery_page_draws_the_grid_from_the_front_matter(tmp_path):
     assert "Oversized result" in golden and "Wrong counts" in golden
     assert "<b>Unanswerable</b><span>CRMArena</span>" in golden
     assert ' pass</span></td>' in golden and "22% pass" in golden
-
-
-def test_discovery_page_still_places_pillar_headings_from_0_1_0(tmp_path):
-    from aot_evals.start import write_discovery_page
-
-    src = tmp_path / "evals/agents/pizza-bot/discovery.md"
-    src.parent.mkdir(parents=True)
-    src.write_text(REPORT.replace("## Golden test cases", "## Golden use cases")
-                   + "\n## Safe testing env\n\nFakes.\n")
-    html = write_discovery_page(src, "pizza-bot", src.parent).read_text()
-    assert 'id="safe-testing-env"><h2><span class="num">03</span> Safe testing env</h2>' in html
-    assert 'id="golden-use-cases"><h2><span class="num">04</span> Golden use cases</h2>' in html
-    assert html.index('id="safe-testing-env"') < html.index('id="golden-use-cases"') < html.index('id="next"')
 
 
 def test_discovery_page_without_front_matter_renders_the_markdown_as_written(tmp_path):

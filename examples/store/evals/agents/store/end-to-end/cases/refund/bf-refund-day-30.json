@@ -1,0 +1,133 @@
+{
+  "id": "bf-refund-day-30",
+  "use_case": "refund",
+  "pool": "bug_finding",
+  "template": "bf-refund-window",
+  "failure_modes": [
+    "wrong-answer",
+    "wrong-end-state",
+    "unrequested-change",
+    "wrong-route"
+  ],
+  "coverage_entries": [
+    "refund",
+    "window-edge"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-refund-window",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "message",
+    "text": "I'd like a refund for order A7019."
+  },
+  "inputs": {
+    "today": "2026-10-20",
+    "customer": "c-0010"
+  },
+  "start_state": {
+    "orders": {
+      "A7019": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-104",
+            "name": "coffee grinder",
+            "price": 59.0
+          },
+          {
+            "sku": "SKU-108",
+            "name": "french press",
+            "price": 27.99
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "67 Harbor Road",
+        "eta": null,
+        "delivered": "2026-09-20",
+        "customer": "c-0010"
+      },
+      "A7020": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-101",
+            "name": "blender",
+            "price": 49.99
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "74 Elm Street",
+        "eta": null,
+        "delivered": "2026-09-06",
+        "customer": "c-0010"
+      }
+    },
+    "refunds": [],
+    "returns": [],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A7019": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-104",
+              "name": "coffee grinder",
+              "price": 59.0
+            },
+            {
+              "sku": "SKU-108",
+              "name": "french press",
+              "price": 27.99
+            }
+          ],
+          "payment": "card",
+          "refunded": 86.99,
+          "address": "67 Harbor Road",
+          "eta": null,
+          "delivered": "2026-09-20",
+          "customer": "c-0010"
+        },
+        "A7020": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-101",
+              "name": "blender",
+              "price": 49.99
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "74 Elm Street",
+          "eta": null,
+          "delivered": "2026-09-06",
+          "customer": "c-0010"
+        }
+      },
+      "refunds": [
+        {
+          "order": "A7019",
+          "amount": 86.99,
+          "to": "original"
+        }
+      ],
+      "returns": [],
+      "log": [
+        {
+          "tool": "handoff",
+          "to": "refund-subagent",
+          "order": "A7019"
+        }
+      ]
+    },
+    "output": "Refunded $86.99 for order A7019 to your original payment."
+  }
+}

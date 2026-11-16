@@ -53,19 +53,24 @@ def checks(evals: str | None, agent: str | None) -> list[tuple[str, str, str]]:
                  "not found; aot-evals falls back to a Python 3.11+ with PyYAML"))
     git = _which("git")
     rows.append(("ok" if git else "FAIL", "git", _version([git, "--version"]) if git else
-                 "not found; runs record commits, and C2 checks the taxonomy predates the cases"))
+                 "not found; runs record commits, and a coverage list must be committed before the cases"))
     rows.append(("ok", "platform", f"{platform.system()} {platform.release()} {platform.machine()}"))
 
     from .repo import Evals  # after the PyYAML check: the repo module needs it
     try:
         ev = Evals.find(evals, agent)
     except ContractError as e:
-        rows.append(("warn", "suite", str(e)))
+        rows.append(("warn", "agent", str(e)))
         return rows
     if not ev.exists():
-        rows.append(("warn", "suite", f"none at {ev.root} (fine before `aot-evals init`)"))
+        rows.append(("warn", "agent", f"none at {ev.root} (fine before `aot-evals init`)"))
         return rows
-    rows.append(("ok", "suite", f"{ev.root} (agent {ev.agent_name}, {len(ev.case_paths())} cases)"))
+    eval_list = ev.evals()
+    rows.append(("ok", "agent", f"{ev.root} (agent {ev.agent_name})"))
+    for e in eval_list:
+        rows.append(("ok", f"eval {e.id}", f"{len(e.case_paths())} cases"))
+    if not eval_list:
+        rows.append(("warn", "evals", "none yet (`aot-evals --eval end-to-end init`)"))
     inside = _version(["git", "-C", str(ev.repo_root), "rev-parse", "--is-inside-work-tree"]) == "true"
     rows.append(("ok" if inside else "warn", "repository",
                  f"{ev.repo_root}" + ("" if inside else " is not a git repository")))
@@ -73,17 +78,27 @@ def checks(evals: str | None, agent: str | None) -> list[tuple[str, str, str]]:
     rows.append(("ok" if (ev.repo_root / str(cwd)).is_dir() else "FAIL", "invoke.cwd",
                  f"{cwd!r} from the repository root"))
     from .judges import load_spec
-    for path in sorted(ev.p("checks", "judge").glob("*.md")) if ev.p("checks", "judge").is_dir() else []:
+    for e in eval_list:
         try:
-            spec = load_spec(path)
-        except ContractError as e:
-            rows.append(("FAIL", f"judge {path.stem}", str(e)))
-            continue
-        for name, cfg in spec.backends.items():
-            env = cfg.get("api_key_env") or ("ANTHROPIC_API_KEY" if cfg.get("type") == "anthropic" else None)
-            if env:
-                rows.append(("ok" if os.environ.get(env) else "warn", f"judge {spec.id}/{name}",
-                             f"{env} is {'set' if os.environ.get(env) else 'not set'}"))
+            own = e.spec().resolved.get("invoke")  # a component eval invokes its component itself
+        except ContractError as err:
+            rows.append(("FAIL", f"eval {e.id}", str(err)))
+            own = None
+        if isinstance(own, dict) and own.get("cwd") is not None:
+            rows.append(("ok" if (ev.repo_root / str(own["cwd"])).is_dir() else "FAIL", f"{e.id} invoke.cwd",
+                         f"{own['cwd']!r} from the repository root"))
+        d = e.p("checks", "judge")
+        for path in sorted(d.glob("*.md")) if d.is_dir() else []:
+            try:
+                spec = load_spec(path)
+            except ContractError as err:
+                rows.append(("FAIL", f"judge {e.id}/{path.stem}", str(err)))
+                continue
+            for name, cfg in spec.backends.items():
+                env = cfg.get("api_key_env") or ("ANTHROPIC_API_KEY" if cfg.get("type") == "anthropic" else None)
+                if env:
+                    rows.append(("ok" if os.environ.get(env) else "warn", f"judge {e.id}/{spec.id}/{name}",
+                                 f"{env} is {'set' if os.environ.get(env) else 'not set'}"))
     return rows
 
 

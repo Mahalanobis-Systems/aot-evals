@@ -1,297 +1,296 @@
-"""Self-test fixtures: each one must trigger exactly the gate it targets.
+"""Self-test fixtures on the online store (examples/store): each one triggers exactly the gate it
+targets, and the agent variants do what they claim.
 
-A good agent, an agent that claims success without changing anything, a flaky agent, an agent
-with the same correctness at 3x the cost, an agent that times out a third of the time, and a
-taxonomy derived from the suite's own cases. The always-pass judge is in test_judges.py and the
-redundant case set in test_suite.py.
+report.json's `gates` (docs/method.md; evidence.py) are the evidence checks: `manifest` and
+`trials_complete` (agent contract), `screened`, `committed` and `coverage_list` (design),
+`independent_reference` and `k` (measurement). One fixture per gate asserts that the set of
+failing gates is exactly {that gate}; a clean baseline fails none.
+
+The variants: liar (claims success, changes nothing), flaky (a wrong date on about one trial in
+four), costly (three times the cost), slow (hangs past the timeout), silent (prints nothing),
+peek (reads its own case file). The measurement gates (judges, people) are in test_measurement.py
+and the decision's in test_decision.py.
 """
 
 from __future__ import annotations
 
 import json
 import math
-import shutil
-from pathlib import Path
 
-from aot_evals import gates
-from aot_evals.repo import Evals
+import yaml
+from conftest import StoreRepo, git
 
-PHASE1_GATES = ("G1", "G2", "G5", "G6", "G8", "G10", "G12", "G13")
+from aot_evals import runner
+from aot_evals.evidence import failing as failing_ids
+from aot_evals.evidence import trial_completeness
 
-
-def failing(report: dict) -> set[str]:
-    """Failing report gates, leaving out G14: no fixture labels whole runs, so G14 fails in every
-    one of them until C19 is done (test_agreement.py covers it)."""
-    return {g["id"] for g in report["gates"] if g["status"] == "fail" and g["id"] != "G14"}
+TWO = ("--case", "tr_1005", "--case", "tr_1238")  # an order-status request and a refund
+STATUS = ["tr_1005", "tr_1006", "tr_1010", "tr_1013"]
 
 
-def rows(report: dict, category: str) -> list[dict]:
-    return [r for r in report["categories"] if r["id"] == category]
+def failing(r: dict) -> set[str]:
+    return failing_ids(r["gates"])
 
 
-def test_good_agent_clears_every_phase1_gate(make_repo):
-    repo = make_repo()
-    ev = Evals(repo.evals)
-    unmet = [g.id for g in gates.evaluate(ev) if g.status == "unmet"]
-    assert unmet == ["C1", "C12", "C19", "C18"]  # C1 waits only on the smoke run
+def gate(r: dict, gid: str) -> dict:
+    return next(g for part in r["gates"].values() for g in part if g["id"] == gid)
 
-    assert repo.cli("run", "--purpose", "smoke", "--case", "book-001") == 0
-    assert repo.cli("run", "--purpose", "baseline", "--k", "3") == 0
-    assert repo.cli("report") == 0
-    r = repo.report()
+
+def baseline(s: StoreRepo, *args: str, eval_id: str = "end-to-end") -> dict:
+    assert s.cli("run", "--purpose", "baseline", *(args or TWO), eval_id=eval_id) == 0
+    assert s.cli("report", eval_id=eval_id) == 0
+    return s.report(eval_id)
+
+
+def report_on(s: StoreRepo, *runs: str, candidates: tuple[str, ...] = ()) -> dict:
+    args = [a for r in runs for a in ("--run", r)] + [a for c in candidates for a in ("--candidate", c)]
+    assert s.cli("report", *args) == 0
+    return s.report()
+
+
+def rows(r: dict, uc: str) -> list[dict]:
+    return [row for row in r["use_cases"] if row["id"] == uc and row["n_cases"]]
+
+
+def edit_yaml(path, fn) -> None:
+    data = yaml.safe_load(path.read_text())
+    fn(data)
+    path.write_text(yaml.safe_dump(data, sort_keys=False))
+
+
+# ---- the gates, one fixture each ---------------------------------------------------------------
+
+def test_a_clean_baseline_fails_no_gate(store_repo):
+    r = baseline(store_repo)
     assert failing(r) == set()
-    assert repo.gate(r, "G14")["status"] == "fail" and repo.gate(r, "G14")["blocks"] == ["validated"]
-    assert all(repo.gate(r, g)["status"] == "pass" for g in PHASE1_GATES)
-    # C19 waits on a person: whole runs labelled pass or fail (test_agreement.py clears it)
-    assert [g.id for g in gates.evaluate(ev) if g.status == "unmet"] == ["C19"]
-
-    for row in r["categories"]:
-        assert row["pass_rate"]["point"] == 1.0
-        assert row["pass_rate"]["k"] == 3 and row["pass_rate"]["n"] > 0
-        assert row["pass_rate"]["ci"] is not None
-        assert row["operational"]["budget_status"] == "within"
-        assert row["operational"]["cache_hit_rate"] is not None
-        # M30: a clean category says how high its failure rate could still be
-        assert math.isclose(row["zero_failure_bound"], 1 - 0.05 ** (1 / row["n_cases"]))
-    assert r["sets"]["quality_estimate"]["estimate"]["point"] == 1.0
-    assert r["coverage"]["list"] == "external"
-    assert r["coverage"]["empty_cells"] > 0  # reschedule-meeting has no cases
-    assert r["coverage"]["cells"][0]["n"] == 0  # empty cells listed first
+    assert set(r["gates"]) == {"agent_contract", "design", "measurement"}
+    ids = [g["id"] for part in r["gates"].values() for g in part]
+    assert ids == ["manifest", "trials_complete", "screened", "committed", "coverage_list",
+                   "independent_reference", "k"]
+    assert all(g["status"] == "pass" and g["detail"] for part in r["gates"].values() for g in part)
+    # the measurement model's own gates stay where they were, not duplicated here
+    assert isinstance(r["measurement"]["gates"], list)
 
 
-def test_baseline_runs_on_unscreened_cases_and_the_report_excludes_them(make_repo, capsys):
-    """Nothing blocks a run on an unmet gate (method §4.1); the manifest records the gates that
-    were unmet, and the report greys what they cover (G8 keeps unscreened cases out of gated
-    numbers)."""
-    repo = make_repo(screen=False)
-    repo.cli("run", "--purpose", "smoke", "--question", "hello")
-    assert repo.cli("run", "--purpose", "baseline", "--k", "3") == 0
-    assert "unmet gate(s)" in capsys.readouterr().err
-    ev = Evals(repo.evals)
-    m = ev.latest_run("baseline")
-    assert "C7" in m["unmet_gates"] and m["unmet_gates"] == m["forced_past_gates"]
-    assert repo.cli("report") == 0
-    r = repo.report()
-    assert repo.gate(r, "G8")["status"] == "fail"
-    assert all(row["pass_rate"] is None and row["excluded"]["n_cases"] > 0 for row in r["categories"])
+def test_no_run_leaves_the_run_gates_unknown(store_repo):
+    assert store_repo.cli("report") == 0
+    r = store_repo.report()
+    assert {g["id"]: g["status"] for part in r["gates"].values() for g in part} == {
+        "manifest": None, "trials_complete": None, "screened": None, "committed": None,
+        "coverage_list": "pass", "independent_reference": "pass", "k": None}
 
 
-def test_k1_baseline_is_refused_by_the_cli(make_repo):
-    repo = make_repo()
-    repo.cli("run", "--purpose", "smoke", "--case", "book-001")
+def test_a_manifest_without_its_harness_fails_manifest(store_repo):
+    s = store_repo
+    edit_yaml(s.agent / "agent.yaml", lambda a: a.pop("harness"))
+    s.commit("no harness")
+    r = baseline(s)
+    assert failing(r) == {"manifest"}
+    assert "manifest has no harness" in gate(r, "manifest")["detail"]
+
+
+def test_a_stopped_run_fails_trials_complete(store_repo, monkeypatch):
+    s = store_repo
+    run_id = _stopped_baseline(s, monkeypatch, ok_cases=3)
+    r = report_on(s, run_id)
+    assert failing(r) == {"trials_complete"}
+    assert "have no final attempt" in gate(r, "trials_complete")["detail"]
+
+
+def test_an_unscreened_case_fails_screened_and_is_excluded_not_hidden(store_repo):
+    s = store_repo
+    path = s.agent / "end-to-end/cases/order-status/tr_1006.json"
+    case = json.loads(path.read_text())
+    case["screen"]["human_read"] = None
+    path.write_text(json.dumps(case, indent=2))
+    s.commit("unread")
+    r = baseline(s, "--case", "tr_1005", "--case", "tr_1006")
+    assert failing(r) == {"screened"}
+    assert "tr_1006" in gate(r, "screened")["detail"]
+    row = next(x for x in rows(r, "order-status") if x["pool"] == "quality")
+    assert row["n_cases"] == 1 and row["excluded"]["n_cases"] == 1
+
+
+def test_an_uncommitted_case_edit_fails_committed(store_repo):
+    s = store_repo
+    path = s.agent / "end-to-end/cases/order-status/tr_1005.json"
+    path.write_text(path.read_text() + "\n")
+    r = baseline(s)
+    assert failing(r) == {"committed"}
+    assert "tr_1005" in gate(r, "committed")["detail"]
+    assert r["estimate"]["n_cases"] <= 1  # tr_1005 stays out of θ̂
+
+
+def test_a_coverage_list_made_from_the_cases_fails_coverage_list(store_repo):
+    s = store_repo
+    edit_yaml(s.agent / "end-to-end/coverage.yaml",
+              lambda t: t.update(source={"document": "clusters of cases/", "kind": "other"}))
+    s.commit("a list from the cases")
+    r = baseline(s)
+    assert failing(r) == {"coverage_list"}
+    assert "always 100%" in gate(r, "coverage_list")["detail"]
+
+
+def test_a_check_that_trusts_the_agents_report_fails_independent_reference(store_repo):
+    s = store_repo
+    check = s.agent / "end-to-end/checks/code/reply-matches-order.py"
+    check.write_text(check.read_text() + "\nUSES_AGENT_REPORT = True\n")
+    s.commit("a check that declares it reads the agent's report")
+    r = baseline(s)
+    assert failing(r) == {"independent_reference"}
+    assert "reply-matches-order" in gate(r, "independent_reference")["detail"]
+
+
+def test_a_k1_run_fails_k(store_repo):
+    s = store_repo
+    assert s.cli("run", "--purpose", "candidate", "--k", "1", "--variable", "prompt=v2", *TWO) == 0
+    r = report_on(s, s.ev().runs("candidate")[-1]["run_id"])
+    assert failing(r) == {"k"}
+    assert "k = 1" in gate(r, "k")["detail"]
+
+
+def test_a_k1_baseline_is_refused_by_the_cli(store_repo):
     try:
-        repo.cli("run", "--purpose", "baseline", "--k", "1")
+        store_repo.cli("run", "--purpose", "baseline", "--k", "1", *TWO)
     except SystemExit as e:
         assert "k >= 3" in str(e)
     else:
         raise AssertionError("k=1 baseline ran")
 
 
-def test_liar_agent_fails_state_checks(make_repo):
-    repo = make_repo(variant="liar")
-    assert repo.cli("run", "--purpose", "baseline", "--k", "3", "--force") == 0
-    repo.cli("report")
-    r = repo.report()
-    for row in rows(r, "book-meeting"):
-        assert row["pass_rate"]["point"] == 0.0
-    for row in rows(r, "nothing-to-do"):
-        assert row["pass_rate"]["point"] == 1.0
-    assert repo.gate(r, "G10")["status"] == "pass"  # the checks grade state, not the claim
+def test_the_gates_read_the_candidates_runs_too(store_repo):
+    s = store_repo
+    base = baseline(s)["runs"]
+    assert s.cli("run", "--purpose", "candidate", "--k", "1", "--variable", "prompt=v2", *TWO) == 0
+    r = report_on(s, *base, candidates=(s.ev().runs("candidate")[-1]["run_id"],))
+    assert failing(r) == {"k"}
 
 
-def test_check_that_trusts_the_agents_claim_is_refused_by_g10(make_repo):
-    repo = make_repo(variant="liar")
-    shutil.copyfile(Path(__file__).parent / "fixtures" / "claims-success.py",
-                    repo.evals / "checks/code/claims-success.py")
-    fms = repo.yaml("failure_modes.yaml")
-    fms["failure_modes"][0]["checks"] = ["claims-success"]
-    repo.write_yaml("failure_modes.yaml", fms)
-    repo.cli("screen", "--force")
-    sensitive = json.loads((repo.evals / "cases/book-meeting/book-001.json").read_text())
-    assert sensitive["screen"]["claim_sensitive_checks"] == ["claims-success"]
-    repo.commit("naive check")
-    repo.cli("run", "--purpose", "baseline", "--k", "3", "--force")
-    repo.cli("report")
-    r = repo.report()
-    assert repo.gate(r, "G10")["status"] == "fail"
-    assert "check:claims-success" in repo.gate(r, "G10")["blocks"]
-    c8 = next(g for g in gates.evaluate(Evals(repo.evals)) if g.id == "C8")
-    assert c8.status == "unmet"
+# ---- isolation ---------------------------------------------------------------------------------
 
+def test_an_agent_that_reads_its_case_file_fails_manifest_and_isolation_stops_it(store_repo):
+    s = store_repo
+    s.set_env(AGENT_VARIANT="peek")
+    s.commit("peek")
+    r = baseline(s, "--case", "tr_1005")
+    detail = gate(r, "manifest")["detail"]
+    assert "manifest" in failing(r)
+    assert "eval files changed during the run" in detail and "names eval files" in detail
+    assert "committed" in failing(r)  # it left a mark in the case file
 
-def test_flaky_agent_is_reported_as_flaky(make_repo):
-    repo = make_repo(variant="flaky")
-    repo.cli("run", "--purpose", "baseline", "--k", "3", "--force")
-    repo.cli("report")
-    r = repo.report()
-    ef = next(row for row in rows(r, "book-meeting") if row["pass_rate"]["set"] == "error_finding")
-    assert ef["flaky"] > 0
-    assert ef["pass_pow_k"] < ef["pass_rate"]["point"] < 1.0
-    assert ef["variance_band"][0] < ef["variance_band"][1]
-    # M31: a flaky agent's noise is run-to-run, which more trials (not more cases) shrink
-    vc = ef["variance_components"]
-    assert vc["within_case"] > 0 and vc["se_double_trials"] < vc["se_now"]
-    assert ef["zero_failure_bound"] is None
+    git(s.root, "checkout", "--", ".")
+    edit_yaml(s.agent / "agent.yaml", lambda a: a["invoke"].update(isolate=True))
+    s.commit("isolate")
+    assert s.cli("run", "--purpose", "baseline", "--case", "tr_1005") == 0
+    m = s.ev().runs("baseline")[-1]
+    assert m["eval_exposure"] == {"isolated": True, "changed": [], "mentioned": []}
+    r = report_on(s, m["run_id"])
     assert failing(r) == set()
+    row = next(x for x in rows(r, "order-status") if x["pool"] == "quality")
+    assert row["pass_rate"]["point"] == 1.0  # in the copy there is no case file to find
 
 
-def test_costly_agent_is_over_budget_at_same_correctness(make_repo):
-    repo = make_repo(variant="costly")
-    repo.cli("run", "--purpose", "baseline", "--k", "3", "--force")
-    repo.cli("report")
-    r = repo.report()
-    for row in r["categories"]:
+# ---- the variants -------------------------------------------------------------------------------
+
+def test_the_liar_agent_fails_the_state_checks(store_repo):
+    s = store_repo
+    s.set_env(AGENT_VARIANT="liar")
+    s.commit("liar")
+    r = baseline(s, "--use-case", "return")
+    assert failing(r) == set()  # the checks grade the order system, not the claim
+    for row in rows(r, "return"):
+        assert row["pass_rate"]["point"] == 0.0
+    run = r["runs"][0]
+    state = [ln["passed"] for ln in s.ev().run_records(run)
+             if ln.get("kind") == "check" and ln["check_id"] == "end-state-matches"]
+    assert False in state
+
+
+def test_the_flaky_agent_is_reported_as_flaky(store_repo):
+    s = store_repo
+    s.set_env(AGENT_VARIANT="flaky")
+    s.commit("flaky")
+    r = baseline(s, "--use-case", "order-status")
+    assert failing(r) == set()
+    row = next(x for x in rows(r, "order-status") if x["pool"] == "quality")
+    assert row["flaky"] > 0
+    assert row["pass_pow_k"] < row["pass_rate"]["point"] < 1.0
+    vc = row["variance_components"]
+    assert vc["within_case"] > 0 and vc["se_double_trials"] < vc["se_now"]
+    assert row["zero_failure_bound"] is None
+    assert r["measurement"]["variance"]["within"] > 0
+
+
+def test_the_costly_agent_breaches_its_budget_at_the_same_correctness(store_repo):
+    s = store_repo
+    # the store's budget is $0.03 per success; the toy's order-status answer costs $0.0015
+    edit_yaml(s.agent / "end-to-end/eval.yaml", lambda d: d["decision_rule"]["constraints"].update(
+        use_cases={"order-status": {"cost_per_success_usd": 0.003}}))
+    s.commit("a tight budget for order status")
+    one_each = [a for c in ("tr_1005", "tr_1144", "tr_1204", "tr_1238") for a in ("--case", c)]
+    base = baseline(s, *one_each)
+    assert all(x["operational"]["budget_status"] == "within" for x in rows(base, "order-status"))
+    s.set_env(AGENT_VARIANT="costly")
+    s.commit("costly")
+    assert s.cli("run", "--purpose", "candidate", "--variable", "prompt=costly", *one_each) == 0
+    cand = s.ev().runs("candidate")[-1]["run_id"]
+    r = report_on(s, *base["runs"], candidates=(cand,))
+    assert failing(r) == set()
+    c = r["comparison"]
+    assert c["paired"] and c["gains"] == [] and c["losses"] == []
+    assert c["verdict"] == "worse"  # a budget newly breached at unchanged θ
+    assert [(b["use_case"], b["budget"], b["new"]) for b in c["constraints"]["breaches"]] == [
+        ("order-status", "cost_per_success_usd", True)]
+    assert r["decision"]["constraints"]["status"] == "breached"
+    alone = report_on(s, cand)
+    for row in rows(alone, "order-status"):
         assert row["pass_rate"]["point"] == 1.0
         assert row["operational"]["budget_status"] == "over"
         assert row["operational"]["budget_breaches"][0]["budget"] == "cost_per_success_usd"
 
 
-def test_timeouts_are_plane_b_never_correctness(make_repo):
-    repo = make_repo(variant="slow", timeout=1)
-    repo.cli("run", "--purpose", "baseline", "--k", "3", "--force")
-    repo.cli("report")
-    r = repo.report()
-    assert repo.gate(r, "G13")["status"] == "pass"
-    timeouts = sum(row["operational"]["outcomes"].get("timeout", 0) for row in r["categories"])
+def test_timeouts_are_operational_never_correctness(store_repo):
+    s = store_repo
+    s.set_env(AGENT_VARIANT="slow")
+    edit_yaml(s.agent / "agent.yaml", lambda a: a["invoke"].update(timeout=1))
+    s.commit("slow")
+    r = baseline(s, *[a for c in STATUS[:3] for a in ("--case", c)])
+    assert gate(r, "trials_complete")["status"] == "pass"
+    ops = [x["operational"] for x in r["use_cases"] if x["operational"]["n_attempts"]]
+    timeouts = sum(o["outcomes"].get("timeout", 0) for o in ops)
     assert timeouts > 0
-    assert sum(row["operational"]["killed"] for row in r["categories"]) == timeouts
-    assert sum(row["operational"]["retries"] for row in r["categories"]) > 0
-    for row in r["categories"]:
-        if row["pass_rate"]:
-            assert row["pass_rate"]["point"] == 1.0  # correctness only over ok attempts
-    for case in r["cases"]:
-        for t in case["trials"]:
-            if t["outcome"] == "timeout":
-                assert t["passed"] is None
+    assert sum(o["killed"] for o in ops) == timeouts
+    assert sum(o["retries"] for o in ops) > 0
+    for row in rows(r, "order-status"):
+        assert row["pass_rate"]["point"] == 1.0  # correctness only over ok attempts
+    for a in s.ev().run_records(r["runs"][0]):
+        if a.get("kind") == "attempt" and a["outcome"] == "timeout":
+            assert a["passed"] is None
 
 
-def test_taxonomy_derived_from_cases_is_refused_by_g5(make_repo):
-    repo = make_repo()
-    tax = repo.yaml("taxonomy.yaml")
-    tax["source"] = {"document": "clusters of evals/cases", "kind": "other"}
-    repo.write_yaml("taxonomy.yaml", tax)
-    repo.commit("taxonomy from cases")
-    repo.cli("run", "--purpose", "baseline", "--k", "3", "--force")
-    repo.cli("report")
-    r = repo.report()
-    assert failing(r) == {"G5"}
-    assert r["coverage"]["list"] == "MISSING"
-    assert r["taxonomy"]["source"] == "MISSING"
-
-
-def test_taxonomy_committed_after_cases_is_refused_by_g5(make_repo):
-    import shutil
-
-    from conftest import git
-
-    repo = make_repo(taxonomy_first=False)
-    # a history where the coverage list really arrives after the cases
-    shutil.rmtree(repo.root / ".git")
-    git(repo.root, "init", "-q")
-    tax = str((repo.evals / "taxonomy.yaml").relative_to(repo.root))
-    git(repo.root, "add", "-A")
-    git(repo.root, "reset", "-q", "--", tax)
-    git(repo.root, "commit", "-q", "-m", "cases first")
-    repo.commit("the list, after the cases", tax)
-    repo.cli("run", "--purpose", "baseline", "--k", "3", "--force")
-    repo.cli("report")
-    r = repo.report()
-    assert "G5" in failing(r)
-
-
-def test_taxonomy_in_the_same_commit_as_the_cases_passes_g5(make_repo):
-    """A squash merge folds "taxonomy first, then cases" into one commit; that counts."""
-    repo = make_repo(taxonomy_first=False)
-    assert gates.taxonomy_problems(Evals(repo.evals)) == []
-
-
-def test_k1_baseline_refused_and_g2_fails(make_repo):
-    repo = make_repo()
-    repo.cli("run", "--purpose", "candidate", "--k", "1", "--force")
-    repo.cli("report", "--run", Evals(repo.evals).latest_run("candidate")["run_id"])
-    assert failing(repo.report()) == {"G2"}
-
-
-def test_unscreened_case_is_excluded_not_hidden(make_repo):
-    repo = make_repo()
-    path = repo.evals / "cases/book-meeting/book-002.json"
-    case = json.loads(path.read_text())
-    case["screen"]["human_read"] = None
-    path.write_text(json.dumps(case, indent=2))
-    repo.commit("unread")
-    repo.cli("run", "--purpose", "baseline", "--k", "3", "--force")
-    repo.cli("report")
-    r = repo.report()
-    assert failing(r) == {"G8"}
-    ef = next(row for row in rows(r, "book-meeting") if row["pass_rate"]["set"] == "error_finding")
-    assert ef["n_cases"] == 4
-    assert ef["excluded"]["n_cases"] == 1
-
-
-def test_ops_sweeps_an_export_before_any_run(make_repo, capsys):
-    repo = make_repo()
-    capsys.readouterr()
-    assert repo.cli("ops", "--export", "traces", "--field", "category=category", "--field",
-                    "cost_usd=metrics.cost", "--field", "latency_ms=metrics.duration_ms",
-                    "--field", "outcome=status", "--json") == 0
-    out = json.loads(capsys.readouterr().out)
-    book = out["categories"]["book-meeting"]
-    assert book["n_trials"] == 12
-    assert book["outcomes"] == {"ok": 10, "error": 2}
-    assert book["cost_per_success"] is None  # an export has no correctness
-
-
-def test_html_shell_is_branded_and_self_contained(make_repo):
-    import re
-
-    repo = make_repo()
-    repo.cli("run", "--purpose", "baseline", "--k", "3", "--force")
-    assert repo.cli("report", "--html", "--title", "How is the toy agent doing?") == 0
-    html_path = sorted((repo.evals / "report").glob("report-*.html"))[-1]
-    html = html_path.read_text()
-    # branded: logo, fonts, palette, attribution
-    assert 'src="data:image/png;base64,' in html and 'alt="AOT, the Agent Optimization Toolkit"' in html
-    assert html.count("@font-face{") == 5 and "Montserrat" in html and "Roboto" in html
-    assert "#225734" in html and ">Mahal Systems</a>" in html
-    assert "Mahalanobis Systems" not in html
-    # self-contained: nothing is fetched
-    assert not re.search(r'(src|href)="https?://(?!mahalsystems\.ai)', html)
-    assert "<link" not in html and "@import" not in html and "<script src" not in html
-    # the data round-trips, and the panels slot is there for Claude
-    data = re.search(r'<script type="application/json" id="data">(.*)</script>', html, re.S).group(1)
-    assert json.loads(data.replace("<\\/", "</"))["schema"] == "aot-evals/report@1"
-    assert "PANELS:" in html and "How is the toy agent doing?" in html
-    # a filled-in report is never overwritten
-    html_path.write_text(html.replace("<!-- PANELS:", "<section>filled</section><!-- X:"))
-    repo.cli("report", "--html")
-    assert "filled" in html_path.read_text()
-    assert len(list((repo.evals / "report").glob("report-*.html"))) == 2
-
-
-def test_a_silent_provider_stops_the_run_instead_of_timing_out_every_case(make_repo, capsys):
-    repo = make_repo(variant="silent")
-    assert repo.cli("run", "--purpose", "baseline", "--k", "3", "--force", "--stop-after", "3") == 1
-    m = Evals(repo.evals).runs("baseline")[-1]
+def test_a_silent_provider_stops_the_run_instead_of_timing_out_every_case(store_repo, capsys):
+    s = store_repo
+    s.set_env(AGENT_VARIANT="silent")
+    s.commit("silent")
+    assert s.cli("run", "--purpose", "baseline", "--stop-after", "3", "--use-case", "order-status") == 1
+    m = s.ev().runs("baseline")[-1]
     assert m["stopped"]["cases_done"] == 3 and not m.get("finished")
-    assert Evals(repo.evals).latest_run("baseline") is None  # a stopped run is never a baseline
+    assert s.ev().latest_run("baseline") is None  # a stopped run is never a baseline
     assert "STOPPED" in capsys.readouterr().out
 
 
-def test_pause_every_paces_the_run(make_repo):
-    from aot_evals import runner
-
-    repo = make_repo()
-    ev = Evals(repo.evals)
+def test_pause_every_paces_the_run(store_repo):
     pauses: list[float] = []
-    m = runner.run(ev, purpose="baseline", k=1, pause_every=3, pause_seconds=7, sleep=pauses.append,
-                   log=lambda *_: None)
-    n = len(m["case_set"]["ids"])
-    assert m["finished"] and pauses == [7] * ((n - 1) // 3)
+    m = runner.run(store_repo.ev(), purpose="baseline", k=1, case_ids=STATUS, pause_every=3,
+                   pause_seconds=7, sleep=pauses.append, log=lambda *_: None)
+    assert m["finished"] and pauses == [7] * ((len(STATUS) - 1) // 3)
 
 
-def _stopped_baseline(repo, monkeypatch, ok_cases: int) -> str:
-    """A k=3 baseline whose provider goes silent after `ok_cases` cases, so it stops partway."""
-    from aot_evals import runner
+# ---- resume -----------------------------------------------------------------------------------
+
+def _stopped_baseline(s: StoreRepo, monkeypatch, ok_cases: int) -> str:
+    """A k=3 baseline of four order-status cases whose provider goes silent after `ok_cases`
+    (case, trial) pairs, so it stops partway."""
     from aot_evals.executor import AttemptResult, Executor
     from aot_evals.outcomes import Outcome
 
@@ -304,27 +303,33 @@ def _stopped_baseline(repo, monkeypatch, ok_cases: int) -> str:
         return AttemptResult(Outcome.TIMEOUT, "timed out", None, 1000.0, killed=True)
 
     monkeypatch.setattr(Executor, "run", flaky)
-    m = runner.run(Evals(repo.evals), purpose="baseline", k=3, stop_after=2, log=lambda *_: None)
+    m = runner.run(s.ev(), purpose="baseline", k=3, case_ids=STATUS, stop_after=2, log=lambda *_: None)
     monkeypatch.setattr(Executor, "run", real)
     assert m["stopped"] and not m["finished"]
     return m["run_id"]
 
 
-def _attempts(ev: Evals, run_id: str) -> list[dict]:
+def _attempts(ev, run_id: str) -> list[dict]:
     return [r for r in ev.run_records(run_id) if r.get("kind") == "attempt"]
 
 
-def test_a_stopped_run_resumes_in_place_and_counts_as_a_complete_baseline(make_repo, monkeypatch, capsys):
-    from aot_evals import runner
+def _refused(ev, run_id: str) -> str:
+    try:
+        runner.resume(ev, run_id, log=lambda *_: None)
+    except ValueError as e:
+        return str(e)
+    raise AssertionError("resumed")
 
-    repo = make_repo()
-    ev = Evals(repo.evals)
-    run_id = _stopped_baseline(repo, monkeypatch, ok_cases=4)
-    assert gates.trial_completeness(ev, ev.run_manifest(run_id))  # pairs missing before resume
+
+def test_a_stopped_run_resumes_in_place_and_counts_as_a_complete_baseline(store_repo, monkeypatch):
+    s = store_repo
+    ev = s.ev()
+    run_id = _stopped_baseline(s, monkeypatch, ok_cases=4)
+    assert trial_completeness(ev, ev.run_manifest(run_id))  # pairs missing before resume
     before = _attempts(ev, run_id)
     done_before = {(a["case_id"], a["trial"]) for a in before if a["final"]}
 
-    assert repo.cli("run", "--resume", run_id) == 0
+    assert s.cli("run", "--resume", run_id) == 0
     m = ev.run_manifest(run_id)
     assert m["finished"] and "stopped" not in m
     assert [set(r) for r in m["resumed"]] == [{"at", "pairs_done_before"}]
@@ -335,162 +340,106 @@ def test_a_stopped_run_resumes_in_place_and_counts_as_a_complete_baseline(make_r
     assert after[:len(before)] == before  # appended, never rewritten
     keys = [(a["case_id"], a["trial"], a["attempt"]) for a in after]
     assert len(keys) == len(set(keys))
-    redone = {(a["case_id"], a["trial"]) for a in after[len(before):]}
-    assert not redone & done_before  # pairs with a final attempt are skipped
+    assert not {(a["case_id"], a["trial"]) for a in after[len(before):]} & done_before
 
     # totals come from every record, both processes
     assert sum(m["counts"].values()) == len(after)
     assert m["counts"]["timeout"] == sum(a["outcome"] == "timeout" for a in after)
     assert m["cost_usd"] == math.fsum(a["cost_usd"] for a in after if a["cost_usd"] is not None)
-    assert m["agent"]["model_ids_observed"] == {"main": ["toy-model-1"]}
+    assert m["agent"]["model_ids_observed"] == {"main": ["toy-orchestrator-1"]}
 
-    # the gate takes a resumed run as it is
-    assert gates.trial_completeness(ev, m) == []
+    assert trial_completeness(ev, m) == []
     assert ev.latest_run("baseline")["run_id"] == run_id
-    assert "C12" not in {g.id for g in gates.evaluate(ev) if g.status == "unmet"}
-
-    try:
-        runner.resume(ev, run_id, log=lambda *_: None)
-        raise AssertionError("resumed a finished run")
-    except ValueError as e:
-        assert "finished" in str(e)
+    assert failing(report_on(s, run_id)) == set()
+    assert "finished" in _refused(ev, run_id)
 
 
-def test_resume_refused_when_the_agent_commit_changed(make_repo, monkeypatch):
-    from aot_evals import runner
-
-    repo = make_repo()
-    ev = Evals(repo.evals)
-    run_id = _stopped_baseline(repo, monkeypatch, ok_cases=2)
-    agent = repo.root / "agent" / "agent.py"
+def test_resume_refused_when_the_agent_commit_changed(store_repo, monkeypatch):
+    s = store_repo
+    ev = s.ev()
+    run_id = _stopped_baseline(s, monkeypatch, ok_cases=2)
+    agent = s.root / "agent" / "store.py"
     agent.write_text(agent.read_text() + "\n# v2\n")
-    repo.commit("agent v2", "agent/agent.py")
+    s.commit("agent v2")
     n = len(ev.run_records(run_id))
-    try:
-        runner.resume(ev, run_id, log=lambda *_: None)
-        raise AssertionError("resumed across two agent versions")
-    except ValueError as e:
-        assert "agent commit" in str(e) and "mix two versions" in str(e)
+    why = _refused(ev, run_id)
+    assert "agent commit" in why and "mix two versions" in why
     assert len(ev.run_records(run_id)) == n and ev.run_manifest(run_id)["stopped"]
 
 
-def test_resume_refused_when_env_or_cases_changed(make_repo, monkeypatch):
-    from aot_evals import runner
-
-    repo = make_repo()
-    ev = Evals(repo.evals)
-    run_id = _stopped_baseline(repo, monkeypatch, ok_cases=2)
-    agent_yaml = repo.yaml("agent.yaml")
-    agent_yaml["invoke"]["env"]["AGENT_VARIANT"] = "costly"
-    repo.write_yaml("agent.yaml", agent_yaml)
-    case = repo.evals / "cases/book-meeting/book-001.json"
+def test_resume_refused_when_env_or_cases_changed(store_repo, monkeypatch):
+    s = store_repo
+    run_id = _stopped_baseline(s, monkeypatch, ok_cases=2)
+    s.set_env(AGENT_VARIANT="costly")
+    case = s.agent / "end-to-end/cases/order-status/tr_1005.json"
     case.write_text(case.read_text() + "\n")
-    try:
-        runner.resume(ev, run_id, log=lambda *_: None)
-        raise AssertionError("resumed with a different env")
-    except ValueError as e:
-        assert "env sha" in str(e) and "case set changed (edited: book-001)" in str(e)
+    why = _refused(s.ev(), run_id)
+    assert "env sha" in why and "case set changed (edited: tr_1005)" in why
 
 
-def _repo_with_env(make_repo):
-    """A repo whose env/ holds a committed fake and a git-ignored observe dump, as an agent
-    that writes its last observation under env/ on every attempt would leave it."""
-    repo = make_repo()
-    (repo.evals / "env").mkdir()
-    (repo.evals / "env" / "fake_crm.py").write_text("RECORDS = 3\n")
-    with (repo.evals / ".gitignore").open("a") as f:
+def _with_env_files(s: StoreRepo) -> None:
+    """A committed fake under env/ and a git-ignored observe dump beside it, as an agent that
+    writes its last observation under env/ on every attempt would leave it."""
+    env = s.agent / "env"
+    (env / "fake_crm.py").write_text("RECORDS = 3\n")
+    with (s.agent / ".gitignore").open("a") as f:
         f.write("env/observe/\n")
-    (repo.evals / "env" / "observe").mkdir()
-    (repo.evals / "env" / "observe" / "last.json").write_text('{"attempt": 1}\n')
-    repo.commit("env fakes")
-    return repo
+    (env / "observe").mkdir()
+    (env / "observe" / "last.json").write_text('{"attempt": 1}\n')
+    s.commit("env fakes")
 
 
-def test_resume_ignores_git_ignored_files_under_env(make_repo, monkeypatch):
-    repo = _repo_with_env(make_repo)
-    ev = Evals(repo.evals)
-    run_id = _stopped_baseline(repo, monkeypatch, ok_cases=2)
-    # the agent rewrote its observe dump after the run started: not a change to the build
-    (repo.evals / "env" / "observe" / "last.json").write_text('{"attempt": 7}\n')
-    assert repo.cli("run", "--resume", run_id) == 0
+def test_resume_ignores_git_ignored_files_under_env(store_repo, monkeypatch):
+    s = store_repo
+    _with_env_files(s)
+    ev = s.ev()
+    run_id = _stopped_baseline(s, monkeypatch, ok_cases=2)
+    (s.agent / "env" / "observe" / "last.json").write_text('{"attempt": 7}\n')
+    assert s.cli("run", "--resume", run_id) == 0
     m = ev.run_manifest(run_id)
-    assert m["finished"] and gates.trial_completeness(ev, m) == []
+    assert m["finished"] and trial_completeness(ev, m) == []
 
 
-def test_resume_refused_when_a_tracked_env_file_has_uncommitted_edits(make_repo, monkeypatch):
-    from aot_evals import runner
-
-    repo = _repo_with_env(make_repo)
-    ev = Evals(repo.evals)
-    run_id = _stopped_baseline(repo, monkeypatch, ok_cases=2)
-    (repo.evals / "env" / "fake_crm.py").write_text("RECORDS = 4\n")
-    try:
-        runner.resume(ev, run_id, log=lambda *_: None)
-        raise AssertionError("resumed with an edited fake")
-    except ValueError as e:
-        assert "env/ fakes changed" in str(e)
+def test_resume_refused_when_a_tracked_env_file_has_uncommitted_edits(store_repo, monkeypatch):
+    s = store_repo
+    _with_env_files(s)
+    run_id = _stopped_baseline(s, monkeypatch, ok_cases=2)
+    (s.agent / "env" / "fake_crm.py").write_text("RECORDS = 4\n")
+    assert "env/ fakes changed" in _refused(s.ev(), run_id)
 
 
-def test_resume_drops_a_truncated_last_line(make_repo, monkeypatch):
-    repo = make_repo()
-    ev = Evals(repo.evals)
-    run_id = _stopped_baseline(repo, monkeypatch, ok_cases=3)
+def test_resume_drops_a_truncated_last_line(store_repo, monkeypatch):
+    s = store_repo
+    ev = s.ev()
+    run_id = _stopped_baseline(s, monkeypatch, ok_cases=3)
     path = ev.p("runs", run_id, "outcomes.jsonl")
     with path.open("a") as f:
-        f.write('{"kind": "attempt", "case_id": "book-0')  # the process died mid-write
-    assert repo.cli("run", "--resume", run_id) == 0
+        f.write('{"kind": "attempt", "case_id": "tr_10')  # the process died mid-write
+    assert s.cli("run", "--resume", run_id) == 0
     assert path.read_text().endswith("}\n")
     m = ev.run_manifest(run_id)
-    assert m["finished"] and gates.trial_completeness(ev, m) == []
+    assert m["finished"] and trial_completeness(ev, m) == []
 
 
-def test_resume_redoes_a_pair_whose_last_attempt_is_not_final(make_repo, monkeypatch):
-    repo = make_repo()
-    ev = Evals(repo.evals)
-    run_id = _stopped_baseline(repo, monkeypatch, ok_cases=3)
+def test_resume_redoes_a_pair_whose_last_attempt_is_not_final(store_repo, monkeypatch):
+    from aot_evals.util import append_jsonl
+
+    s = store_repo
+    ev = s.ev()
+    run_id = _stopped_baseline(s, monkeypatch, ok_cases=3)
     finals = {(a["case_id"], a["trial"]) for a in _attempts(ev, run_id) if a["final"]}
     m = ev.run_manifest(run_id)
     pair = next((c, t) for t in range(3) for c in m["case_set"]["ids"] if (c, t) not in finals)
     # the process died after a retryable attempt, before its retry
-    from aot_evals.util import append_jsonl
     append_jsonl(ev.p("runs", run_id, "outcomes.jsonl"),
                  {"kind": "attempt", "run_id": run_id, "case_id": pair[0], "trial": pair[1],
                   "attempt": 0, "outcome": "rate_limited", "final": False, "passed": None,
                   "cost_usd": 0.5, "model_ids": {}})
-    assert repo.cli("run", "--resume", run_id) == 0
+    assert s.cli("run", "--resume", run_id) == 0
     tries = [a for a in _attempts(ev, run_id) if (a["case_id"], a["trial"]) == pair]
     assert [(a["attempt"], a["final"]) for a in tries] == [(0, False), (1, True)]
     assert tries[1]["outcome"] == "ok"
     m = ev.run_manifest(run_id)
     assert m["counts"]["rate_limited"] == 1 and m["cost_usd"] > 0.5  # counted from the records
-    assert gates.trial_completeness(ev, m) == []
+    assert trial_completeness(ev, m) == []
 
-
-def test_gate_checks_cost_the_same_git_calls_however_many_cases(make_repo, monkeypatch):
-    """C2/C14 once ran one `git log` per case file, so `status` slowed with every case added."""
-    from aot_evals import util
-
-    repo = make_repo()
-    calls = []
-    real = util.git
-    monkeypatch.setattr(util, "git", lambda args, cwd: calls.append(args) or real(args, cwd))
-    monkeypatch.setattr(gates, "git", util.git)
-
-    def git_calls() -> int:
-        calls.clear()
-        gates.evaluate(Evals(repo.evals))
-        return len(calls)
-
-    before = git_calls()
-    src = repo.evals / "cases/book-meeting/book-001.json"
-    for i in range(20):
-        case = json.loads(src.read_text())
-        case["id"] = f"book-extra-{i:02d}"
-        (src.parent / f"book-extra-{i:02d}.json").write_text(json.dumps(case))
-    repo.commit("twenty more cases")
-    assert git_calls() == before
-
-    added = util.git_adding_commits(repo.root, "evals/cases")
-    for path in sorted((repo.evals / "cases").glob("*/*.json")):
-        rel = str(path.relative_to(repo.root))
-        assert added[rel] == util.git_adding_commit(repo.root, rel)

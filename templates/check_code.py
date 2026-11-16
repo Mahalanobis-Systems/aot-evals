@@ -4,7 +4,8 @@ start / end: {"world": <what invoke.observe printed>, "output": <the agent's del
 case: the case JSON (inputs, start_state, expected_end_state, ...)
 
 Grade against the goal, not one expected path: any sequence of actions that reaches the right
-state passes. Never read the agent's claim that it succeeded (G10); the C7 screen checks for that.
+state passes. Never read the agent's claim that it succeeded (evidence gate `independent_reference`); the liar
+screen (`aot-evals screen`) checks for that.
 """
 
 

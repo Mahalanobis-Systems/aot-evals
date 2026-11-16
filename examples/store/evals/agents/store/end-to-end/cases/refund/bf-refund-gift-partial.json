@@ -1,0 +1,134 @@
+{
+  "id": "bf-refund-gift-partial",
+  "use_case": "refund",
+  "pool": "bug_finding",
+  "template": "bf-refund-gift-partial",
+  "failure_modes": [
+    "wrong-answer",
+    "wrong-end-state",
+    "unrequested-change",
+    "wrong-route"
+  ],
+  "coverage_entries": [
+    "refund",
+    "gift-card",
+    "partial"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-refund-gift-partial",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "message",
+    "text": "Refund the toaster from A7023 to a gift card."
+  },
+  "inputs": {
+    "today": "2026-10-20",
+    "customer": "c-0012"
+  },
+  "start_state": {
+    "orders": {
+      "A7023": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-103",
+            "name": "toaster",
+            "price": 29.99
+          },
+          {
+            "sku": "SKU-105",
+            "name": "mixing bowls",
+            "price": 18.75
+          }
+        ],
+        "payment": "gift_card",
+        "refunded": 0.0,
+        "address": "62 Mill Lane",
+        "eta": null,
+        "delivered": "2026-10-14",
+        "customer": "c-0012"
+      },
+      "A7024": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-103",
+            "name": "toaster",
+            "price": 29.99
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "55 Elm Street",
+        "eta": null,
+        "delivered": "2026-08-16",
+        "customer": "c-0012"
+      }
+    },
+    "refunds": [],
+    "returns": [],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A7023": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-103",
+              "name": "toaster",
+              "price": 29.99
+            },
+            {
+              "sku": "SKU-105",
+              "name": "mixing bowls",
+              "price": 18.75
+            }
+          ],
+          "payment": "gift_card",
+          "refunded": 29.99,
+          "address": "62 Mill Lane",
+          "eta": null,
+          "delivered": "2026-10-14",
+          "customer": "c-0012"
+        },
+        "A7024": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-103",
+              "name": "toaster",
+              "price": 29.99
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "55 Elm Street",
+          "eta": null,
+          "delivered": "2026-08-16",
+          "customer": "c-0012"
+        }
+      },
+      "refunds": [
+        {
+          "order": "A7023",
+          "amount": 29.99,
+          "to": "gift_card"
+        }
+      ],
+      "returns": [],
+      "log": [
+        {
+          "tool": "handoff",
+          "to": "refund-subagent",
+          "order": "A7023"
+        }
+      ]
+    },
+    "output": "Refunded $29.99 for order A7023 to your gift card."
+  }
+}

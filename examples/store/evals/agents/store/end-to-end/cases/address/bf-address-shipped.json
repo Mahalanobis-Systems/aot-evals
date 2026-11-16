@@ -1,0 +1,141 @@
+{
+  "id": "bf-address-shipped",
+  "use_case": "address",
+  "pool": "bug_finding",
+  "template": "bf-address-shipped",
+  "failure_modes": [
+    "wrong-answer",
+    "wrong-end-state",
+    "unrequested-change",
+    "wrong-route"
+  ],
+  "coverage_entries": [
+    "address",
+    "not-allowed"
+  ],
+  "provenance": {
+    "source": "template",
+    "template": "bf-address-shipped",
+    "synthetic": true
+  },
+  "trigger": {
+    "type": "message",
+    "text": "Please send order A7013 to 401 Bay Street instead."
+  },
+  "inputs": {
+    "today": "2026-10-20",
+    "customer": "c-0007"
+  },
+  "start_state": {
+    "orders": {
+      "A7013": {
+        "status": "shipped",
+        "items": [
+          {
+            "sku": "SKU-103",
+            "name": "toaster",
+            "price": 29.99
+          },
+          {
+            "sku": "SKU-105",
+            "name": "mixing bowls",
+            "price": 18.75
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "78 Elm Street",
+        "eta": "2026-10-24",
+        "delivered": null,
+        "customer": "c-0007"
+      },
+      "A7014": {
+        "status": "delivered",
+        "items": [
+          {
+            "sku": "SKU-101",
+            "name": "blender",
+            "price": 49.99
+          },
+          {
+            "sku": "SKU-105",
+            "name": "mixing bowls",
+            "price": 18.75
+          },
+          {
+            "sku": "SKU-107",
+            "name": "cutting board",
+            "price": 22.4
+          }
+        ],
+        "payment": "card",
+        "refunded": 0.0,
+        "address": "77 Oak Avenue",
+        "eta": null,
+        "delivered": "2026-08-13",
+        "customer": "c-0007"
+      }
+    },
+    "refunds": [],
+    "returns": [],
+    "log": []
+  },
+  "followups": [],
+  "expected_end_state": {
+    "world": {
+      "orders": {
+        "A7013": {
+          "status": "shipped",
+          "items": [
+            {
+              "sku": "SKU-103",
+              "name": "toaster",
+              "price": 29.99
+            },
+            {
+              "sku": "SKU-105",
+              "name": "mixing bowls",
+              "price": 18.75
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "78 Elm Street",
+          "eta": "2026-10-24",
+          "delivered": null,
+          "customer": "c-0007"
+        },
+        "A7014": {
+          "status": "delivered",
+          "items": [
+            {
+              "sku": "SKU-101",
+              "name": "blender",
+              "price": 49.99
+            },
+            {
+              "sku": "SKU-105",
+              "name": "mixing bowls",
+              "price": 18.75
+            },
+            {
+              "sku": "SKU-107",
+              "name": "cutting board",
+              "price": 22.4
+            }
+          ],
+          "payment": "card",
+          "refunded": 0.0,
+          "address": "77 Oak Avenue",
+          "eta": null,
+          "delivered": "2026-08-13",
+          "customer": "c-0007"
+        }
+      },
+      "refunds": [],
+      "returns": [],
+      "log": []
+    },
+    "output": "Order A7013 has already shipped, so I can't change its address."
+  }
+}
