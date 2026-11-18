@@ -484,7 +484,8 @@ verdicts count. Judgements are cached per backend; a refusal or an error is an i
 never a verdict from another model.
 
 **A judge's error rates** ([statistics §3.2](statistics.md#32-a-judge-is-a-diagnostic-test)).
-`calibrate` measures, per backend, on the judge's labels: the **catch rate** and the **clean pass
+`calibrate` builds, per backend, the judge's confusion matrix against its labels
+([estimators, terms](estimators.md#terms)) and reads it down its columns: the **catch rate** and the **clean pass
 rate**, each with its Wilson interval, its one-sided lower bound at the decision rule's α and its
 count of labels per kind (`labels_per_kind: {fail, pass}`), plus J and the inflation factor its
 lower bounds imply at 50%, 20%, 10% and 3% (`inflation_at_lower_bounds`). A probabilistic backend's threshold is chosen on the dev labels by maximizing
@@ -532,7 +533,8 @@ one line per run and labeler). Where labelers differ the run has no verdict unti
 (`labels/rulings.jsonl`). Each run is assigned to dev or holdout by a hash of its id. `agreement`
 compares the eval's verdicts with people's on the same runs and writes `report/agreement.json`, which
 the measurement gates read:
-the eval's catch and clean pass rates (dev, holdout, all), labels per kind against the count fixed
+the eval's catch and clean pass rates (dev, holdout, all), each split's confusion matrix
+(`confusion_matrix`: `tp`, `fp`, `fn`, `tn`, with `positive: fail`), labels per kind against the count fixed
 before looking, agreement between labelers (share agreed, Cohen's κ, Gwet's AC1, agreement on
 fails and on passes), the person-anchored pass rate (PPI++), and its gates (§11). Every dev
 disagreement needs a cause in `labels/triage.yaml`: `wrong-expectation`, `missing-requirement`,
@@ -696,7 +698,7 @@ and nothing is pre-rounded. The `report` skill writes its HTML from this file an
 | `estimate` | the headline: `{theta, ci, ci_method, se, quantity, weights, weights_source, estimator, corrected, correction, corrected_reason, uncorrected, n_cases, n_clusters, n_effective, k, null_reason}` | Estimand, design |
 | `use_cases[]` | one row per use case and pool: `share`, `cost`, `weight`, `inclusion_prob_range`, `n_cases`, `estimate` (quality pool only), `estimate_corrected`, `pass_rate`, `pass_pow_k`, `flaky`, `variance_band`, `zero_failure_bound`, `clusters`, `variance_components`, `operational`, `excluded` | Estimand, design |
 | `design` | `{quality{n, drawn, frame, seed, oversample, strata, skips[], refused[]}, bug_finding{n, coverage}, clusters{n, n_bug_finding, cluster_key, design_effect, icc, largest, mean_size, shared_with_bug_finding}, cases_without_pool[]}` | Design |
-| `measurement` | `{failure_modes[{id, check, type, use_cases, observed_rate, catch, clean, j, labels{fail, pass}, inflation, inflation_at_lower_bounds, floor{status, reason, rate, max_inflation, read_on, rate_on_these_runs}, floor_rate, corrected_rate, feeds_estimate}], eval_vs_people{catch, clean, all, labels{fail, pass}, labels_needed, floor, failure_rate, stale}, person_anchored{ppi}, variance{icc, between, within, k_recommended}, people{pairs[{ac1, kappa, pass_agreement, fail_agreement}]}, trials, max_inflation, correction, gates[{id, detail}]}` | Measurement |
+| `measurement` | `{failure_modes[{id, check, type, use_cases, observed_rate, catch, clean, j, labels{fail, pass}, confusion_matrix{positive, tp, fp, fn, tn}, inflation, inflation_at_lower_bounds, floor{status, reason, rate, max_inflation, read_on, rate_on_these_runs}, floor_rate, corrected_rate, feeds_estimate}], eval_vs_people{catch, clean, all{…, confusion_matrix}, labels{fail, pass}, labels_needed, floor, failure_rate, stale}, person_anchored{ppi}, variance{icc, between, within, k_recommended}, people{pairs[{ac1, kappa, pass_agreement, fail_agreement}]}, trials, max_inflation, correction, gates[{id, detail}]}` | Measurement |
 | `decision` | `{test, quantity, bar, margin, alpha, power, looks, combine, multiplicity, subject, result: "pass" \| "fail" \| "insufficient" \| "unknown" \| "trade", reasons[], null_reason, interval, detectable_effect, cases_needed, headline{…}, gates[{gate, use_case, result, p, p_adjusted, …}], also_requires[{eval, result, reason, runs, gate}], constraints{status, breaches[]}, look{n, prior[], recorded}, refused}` | Decision rule |
 | `comparison` | with `--candidate`: Δθ̂ design-weighted, gains and losses, flips, the verdict from the paired sign-flip test per cluster, per-use-case rows with adjusted p-values, bug-finding flips apart, new budget breaches; else null | Decision rule |
 | `checks` | per check, with `catch` and `clean` | Measurement |
@@ -890,8 +892,8 @@ rules follow from them ([estimators §12](estimators.md#12-prior-work) has the c
   Software testing drew the same line between testing to find faults and testing to measure
   reliability (Musa 1993; Frankl et al. 1998), and the coverage grid is category-partition testing
   (Ostrand & Balcer 1988).
-- **The measurement model** is diagnostic testing: sensitivity and specificity (here catch rate and
-  clean pass rate), Youden's J (Youden 1950), the Rogan–Gladen correction (Rogan & Gladen 1978),
+- **The measurement model** is diagnostic testing: the 2×2 table of a test against a reference,
+  read as sensitivity and specificity (Yerushalmy 1947; here catch rate and clean pass rate), Youden's J (Youden 1950), the Rogan–Gladen correction (Rogan & Gladen 1978),
   misclassification's cost in power (Bross 1954); inter-rater agreement (Cohen 1960; Gwet 2008);
   generalizability theory for trials (Cronbach et al. 1972); and prediction-powered inference for
   combining labels with a grader's verdicts (Angelopoulos et al. 2023; Angelopoulos, Duchi & Zrnic
@@ -944,4 +946,5 @@ ones cited on this page:
 - Rogan, W. J. & Gladen, B. (1978). Estimating prevalence from the results of a screening test. *American Journal of Epidemiology* 107(1):71–76. doi:10.1093/oxfordjournals.aje.a112510
 - U.S. Food and Drug Administration (2016). *Non-Inferiority Clinical Trials to Establish Effectiveness: Guidance for Industry.* https://www.fda.gov/media/78504/download
 - Wald, A. (1947). *Sequential Analysis.* New York: Wiley.
+- Yerushalmy, J. (1947). Statistical problems in assessing methods of medical diagnosis, with special reference to X-ray techniques. *Public Health Reports* 62(40):1432–1449.
 - Youden, W. J. (1950). Index for rating diagnostic tests. *Cancer* 3(1):32–35. doi:10.1002/1097-0142(1950)3:1<32::aid-cncr2820030106>3.0.co;2-3

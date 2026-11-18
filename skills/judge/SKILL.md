@@ -9,9 +9,12 @@ Judge is the role of the people who know what good looks like: experts, support 
 They settle one of an eval's four parts, the **measurement model's error rates**, and they can
 start as soon as an eval has runs to label, while engineering is still adding cases and checks.
 
-A grader (a check, a judge, or the eval as a whole) is measured by two numbers against people's labels: its
-**catch rate** (of the runs a person fails, the share it fails) and its **clean pass rate** (of the
-runs a person passes, the share it passes). An eval is **trusted** when its spec is complete, every
+A grader (a check, a judge, or the eval as a whole) is measured by its confusion matrix against
+people's labels: the 2×2 table of its verdicts against theirs, with a failure as the positive (TP,
+FP, FN, TN in `${CLAUDE_PLUGIN_ROOT}/docs/estimators.md#terms`). Read down its columns, that gives
+two numbers: its **catch rate** (of the runs a person fails, the share it fails) and its **clean
+pass rate** (of the runs a person passes, the share it passes). Its off-diagonal cells, the false
+positives and false negatives, are the disagreements that each need a cause. An eval is **trusted** when its spec is complete, every
 counted judge counts, the eval against people meets its floors, and the quality set is the size its
 decision rule needs (`aot-evals status`). Graders do this in the grader application, without an
 engineer, until a fix to the agent, a case or a check is needed; those go to the engineering inbox.

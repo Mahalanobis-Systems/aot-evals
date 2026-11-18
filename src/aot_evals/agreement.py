@@ -515,6 +515,7 @@ def reproduces(ev: Eval, run_id: str) -> dict:
 # ---------- agreement ----------
 
 def _rates(rows: list[dict]) -> dict:
+    from .calibrate import confusion_matrix
     fails = [r for r in rows if r["human"] == "fail"]
     passes = [r for r in rows if r["human"] == "pass"]
     caught = sum(r["suite"] == "fail" for r in fails)
@@ -524,6 +525,7 @@ def _rates(rows: list[dict]) -> dict:
         return {"rate": k / n if n else None, "ci95": stats.wilson(k, n), "k": k, "n": n}
     out = {"runs": len(rows), "human_fail": len(fails), "human_pass": len(passes),
            "catch": rate(caught, len(fails)), "clean": rate(clean, len(passes)),
+           "confusion_matrix": confusion_matrix(caught, len(fails), clean, len(passes)),
            "no_verdict": sum(r["suite"] is None for r in rows)}
     c, p = out["catch"]["rate"], out["clean"]["rate"]
     out["balanced"] = (c + p) / 2 if c is not None and p is not None else None

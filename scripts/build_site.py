@@ -228,7 +228,8 @@ def guide(name: str, path: Path, tag: str) -> dict:
 
 
 def terms(estimators: dict) -> list[dict]:
-    """estimators.md's Terms: each table under its bold heading, one row per term."""
+    """estimators.md's Terms: the Term table under each bold heading, one row per term. Other
+    tables in a group, such as the worked 2×2 table, are examples, not terms."""
     sec = next((s for s in estimators["sections"] if s["id"] == "terms"), None)
     if sec is None:
         raise ValueError("docs/estimators.md: no Terms section")
@@ -236,7 +237,12 @@ def terms(estimators: dict) -> list[dict]:
     groups = re.split(r"^\*\*(.+?)\*\*\s*$", sec["markdown"], flags=re.M)
     for k in range(1, len(groups), 2):
         group = groups[k].strip()
-        for row in table(groups[k + 1], f"estimators Terms, {group}"):
+        where = f"estimators Terms, {group}"
+        found = tables(groups[k + 1])
+        nth = next((i for i, t in enumerate(found) if cells(t[0])[:1] == ["Term"]), None)
+        if nth is None:
+            raise ValueError(f"{where}: no Term table")
+        for row in table(groups[k + 1], where, nth):
             out.append({"group": group, "term": row["term"].replace("**", ""), "meaning": row["meaning"],
                         "standard_term": row["standard_term"]})
     if not out:

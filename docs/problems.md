@@ -12,7 +12,9 @@ problem below is what happens when one of those parts is left unstated, so they 
 part. Each comes with one worked example and no formulas. The box under each one names the methods
 that solve it, the rules in [estimators.md](estimators.md#10-the-rules-in-one-table) it explains, and
 where [statistics.md](statistics.md) derives them. aot-evals does the math. Words like *use case*,
-*catch rate* and *clean pass rate* mean what the [terms](estimators.md#terms) say.
+*catch rate* and *clean pass rate* mean what the [terms](estimators.md#terms) say. One picture
+comes back in most of them: the [2×2 table](estimators.md#terms) of what a grader said against what a
+person said, with a failure as the positive.
 
 | Part | Problems |
 |---|---|
@@ -168,25 +170,43 @@ quality set can't also feed the bug-finding set.
 
 **The trap.** "Our AI judge agrees with our reviewers 95% of the time."
 
-**Worked example.** A reviewer labels 200 runs: 190 good and 10 bad. A judge that says "pass" to
-everything agrees with the reviewer on 190 of 200, which is 95%, and it caught **none** of the 10
-bad runs. So ask two separate questions. Of the bad runs, how many did it catch (its **catch
-rate**)? Of the good runs, how many did it pass (its **clean pass rate**)? Each needs its own labels. If only 2 bad runs were labeled, "caught 2 of 2"
-is consistent with a judge that catches anywhere from a third of failures to all of them.
+**Worked example.** A reviewer labels 200 runs: 190 good and 10 bad. Put the judge's verdicts
+against the reviewer's in a table. A judge that says "pass" to everything gives this one:
 
-The judge's error also distorts the rates it reports. Take 1,000 refunds, 30 of them really bad. The
-judge catches 80% of those (24) and wrongly flags 10% of the good ones (97). It flags 121 runs, or
-12%, when the real failure rate is 3%. And its mistakes cost you cases. To show that refunds go wrong less than 1 time in 20, a check
-written in code needs about 120 cases. This judge needs about 860, because its false flags on good
-refunds swamp the few real failures.
+| | reviewer fails | reviewer passes |
+|---|---:|---:|
+| **judge fails** | 0 | 0 |
+| **judge passes** | 10 | 190 |
+
+It agrees with the reviewer on the diagonal, 190 of 200, which is 95%, and it caught **none** of
+the 10 bad runs. So read the table down its columns instead, one question each. Of the bad runs,
+how many did it catch (its **catch rate**)? Of the good runs, how many did it pass (its **clean
+pass rate**)? Each column needs its own labels. If only 2 bad runs were labeled, "caught 2 of 2" is
+consistent with a judge that catches anywhere from a third of failures to all of them.
+
+The judge's error also distorts the rates it reports. Take 1,000 refunds, 30 of them really bad,
+and a judge that catches 80% of the bad ones and passes 90% of the good ones:
+
+| | really bad | really good | total |
+|---|---:|---:|---:|
+| **judge fails** | 24 | 97 | 121 |
+| **judge passes** | 6 | 873 | 879 |
+| **total** | 30 | 970 | 1,000 |
+
+It fails 121 runs, or 12%, when the real failure rate is 3%. Read across its top row: four of every
+five runs it fails are fine, so a reviewer who only looks at what the judge flagged spends most of
+the time on good runs and never sees the 6 it missed. And its mistakes cost you cases. To show that refunds go wrong less than 1 time in 20, a check
+written in code needs about 120 cases. This judge needs about 860, because its 97 false alarms
+swamp the 24 real failures it caught.
 
 **The fix.** Measure each grader by what it catches and what it wrongly flags, on enough labels of
 each kind. Correct the rates it reports for its known errors. Use code checks wherever code can
 decide. Give each check one question. A judge that agrees with itself, or with another model,
 hasn't shown that it's right.
 
-> **Under the hood.** Diagnostic-test statistics: catch rate and clean pass rate (sensitivity and
-> specificity), Wilson intervals per kind of label, and the Rogan–Gladen correction. Attenuation: a grader with J = catch + clean − 1 shrinks every real change by J, and costs about
+> **Under the hood.** Diagnostic-test statistics on the confusion matrix (TP, FP, FN, TN, with a
+> failure as the positive): catch rate and clean pass rate (sensitivity and specificity) down its
+> columns, precision across its rows, raw agreement on its diagonal; Wilson intervals per column, and the Rogan–Gladen correction. Attenuation: a grader with J = catch + clean − 1 shrinks every real change by J, and costs about
 > 1/J² as many cases near a 50% failure rate and far more for rare failures, which is how a floor on
 > judge quality is set. A judge's threshold chosen from the cost of each error, not Youden's J; calibration
 > of its probabilities (ECE, Brier); out-of-fold estimation. Reliability is not validity:
@@ -201,19 +221,29 @@ hasn't shown that it's right.
 **Worked example.** The eval has five judge checks, and each passes 90% of good runs. A good run has
 to pass all five, which happens only 59% of the time (0.9 × 0.9 × 0.9 × 0.9 × 0.9), so 41 of every
 100 good runs get failed by something. The eval also misses things: a reviewer fails a run because
-the agent promised a refund it isn't allowed to issue, and no check looks for promises. People
-disagree with each other, too. Two reviewers who agree on 90 of 100 runs can agree on **none** of
-the failures, if all their agreement is on the good runs.
+the agent promised a refund it isn't allowed to issue, and no check looks for promises. No check's
+own table shows either problem; only the eval's table against a reviewer does.
 
-**The fix.** Have a person grade whole runs without seeing the checks. Measure how many of their
-failures the eval catches and how many of their passes it passes. Give every disagreement a cause
+People disagree with each other, too. Two reviewers who agree on 90 of 100 runs can have this table:
+
+| | reviewer B fails | reviewer B passes |
+|---|---:|---:|
+| **reviewer A fails** | 0 | 5 |
+| **reviewer A passes** | 5 | 90 |
+
+All 90 agreements are on good runs. On the failures they agree **never**: the top-left cell is
+empty.
+
+**The fix.** Have a person grade whole runs without seeing the checks, and build the eval's own
+table against theirs. Measure how many of their failures the eval catches and how many of their
+passes it passes. Give every disagreement, each run off the diagonal, a cause
 and fix the check or the standard. Measure how well reviewers agree *on failures*, and write down
 how each disagreement was settled so the standard doesn't drift. Combine the person's labels with
 the eval's verdicts to estimate what a person would say about every run.
 
-> **Under the hood.** The eval's own catch rate and clean pass rate, with a person as the reference
+> **Under the hood.** The eval's own confusion matrix, catch rate and clean pass rate, with a person as the reference
 > standard: the measurement model the estimate and its power calculations use. ∏ clean pass, and
-> correlated judge errors that break it. Agreement that holds up when most runs pass (Gwet's AC1,
+> correlated judge errors that break it. The agreement table between people, and agreement that holds up when most runs pass (Gwet's AC1,
 > specific agreement) instead of Cohen's κ. Adjudication, latent-class models of reviewer error
 > (Dawid–Skene), and criteria drift with a versioned standard. Prediction-powered inference (PPI++)
 > for the person-anchored pass rate, with labels drawn by a queue, not picked (verification bias).
@@ -251,7 +281,7 @@ can't rule it out. If it gets 1 in 5 wrong, all 10 pass 11% of the time. A quick
 clean cases, the true failure rate could still be as high as about **3 ÷ *n***. With 10 cases that's
 around 26%, with 30 it's 10%, and with 100 it's 3%. To see a failure that hits 1 request in 20 at
 least once, with 95% confidence, you need 59 cases, and that only works when code or a person does the grading: a judge that
-sometimes flags good runs never returns a clean run, and needs far more (problem 6).
+sometimes fails good runs (its false alarms, problem 6) never returns a clean run, and needs far more.
 
 **The fix.** Decide first what the eval has to show (that refunds fail less than 1 time in 20, say)
 and let that set the number of cases. Read a clean result as an upper limit, not as zero. A rare,
@@ -267,8 +297,17 @@ costly failure needs many cases, cases written to target it, or a check on every
 
 **The trap.** "Version B scores 5 points higher on 200 cases."
 
-**Worked example.** Count what changed rather than the totals. Suppose change X fixed 10 cases and
-broke none, and change Y fixed 30 and broke 20. Both are +10 cases, or +5 points. Now ask: if the
+**Worked example.** Count what changed rather than the totals. Put each case in a table by how it
+did on each version:
+
+| | B passes | B fails |
+|---|---:|---:|
+| **A passes** | passed on both | broken by B |
+| **A fails** | fixed by B | failed on both |
+
+The cases on the diagonal did the same on both versions, so they say nothing about the change. Only
+the fixed and broken cells do. Suppose change X fixed 10 cases and broke none, and change Y fixed
+30 and broke 20. Both are +10 cases, or +5 points. Now ask: if the
 change did nothing, each case that moved would be a coin flip between "fixed" and "broken". Ten
 fixes out of ten moves is like 10 heads in a row, about 1 chance in 500 either way: X is real. Thirty
 of fifty happens 1 time in 5: Y could be noise. Y also broke 20 cases that worked yesterday, and
@@ -280,7 +319,7 @@ Do the same with cost. "Cost per request went down" can just mean it gives up so
 **The fix.** Run both versions on the same cases, list what each one fixed and broke, and test the
 difference case by case. A gain that blows the cost budget is a trade, not a win.
 
-> **Under the hood.** Paired designs. The sign-flip permutation test on per-case deltas and its
+> **Under the hood.** Paired designs and the paired 2×2 table, whose off-diagonal cells are the flips. The sign-flip permutation test on per-case deltas and its
 > inverted interval; McNemar's mid-p on flips; flip rate d with SE √((d − Δ²)/N). Cost per successful
 > task, medians and p90 with bootstrap intervals, and budgets as constraints in the decision rule.
 > Operational failures (timeouts, rate limits) counted on their own, never as wrong answers. *Rules*
@@ -315,13 +354,15 @@ on 15 labels and it clears the bar by luck 40% of the time. Check after every 5 
 soon as it clears, and it clears 56% of the time. Every look is another lottery ticket. A prompt
 search is the same thing at scale: the best of 2,000 tries is partly the luckiest on *these* cases.
 So is checking many kinds of request at once: with ten of them, each with a 1-in-20 chance of a
-false alarm, 40% of the time at least one "significantly" changes when nothing did.
+false alarm, 40% of the time at least one "significantly" changes when nothing did. A decision is
+graded like a judge: its false alarms are its false positives, and every extra look or extra test
+adds to them.
 
 **The fix.** Decide how many labels you'll collect before you look. Tune on one set and confirm on
 a held-out set you check once. Before making a new claim, get fresh labels. Adjust for the number of
 things you check before acting on one. Never let the agent see the cases.
 
-> **Under the hood.** Optional stopping and always-valid sequential intervals; adaptive data
+> **Under the hood.** The decision table: α is the decision's false positive rate, and power its catch rate. Optional stopping and always-valid sequential intervals; adaptive data
 > analysis, the reusable holdout and the Ladder; overoptimization of proxy graders (Goodhart).
 > Holm or Benjamini–Hochberg when any one of many tests can trigger a claim; none for gates that
 > must all pass (intersection–union). Isolation of the cases from the agent. *Rules* 21, 22, 23.

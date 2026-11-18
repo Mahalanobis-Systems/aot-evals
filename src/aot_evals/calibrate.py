@@ -123,12 +123,24 @@ def pending_calls(ev: Eval, spec: JudgeSpec, backends: list[str]) -> dict[str, i
 # ---- metrics ---------------------------------------------------------------------------------
 
 def confusion(pairs: list[tuple[bool, bool]]) -> dict:
-    """pairs of (human_pass, judge_pass); positive class = pass."""
+    """pairs of (human_pass, judge_pass); positive class = pass.
+
+    The docs take failure as the positive (catch rate = sensitivity), so the sense is flipped
+    here: tp is a run both passed, tn a run both failed. The catch rate is tn / (tn + fp), the
+    clean pass rate tp / (tp + fn)."""
     tp = sum(1 for h, j in pairs if h and j)
     fn = sum(1 for h, j in pairs if h and not j)
     fp = sum(1 for h, j in pairs if not h and j)
     tn = sum(1 for h, j in pairs if not h and not j)
     return {"tp": tp, "fn": fn, "fp": fp, "tn": tn}
+
+
+def confusion_matrix(caught: int, n_fail: int, clean: int, n_pass: int) -> dict:
+    """A grader's confusion matrix in the docs' sense, failure as the positive (estimators.md,
+    terms): from runs a person failed (n_fail, of which the grader failed `caught`) and runs a
+    person passed (n_pass, of which the grader passed `clean`). A run with no verdict counts
+    against its column's rate, as in the rates, so it lands in FN or FP."""
+    return {"positive": "fail", "tp": caught, "fn": n_fail - caught, "fp": n_pass - clean, "tn": clean}
 
 
 def rates(cm: dict) -> dict:

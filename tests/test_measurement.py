@@ -239,6 +239,8 @@ def test_a_judge_over_max_inflation_is_refused(store):
     fm = next(m for m in r["measurement"]["failure_modes"] if m["id"] == "wrong-end-state")
     assert fm["floor"]["status"] == "refused" and fm["inflation_at_lower_bounds"] > 2.0
     assert fm["catch"] == pytest.approx(0.8) and fm["clean"] == pytest.approx(0.9)
+    # the counts behind them, failure as the positive (estimators.md, terms)
+    assert fm["confusion_matrix"] == {"positive": "fail", "tp": 8, "fn": 2, "fp": 10, "tn": 90}
     assert r["estimate"]["theta"] is None and "max_inflation" in r["estimate"]["null_reason"]
     # labels for a judge are queued from its eval's runs, by use case; judge apply reads it too
     assert store.cli("label", "queue", "--judge", "end-state-judge", "--n", "5") == 0
