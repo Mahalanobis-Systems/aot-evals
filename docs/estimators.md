@@ -91,6 +91,45 @@ comes from, the last column gives the standard name, so the sources can be read 
 | **coverage** | The list of situations the bug-finding set has to reach | test adequacy criterion |
 | **plan** | How many cases each use case and pool needs, worked out from the decision rule | sample-size calculation, optimum allocation |
 
+**The 2×2 table**
+
+Every error an eval can make is a cell of a 2×2 table: what a grader said, in the rows, against
+what the reference says, in the columns. A failure is the **positive**, because a failure is what a
+check looks for. When the reference is a person's label, the table is a **confusion matrix**. The
+refund judge of [§5](#5-part-3-the-measurement-model), on 1,000 runs:
+
+| | person fails | person passes | total |
+|---|---:|---:|---:|
+| **judge fails** | TP 24 | FP 97 | 121 |
+| **judge passes** | FN 6 | TN 873 | 879 |
+| **total** | 30 | 970 | 1,000 |
+
+Read **down a column** for the grader's error rates: it catches 24 of the 30 failures (catch rate
+0.80) and passes 873 of the 970 good runs (clean pass rate 0.90). These don't depend on how many
+runs fail. Read **across a row** for what a verdict is worth: of the 121 runs the judge fails, 24
+really failed (precision 0.20), so four of its five fails are good runs. That does depend on how
+many runs fail. The **diagonal** is raw agreement, 897 of 1,000, which says little when most runs
+pass. The same table holds two people's labels against each other
+([statistics §3.6](statistics.md#36-the-whole-eval-against-people)), a baseline's verdicts against
+a candidate's on the same cases ([statistics §4.3](statistics.md#43-compare-versions-case-by-case)), and a
+decision against the truth ([statistics §4.1](statistics.md#41-case-counts-come-from-power)).
+
+| Term | Meaning | Standard term |
+|---|---|---|
+| **2×2 table** | Counts of runs (or cases, or decisions) by two yes-or-no verdicts, one in the rows and one in the columns | contingency table |
+| **confusion matrix** | A 2×2 table of a grader's verdicts (rows) against people's labels (columns), the reference | confusion matrix, error matrix |
+| **positive** | A failure. **Negative**: a pass | positive, negative |
+| **TP** | A run the grader fails and a person fails | true positive |
+| **FP** | A run the grader fails and a person passes: a false alarm | false positive |
+| **FN** | A run the grader passes and a person fails: a miss | false negative |
+| **TN** | A run the grader passes and a person passes | true negative |
+| **failure rate** (p) | The share of runs a person fails: (TP + FN) ÷ all. 1 − p is the pass rate | prevalence |
+| **raw agreement** | (TP + TN) ÷ all. At a 95% pass rate, a grader that passes everything has 95% | accuracy, observed agreement |
+| **precision** | TP ÷ (TP + FP): of the runs the grader fails, the share a person fails. It falls as failures get rarer | positive predictive value (PPV) |
+| **negative predictive value** | TN ÷ (TN + FN): of the runs the grader passes, the share a person passes | negative predictive value (NPV) |
+| **false positive rate** | FP ÷ (FP + TN), or 1 − clean pass rate | false positive rate, fall-out |
+| **false negative rate** | FN ÷ (TP + FN), or 1 − catch rate | false negative rate, miss rate |
+
 **Part 3: the measurement model**
 
 | Term | Meaning | Standard term |
@@ -100,9 +139,13 @@ comes from, the last column gives the standard name, so the sources can be read 
 | **judge** | A check made of a model that reads the run | automated rater |
 | **grader** | Whatever produces a verdict: a check, a judge, or the eval as a whole | rater |
 | **label** | A person's verdict on a whole run. Graders are measured against labels | reference standard |
-| **catch rate** | Of the runs a person fails, the share the grader fails | sensitivity, with failure as the positive |
-| **clean pass rate** | Of the runs a person passes, the share the grader passes | specificity |
-| **J** | Catch rate + clean pass rate − 1. 1 is a perfect grader; 0 is a coin flip | Youden's J |
+| **catch rate** | TP ÷ (TP + FN): of the runs a person fails, the share the grader fails | sensitivity, recall, true positive rate |
+| **clean pass rate** | TN ÷ (TN + FP): of the runs a person passes, the share the grader passes | specificity, true negative rate |
+| **labels per kind** | A confusion matrix's column totals: runs a person failed (TP + FN), which measure the catch rate, and runs a person passed (FP + TN), which measure the clean pass rate | |
+| **J** | Catch rate + clean pass rate − 1, or catch rate − false positive rate. 1 is a perfect grader; 0 is a coin flip | Youden's J |
+| **agreement table** | A 2×2 table of two people's labels on the same runs. Neither is the reference, so it has agreement but no catch rate | inter-rater agreement table |
+| **agreement on fails**, **on passes** | 2 × both fail ÷ (2 × both fail + disagreements), and the same for passes | positive and negative specific agreement |
+| **κ**, **AC1** | Raw agreement corrected for the agreement chance alone would give. κ swings with the failure rate; AC1 is far more stable | Cohen's κ, Gwet's AC1 |
 | **correction** | Adjusting the observed failure rate for the grader's measured errors | Rogan–Gladen estimator, prediction-powered inference |
 | **inflation** | How many times more cases a grader's errors cost, compared with a grader that never errs. `max_inflation` caps it | variance inflation factor |
 | **trial** | One run of a case. Each case runs k times, because the agent doesn't answer the same way every time | replicate |
@@ -117,8 +160,12 @@ comes from, the last column gives the standard name, so the sources can be read 
 | **threshold test** | Shows a rate is on the right side of a fixed bar, such as policy errors below 5% | one-sample test against a fixed bound |
 | **bar** | The fixed value a threshold test compares with | |
 | **margin** (Δ) | The smallest change that matters to the decision. In a non-inferiority test, the largest drop still counted as "no worse" | minimal important difference, non-inferiority margin |
-| **α** | How often you accept acting on a change that isn't real, usually 5% | type I error rate |
-| **power** | How often you need to detect a real change of size Δ, usually 80% | power, 1 − β |
+| **decision table** | The 2×2 table of the decision (act or not, in the rows) against the truth (a real change of Δ or none, in the columns). α and power are read down its columns, as a grader's rates are | error table of a hypothesis test |
+| **α** | How often you accept acting on a change that isn't real, usually 5%: the decision's false positive rate | type I error rate |
+| **power** | How often you need to detect a real change of size Δ, usually 80%: the decision's catch rate | power, 1 − β |
+| **β** | 1 − power: how often a real change of Δ goes unseen. The decision's false negative rate | type II error rate |
+| **paired table** | The 2×2 table of the baseline's verdict (rows) against the candidate's (columns) on the same cases. Only the off-diagonal cells, the flips, carry evidence about the change | paired 2×2 table |
+| **flip** | A case that passed on one version and failed on the other: b from pass to fail (a loss), c from fail to pass (a gain). The **flip rate** is d = (b + c) ÷ N | discordant pair |
 | **look** | One time the results are checked against the rule. The number of looks is fixed in advance | interim analysis |
 | **gate** | A decision rule a change must pass: the headline, a use case's own rule, or another eval | |
 | **multiplicity correction** | Adjusting α when any one of several tests can trigger the action on its own. Gates that must all pass need none | familywise error control; intersection–union test |
@@ -301,18 +348,26 @@ They never enter θ̂, because nobody knows how often such requests occur.
 
 - **Checks**: one check per failure mode, each a yes-or-no question. Each is code (exact) or a judge
   (a model that reads the run).
-- **Error rates for every judge**: its **catch rate** (of the runs a person fails, the share it
-  fails) and its **clean pass rate** (of the runs a person passes, the share it passes), measured on
-  a set of runs that people labeled, with the size of that set and the date. These are a diagnostic
-  test's sensitivity and specificity, and the same two numbers measure the eval as a whole (rule 15).
+- **Error rates for every judge**: its confusion matrix against people's labels, with the date,
+  read down its columns as a **catch rate** and a **clean pass rate** ([terms](#terms)).
+  These are a diagnostic test's sensitivity and specificity, and the same table measures the eval
+  as a whole (rule 15).
 - **Trials**: how many times each case runs (k), because the agent doesn't give the same answer
   every time.
 - **Correction**: how the score is corrected for the judges' errors.
 
 **Example.** A judge checks whether a refund followed the policy. On 1,000 refund decisions, 30
-truly broke the policy. The judge catches 24 of the 30 (catch rate 0.80) and wrongly flags 97 of
-the 970 good ones (clean pass rate 0.90). It flags 121 runs, a 12.1% failure rate, when the true rate is
-3%. The correction undoes this. If the judge flags a share f_obs of runs, the true failure rate is (Rogan & Gladen 1978)
+truly broke the policy. Its confusion matrix is the one in the [terms](#terms):
+
+| | person fails | person passes | total |
+|---|---:|---:|---:|
+| **judge fails** | TP 24 | FP 97 | 121 |
+| **judge passes** | FN 6 | TN 873 | 879 |
+| **total** | 30 | 970 | 1,000 |
+
+The judge reports its row total: it fails 121 runs, a 12.1% failure rate, when the column total
+says 3%. The correction works back from the row to the column. If the judge fails a share f_obs of
+runs, the true failure rate is (Rogan & Gladen 1978)
 
 f = (f_obs + clean − 1) / (catch + clean − 1) = (0.121 + 0.90 − 1) / 0.70 = 0.03
 
@@ -322,7 +377,7 @@ correct the judge's rate and gives an interval that accounts for both (Angelopou
 **A grader's error costs you cases.** If a judge's catch rate and clean pass rate sum to 1 + J, a
 real change of Δ in the failure rate shows up as a change of only J × Δ in what the judge reports.
 Near a 50% failure rate, seeing it takes about 1/J² as many cases. For rare failures it takes far
-more, because the judge's false flags on good runs swamp the few real failures. At the refunds' 3%
+more, because the false positives swamp the true ones: in the table above, FP 97 against TP 24. At the refunds' 3%
 failure rate, the judge above needs about 7.5 times the cases a code check would, and a judge at
 0.75 on both needs about 27 times. That is how much a judge's errors cost, and it is how a floor on
 judge quality is set: decide how many extra cases you are willing to pay for at the failure rates
@@ -585,7 +640,8 @@ patterns in what they measure and how they score it that undermine the validity 
 **Grader error in power is old outside AI.** Misclassification shrinks a difference between
 proportions (Bross 1954) and costs a test efficiency (Rubin, Rosenbaum & Cobb 1956; Walsh 1963; Mote
 & Anderson 1965; Quade et al. 1980; Lagakos 1988); sample sizes that compensate for it are worked out
-by Tavaré, Sobel and Gilles (1995) and in closed form by Hársfalvi and Reiczigel (2024). The factor
+by Tavaré, Sobel and Gilles (1995) and in closed form by Hársfalvi and Reiczigel (2024). Reading a
+test's 2×2 table down its columns, as sensitivity and specificity, is Yerushalmy's (1947). The factor
 sensitivity + specificity − 1 is Youden's index (Youden 1950), and the corrected prevalence's
 variance scales with its inverse square (Rogan & Gladen 1978; Lang & Reiczigel 2014).
 
@@ -650,5 +706,6 @@ a changed judge, or a changed agent under the same judge, calls for fresh labels
 - Wallach, H. et al. (2025). Position: Evaluating generative AI systems is a social science measurement challenge. *ICML 2025*. arXiv:2502.00561
 - Walsh, J. E. (1963). Loss in test efficiency due to misclassification for 2 × 2 tables. *Biometrics* 19(1):158–162. doi:10.2307/2527579
 - Weidinger, L. et al. (2025). Toward an evaluation science for generative AI systems. arXiv:2503.05336
+- Yerushalmy, J. (1947). Statistical problems in assessing methods of medical diagnosis, with special reference to X-ray techniques. *Public Health Reports* 62(40):1432–1449.
 - Youden, W. J. (1950). Index for rating diagnostic tests. *Cancer* 3(1):32–35. doi:10.1002/1097-0142(1950)3:1<32::aid-cncr2820030106>3.0.co;2-3
 - Zhu, Y. et al. (2025). Establishing best practices for building rigorous agentic benchmarks. arXiv:2507.02825

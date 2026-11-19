@@ -6,6 +6,14 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+- **Confusion matrices.** The docs read every grader through its 2×2 table against people's
+  labels, with a failure as the positive (TP, FP, FN, TN): the catch rate and clean pass rate down
+  its columns, precision across its rows, raw agreement on its diagonal. The same table carries
+  agreement between people, the flips of a paired comparison and a decision's α and power, and
+  every term it uses is in the [estimators glossary](docs/estimators.md#terms). `report.json`'s
+  judge rows (`measurement.failure_modes[].confusion_matrix`) and `agreement.json`'s dev, holdout
+  and all splits gain the counts, `{positive: fail, tp, fp, fn, tn}`, and the report draws them.
+
 ## 2.0.0 — 2026-11-15
 
 Suites from earlier versions of aot-evals aren't read; `/aot-evals:start` offers to rebuild the evals from one.

@@ -92,6 +92,9 @@ def test_disagreements_are_listed_with_the_note_and_must_be_triaged(store_repo):
     assert d["human"] == "fail" and d["suite"] == "pass" and d["note"] == "changed the wrong order"
     assert d["use_case"] == "address"
     assert res["dev"]["catch"]["k"] == 1 and res["dev"]["catch"]["n"] == 2
+    cm = res["dev"]["confusion_matrix"]  # failure as the positive: tr_1204 is the eval's FN
+    assert cm["positive"] == "fail" and cm["tp"] == 1 and cm["fn"] == 1
+    assert cm["tn"] == res["dev"]["clean"]["k"] and cm["fp"] == res["dev"]["clean"]["n"] - cm["tn"]
     assert res["use_cases"]["address"]["dev"]["catch"]["n"] == 1
     assert res["labels_per_kind"] == {"fail": 2, "pass": 2} and res["evidence"]["status"] == "meets"
     # labels on one run per case, combined with the eval's verdict on the other trials

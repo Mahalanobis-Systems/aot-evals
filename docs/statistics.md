@@ -13,11 +13,20 @@ Each section follows the same shape: the decision you face, the statistics behin
 source, and when to deviate. Rules are cited by their number in [estimators.md §10](estimators.md#10-the-rules-in-one-table).
 Functions in the `aot_evals.stats` library are named as `stats.<function>`.
 
-Terms follow [estimators.md](estimators.md#terms). Two matter on almost every page: a grader's
-**catch rate** (of the runs a person fails, the share the grader fails: its sensitivity, with failure
-as the positive) and its **clean pass rate** (of the runs a person passes, the share the grader
-passes: its specificity). Their sum minus one, **J = catch + clean − 1**, is Youden's J. J = 1 is a
-perfect grader and J = 0 is a coin.
+Terms follow [estimators.md](estimators.md#terms). One picture matters on almost every page: the
+**2×2 table** of a grader's verdicts (rows) against people's labels (columns), with a failure as the
+positive. Its cells are TP, FP, FN and TN:
+
+| | person fails | person passes |
+|---|---:|---:|
+| **grader fails** | TP | FP |
+| **grader passes** | FN | TN |
+
+Read down the columns, it gives the grader's **catch rate**, TP ÷ (TP + FN) (its sensitivity), and
+its **clean pass rate**, TN ÷ (FP + TN) (its specificity). Their sum minus one, **J = catch + clean
+− 1**, is Youden's J. J = 1 is a perfect grader and J = 0 is a coin. The same table, with other
+verdicts in its rows and columns, carries the agreement between people (§3.6), the comparison of two
+versions (§4.3) and the errors of a decision (§4.1).
 
 ## Contents
 
@@ -388,13 +397,30 @@ doubling one that code already checks.
 
 **Decision.** How good is this judge, and what does its number mean?
 
-**Statistics.** Measure the catch rate and the clean pass rate separately, each with a Wilson
-interval, and never report raw agreement. Agreement mixes the two rates with the base rate: at a 95%
-pass rate a judge that always says "pass" agrees with people 95% of the time and catches nothing.
-Medicine settled this decades ago: report sensitivity and specificity, which don't depend on
-prevalence, and derive predictive values for a given prevalence.
+**Statistics.** Build the judge's confusion matrix against people's labels and read it three ways.
 
-**Correcting a rate for the judge's error.** If a judge fails a share f_obs of runs, the true
+- **Down the columns**: the catch rate and the clean pass rate, each with a Wilson interval on its
+  own column total. Each column holds runs of one kind, so neither rate depends on how many runs
+  fail. These describe the judge.
+- **Across the rows**: precision, TP ÷ (TP + FP), and the negative predictive value, TN ÷ (TN +
+  FN). Each row mixes runs of both kinds, so both move with the failure rate. These describe what
+  one verdict is worth on this traffic.
+- **Along the diagonal**: raw agreement, (TP + TN) ÷ all. Never report it alone. It mixes the
+  columns in proportion to the failure rate: on 200 runs with 10 failures, a judge that always
+  says "pass" has the table TP 0, FP 0, FN 10, TN 190, agrees with people 95% of the time and
+  catches nothing.
+
+Medicine settled this decades ago: report sensitivity and specificity (Yerushalmy 1947), which
+don't depend on prevalence, and derive predictive values for a given prevalence. The rows matter
+to whoever acts on a verdict. The refund judge of [estimators §5](estimators.md#5-part-3-the-measurement-model)
+(catch 0.80, clean 0.90) on refunds failing 3% of the time has precision 0.20: four of its five
+fails are good runs. A queue of runs to review that holds only the judge's fails is mostly good
+runs, and it never holds the misses, so labels drawn from it can't measure the columns (§3.6,
+verification bias).
+
+**Correcting a rate for the judge's error.** The judge reports its first row's share, (TP + FP) ÷
+all; the failure rate is the first column's, (TP + FN) ÷ all. Knowing the column rates, the
+correction works back from the one to the other. If a judge fails a share f_obs of runs, the true
 failure rate is
 
   f = (f_obs + clean − 1) / (catch + clean − 1) = (f_obs + clean − 1) / J
@@ -410,8 +436,9 @@ in the runs (delta method). Two things follow:
 When some runs also carry a person's label, prediction-powered inference does the correction with a
 valid interval (§3.6).
 
-**Choosing a probabilistic judge's threshold.** Maximizing catch + clean (Youden's J) treats a missed
-failure and a false alarm as equally costly and ignores the base rate. Decision theory puts the
+**Choosing a probabilistic judge's threshold.** Moving the threshold moves runs between the cells of
+each column: a stricter judge turns FNs into TPs and TNs into FPs. Maximizing catch + clean
+(Youden's J) treats an FN and an FP as equally costly and ignores the base rate. Decision theory puts the
 optimal threshold where the ROC slope equals (cost of a false fail ÷ cost of a false pass) ×
 ((1 − p) ÷ p), with p the failure rate and a failure as the positive. The costs come from the estimand's weights (§1.1). Choose
 the threshold on one part of the labels and score it on another (out of fold), or the rates will be
@@ -429,8 +456,17 @@ differ between them, can reverse a comparison with apparent confidence (Fiedler 
 
 **Decision.** How good does a judge need to be?
 
-**Statistics.** If the true failure rate is p, a grader fails a run with probability
-q = catch·p + (1 − clean)(1 − p) = (1 − clean) + J·p. Its slope in p is J, so a real change of Δ in
+**Statistics.** If the true failure rate is p, the grader's confusion matrix, as shares of all
+runs, is
+
+| | person fails | person passes | total |
+|---|---:|---:|---:|
+| **grader fails** | TP = catch·p | FP = (1 − clean)(1 − p) | q |
+| **grader passes** | FN = (1 − catch)·p | TN = clean·(1 − p) | 1 − q |
+| **total** | p | 1 − p | 1 |
+
+so it fails a run with probability q = catch·p + (1 − clean)(1 − p) = (1 − clean) + J·p, its first
+row. Its slope in p is J, so a real change of Δ in
 the failure rate shows up as a change of only J·Δ in what the grader reports (Bross 1954, for a
 difference between two proportions; Fiedler 2026, for LLM judges). Spearman (1904) saw the analogous
 attenuation in correlations measured with error. Correcting the reported rate (§3.2) divides by J,
@@ -440,8 +476,9 @@ and the variance by J², so the cases needed to see the same change grow by the 
 
 (an early sample-size treatment is Rubin, Rosenbaum & Cobb 1956; a modern closed form for one- and
 two-sample tests is Hársfalvi & Reiczigel 2024). Near p = 50% the factor is about 1/J². For rare
-failures it is much larger, because the grader's false flags on good runs swamp the few real
-failures:
+failures it is much larger, because the FP cell, which grows with 1 − p, swamps the TP cell, which
+shrinks with p: at catch 0.80, clean 0.90 and p = 3%, FP is 0.097 of runs and TP 0.024. The
+factor, by grader and failure rate:
 
 | Catch, clean | J | p = 50% | p = 20% | p = 10% | p = 3% |
 |---|---:|---:|---:|---:|---:|
@@ -477,15 +514,16 @@ more labels, not more cases, and is scaled by the same 1/J² (Fiedler 2026; §3.
 
 **Decision.** How many labels does a judge need, and of which kind?
 
-**Statistics.** The count is **per kind**. The catch rate is measured only on runs a person failed,
-and the clean pass rate only on runs a person passed. Each is its own proportion with its own n. At
+**Statistics.** The count is **per kind**: per column of the confusion matrix. The catch rate is
+measured only on runs a person failed (TP + FN), and the clean pass rate only on runs a person
+passed (FP + TN). Each is its own proportion with its own n, the column's total. At
 a rate of 0.8, a Wilson interval of ±10 points needs about **60 labels of that kind**, and ±5 points
-needs about 245. Sixty labels in total, split 58/2, measure the catch rate on two runs: "caught 2 of
-2" has an interval from 34% to 100%.
+needs about 245. Sixty labels in total, split 58/2, leave the first column with two runs: "caught 2
+of 2" has an interval from 34% to 100%.
 
 **Which kind to label more of.** Calibrating a judge needs both rates, so a balanced split is right
-for calibration. *Using* a judge to estimate a low failure rate is different: its false alarms on
-passing runs drive the error, not its misses. Take a true failure rate of 5%, a judge that catches
+for calibration. *Using* a judge to estimate a low failure rate is different: its FPs drive the
+error, not its FNs, so the second column needs the tighter rate. Take a true failure rate of 5%, a judge that catches
 80% of failures and passes 95% of good runs, and 10,000 graded runs. The 95% interval on the
 corrected failure rate is:
 
@@ -540,16 +578,18 @@ Five judge checks at 0.9 pass a good run only 59% of the time. Code checks are n
 falls almost entirely on judges.
 
 The product assumes the judges err independently. Judges that share a model family, a rubric or a
-prompt template don't (§2.4), so the product is a poor predictor in both directions: correlated false
-fails land on the same runs, and correlated misses let the same bad runs through every check. And no
+prompt template don't (§2.4), so the product is a poor predictor in both directions: correlated FPs
+land on the same runs, and correlated FNs let the same bad runs through every check. And no
 per-check number sees a failure no check looks for. So the eval as a whole is held to people
 (rule 15): people label whole runs without seeing the checks, the eval grades the same runs, and
-the eval's own **catch rate** and **clean pass rate** come from comparing the two. These are the
-measurement model of the eval: the numbers its corrections and its power calculations use.
+the eval gets a confusion matrix of its own, with the eval's verdict in the rows. Its columns give
+the eval's own **catch rate** and **clean pass rate**. These are the measurement model of the eval:
+the numbers its corrections and its power calculations use.
 
-Everything in §3.2–3.4 carries over: count per kind, report both rates with intervals, and fix the
-number of labels before looking (§4.7). Give every disagreement a cause (a check bug, a wrong
-expected answer, a gap in the standard, a missing check) and fix that.
+Everything in §3.2–3.4 carries over: count per column, report both rates with intervals, and fix
+the number of labels before looking (§4.7). The off-diagonal cells are the work list: give every FP
+and FN a cause (a check bug, a wrong expected answer, a gap in the standard, a missing check) and
+fix that. A missing check shows up only as FNs.
 
 **What would a person say the pass rate is?** The eval grades every run but is wrong sometimes;
 people grade a few runs and are the reference. **Prediction-powered inference** combines the two
@@ -566,12 +606,22 @@ meaningfully worse than the labels alone. Stratified PPI does the same per use c
 from hand-picking.
 
 **Agreement between people.** People are the reference, so their own agreement is measured: some
-share of runs is labeled by two people. Cohen's κ (Cohen 1960) depends on the base rate: when most runs pass, two
-people can agree on 90% of runs and get κ below zero, because chance agreement is already high
-(Feinstein & Cicchetti 1990). **Gwet's AC1** corrects for chance in a way that is far more stable at a skewed base rate (Gwet 2008), and the two **specific agreements**, on fails and on passes (Cicchetti
-& Feinstein 1990), show where the disagreement is. At 90 agreements of 100 (90 runs both pass, 5 and 5 split, none both fail), two people can have
-κ = −0.05 and AC1 = 0.89 while agreeing on 95% of passes and **none of the failures**, and the
-failures are the part that matters. Report all three; read κ only when the pass rate is near 50%.
+share of runs is labeled by two people, and their labels fill an **agreement table**. It has the
+shape of a confusion matrix, but neither labeler is the reference, so it has no catch rate, only
+agreement. Two people who agree on 90 of 100 runs can have this one:
+
+| | B fails | B passes |
+|---|---:|---:|
+| **A fails** | 0 | 5 |
+| **A passes** | 5 | 90 |
+
+Raw agreement, the diagonal, is 90%. Cohen's κ (Cohen 1960) corrects it for chance but depends on
+the base rate: when most runs pass, chance agreement is already high, and κ here is −0.05
+(Feinstein & Cicchetti 1990). **Gwet's AC1** corrects for chance in a way that is far more stable
+at a skewed base rate (Gwet 2008), and gives 0.89. The two **specific agreements**, on fails and on
+passes (Cicchetti & Feinstein 1990), show where the disagreement is: 2 × 90 ÷ (2 × 90 + 10) = 95% on
+passes, and 2 × 0 ÷ (2 × 0 + 10) = **0% on failures**, the empty top-left cell. The failures are the
+part that matters. Report all three; read κ only when the pass rate is near 50%.
 About 60 doubly labeled runs give agreement to within ±13 points at worst, and ±8 near 90%
 agreement.
 
@@ -658,9 +708,19 @@ until a person has read them (rule 17).
 
 **Decision.** How many cases does each gated estimand need?
 
-**Statistics.** The count solves "power at least 1 − β to detect a change of Δ at level α" for the
-decision rule's test (rule 7; Neyman & Pearson 1933), and then multiplies by the grader's inflation
-factor (§3.3). Three tests
+**Statistics.** A decision rule is a grader too: it grades the change, and the truth is the
+reference. Its 2×2 table is the **decision table** (Neyman & Pearson 1933):
+
+| | a real change of Δ | no real change |
+|---|---:|---:|
+| **act** | power, 1 − β | α (false positive, type I error) |
+| **don't act** | β (false negative, type II error) | 1 − α |
+
+Read down its columns, as a grader's table is: power is the decision's catch rate at Δ, and 1 − α
+its clean pass rate. α is fixed by the rule; the cases buy power. The count solves "power at least
+1 − β to detect a change of Δ at level α" for the decision rule's test (rule 7), and then multiplies
+by the grader's inflation factor (§3.3), because the grader's FPs and FNs blur the change the
+decision has to see. Three tests
 cover most decisions, and they need different arithmetic, so one flat number per use case can't serve
 them all.
 
@@ -681,9 +741,9 @@ Read backwards, this is the **zero-failure bound**: if all n cases pass, the fai
 still be as high as 1 − 0.05^(1/n), about 3/n (the "rule of three", Hanley & Lippman-Hand 1983). A
 clean run on 10 cases cannot rule out a failure that hits one run in five. Detection applies **per
 failure mode**: a use case at 70% is usually several failure modes at a few percent each, not one at
-30%, and each needs enough cases to be seen. Over clusters, count clusters (§2.4). The zero-failure arithmetic assumes a grader that never
-flags a good run: a code check, or a person. A judge with a clean pass rate below 1 flags good runs,
-so a clean run never comes, and the threshold test of §3.3 applies instead.
+30%, and each needs enough cases to be seen. Over clusters, count clusters (§2.4). The zero-failure arithmetic assumes a grader whose FP cell
+is empty: a code check, or a person. A judge with a clean pass rate below 1 has FPs, so a clean run
+never comes, and the threshold test of §3.3 applies instead.
 
 **Threshold, on weighted cases: the exact bound.** θ̂ is a weighted mean, so the count above is
 an effective one. A threshold rule on a rate tests the one-sided Clopper–Pearson bound (Clopper &
@@ -766,8 +826,17 @@ removes between-case variance: a hard case is hard on both sides. At 50 cases, a
 at a 50% pass rate detects about 28 points. A paired one detects about 7 points when the change
 shifts every case alike, and about 15 points when it affects cases unevenly (a 15% discordance rate).
 
-**The flips are all the evidence.** When A and B run on the same N cases, only the flips carry
-information: b cases went from pass to fail, c from fail to pass. The net change is Δ = (c − b)/N,
+**The flips are all the evidence.** When A and B run on the same N cases, each case lands in one
+cell of the **paired table** (McNemar 1947):
+
+| | B passes | B fails |
+|---|---:|---:|
+| **A passes** | both pass | b: losses |
+| **A fails** | c: gains | both fail |
+
+The diagonal is the same on both sides, so only the off-diagonal cells, the flips, carry
+information: b cases went from pass to fail, c from fail to pass. Neither version is the reference,
+so this table has flips, not errors. The net change is Δ = (c − b)/N,
 the **flip rate** is d = (b + c)/N, and the standard error of Δ is √((d − Δ²)/N). The same +5 points
 at N = 200 can be a clear win or noise:
 
@@ -839,8 +908,9 @@ action (rule 22).
   at α keeps that chance at α or below. This is the intersection–union test (Berger 1982). No
   correction is needed; the cost is power, since the change needs enough cases to pass every gate.
 - **Any one acts.** A regression flagged in any use case blocks a change, or an improvement in any
-  use case is claimed. Each test at α = 0.05 is a 1-in-20 chance of a false alarm, and ten tests with
-  no real change flag at least one about 40% of the time (1 − 0.95¹⁰). Holm controls the chance of
+  use case is claimed. Each test at α = 0.05 is a 1-in-20 chance of a false positive, and ten tests with
+  no real change flag at least one about 40% of the time (1 − 0.95¹⁰): the action's decision table
+  has α = 0.40, not 0.05. Holm controls the chance of
   any false alarm (Holm 1979; `stats.holm`), which fits a decision. Benjamini–Hochberg controls the share of false
   discoveries among the tests that fire, when the p-values are independent or positively dependent
   (Benjamini & Hochberg 1995; `stats.benjamini_hochberg`), which fits a list of findings to follow up rather than one action.
@@ -966,6 +1036,7 @@ articles the check used the abstract; for books, standard bibliographic records.
 - Rubin, T., Rosenbaum, J. & Cobb, S. (1956). The use of interview data for the detection of associations in field studies. *Journal of Chronic Diseases* 4(3):253–266. doi:10.1016/0021-9681(56)90028-5
 - Shi, L., Ma, C., Liang, W., Diao, X., Ma, W. & Vosoughi, S. (2025). Judging the judges: A systematic study of position bias in LLM-as-a-judge. *AACL-IJCNLP 2025*. doi:10.18653/v1/2025.ijcnlp-long.18. arXiv:2406.07791
 - Wang, P., Li, L., Chen, L. et al. (2024). Large language models are not fair evaluators. *ACL 2024*. doi:10.18653/v1/2024.acl-long.511. arXiv:2305.17926
+- Yerushalmy, J. (1947). Statistical problems in assessing methods of medical diagnosis, with special reference to X-ray techniques. *Public Health Reports* 62(40):1432–1449. https://www.jstor.org/stable/4586294
 - Zheng, L., Chiang, W.-L., Sheng, Y. et al. (2023). Judging LLM-as-a-judge with MT-Bench and Chatbot Arena. *NeurIPS 2023 Datasets and Benchmarks*. arXiv:2306.05685
 
 **Combining judges with human labels.**

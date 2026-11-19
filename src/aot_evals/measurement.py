@@ -378,6 +378,7 @@ def section(s, weights: dict | None, refused: str | None, floor_at: dict | None 
                        floor={"status": "pass", "reason": "a code check has no error to correct (rule 14)"},
                        corrected_rate=obs)
         elif ctype == "judge":
+            from .calibrate import confusion_matrix
             cal = judge_calibration(ev, cid, alpha)
             own = floor_rate(obs, cal)
             fr = (floor_at or {}).get(fm["id"]) if floor_at is not None else own
@@ -389,6 +390,9 @@ def section(s, weights: dict | None, refused: str | None, floor_at: dict | None 
             row.update(catch=cal["catch"], catch_ci=cal["catch_ci"], catch_lower=cal["catch_lower"],
                        clean=cal["clean"], clean_ci=cal["clean_ci"], clean_lower=cal["clean_lower"],
                        j=cal["j"], labels=cal["labels"], calibration=cal["status"],
+                       confusion_matrix=(confusion_matrix(cal["counts"]["catch_k"], cal["counts"]["catch_n"],
+                                                          cal["counts"]["clean_k"], cal["counts"]["clean_n"])
+                                         if cal["counts"] else None),
                        inflation=fl["inflation"], inflation_at_lower_bounds=fl["inflation_at_lower_bounds"],
                        floor=fl)
             if obs is not None and cal["counts"] and cal["status"] == "calibrated":
