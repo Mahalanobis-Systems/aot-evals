@@ -1036,7 +1036,7 @@ articles the check used the abstract; for books, standard bibliographic records.
 - Rubin, T., Rosenbaum, J. & Cobb, S. (1956). The use of interview data for the detection of associations in field studies. *Journal of Chronic Diseases* 4(3):253–266. doi:10.1016/0021-9681(56)90028-5
 - Shi, L., Ma, C., Liang, W., Diao, X., Ma, W. & Vosoughi, S. (2025). Judging the judges: A systematic study of position bias in LLM-as-a-judge. *AACL-IJCNLP 2025*. doi:10.18653/v1/2025.ijcnlp-long.18. arXiv:2406.07791
 - Wang, P., Li, L., Chen, L. et al. (2024). Large language models are not fair evaluators. *ACL 2024*. doi:10.18653/v1/2024.acl-long.511. arXiv:2305.17926
-- Yerushalmy, J. (1947). Statistical problems in assessing methods of medical diagnosis, with special reference to X-ray techniques. *Public Health Reports* 62(40):1432–1449.
+- Yerushalmy, J. (1947). Statistical problems in assessing methods of medical diagnosis, with special reference to X-ray techniques. *Public Health Reports* 62(40):1432–1449. https://www.jstor.org/stable/4586294
 - Zheng, L., Chiang, W.-L., Sheng, Y. et al. (2023). Judging LLM-as-a-judge with MT-Bench and Chatbot Arena. *NeurIPS 2023 Datasets and Benchmarks*. arXiv:2306.05685
 
 **Combining judges with human labels.**
