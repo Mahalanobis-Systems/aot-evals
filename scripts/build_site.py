@@ -450,7 +450,8 @@ PREVIEW = """<!doctype html>
 body {{ margin: 0; background: #F9FAF9; color: #3F4541; font: 16px/1.5 "Roboto", system-ui, sans-serif; }}
 main {{ max-width: 1200px; margin: 0 auto; padding: 32px 16px 64px; }}
 h1 {{ margin: 4px 0 12px; font: 700 34px/1.15 "Montserrat", system-ui, sans-serif; color: #225734; }}
-.eyebrow {{ margin: 0; font: 700 12px/1.3 "Montserrat", system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: #6f9a2a; }}
+.eyebrow {{ margin: 0; font: 700 12px/1.3 "Montserrat", system-ui, sans-serif; letter-spacing: 0.08em;
+           text-transform: uppercase; color: #6f9a2a; }}
 .lead {{ max-width: 52em; font-size: 18px; }}
 a {{ color: #225734; }}
 {css}

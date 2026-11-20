@@ -24,11 +24,14 @@ def config(slug: str) -> dict | None:
 
 def store() -> dict[str, dict]:
     """problems.md's store: requests a day from its table, what one mistake costs from problem 1."""
-    rows = re.findall(r"^\| (Where's my order\?|Start a return|Change my address|Refund me) \| (\d[\d,]*) \|", PROBLEMS, re.M)
+    kinds = r"Where's my order\?|Start a return|Change my address|Refund me"
+    rows = re.findall(rf"^\| ({kinds}) \| (\d[\d,]*) \|", PROBLEMS, re.M)
     prose = " ".join(PROBLEMS.split())
-    costs = re.search(r"\(\$(\d+) for a wrong order status, \$(\d+) for a botched return, \$(\d+) for a wrong address, \$(\d+) for a bad refund\)", prose)
+    costs = re.search(r"\(\$(\d+) for a wrong order status, \$(\d+) for a botched return, "
+                      r"\$(\d+) for a wrong address, \$(\d+) for a bad refund\)", prose)
     assert len(rows) == 4 and costs, "problems.md: the store's table or problem 1's costs moved"
-    return {label: {"n": int(n.replace(",", "")), "cost": int(c)} for (label, n), c in zip(rows, costs.groups())}
+    return {label: {"n": int(n.replace(",", "")), "cost": int(c)}
+            for (label, n), c in zip(rows, costs.groups(), strict=True)}
 
 
 def test_every_problem_has_one_widget_and_its_files():
@@ -43,7 +46,8 @@ def test_each_problem_links_to_its_widget_page():
     for w in MANIFEST["widgets"]:
         heading = re.search(rf"^### {w['problem']}\. .*$", PROBLEMS, re.M)
         rest = PROBLEMS[heading.end():]
-        section = rest[: re.search(r"^(### |## )", rest, re.M).start()] if re.search(r"^(### |## )", rest, re.M) else rest
+        nxt = re.search(r"^(### |## )", rest, re.M)
+        section = rest[: nxt.start()] if nxt else rest
         assert f"]({MANIFEST['site']}{w['slug']}/)" in section, f"problem {w['problem']} doesn't link to {w['slug']}"
 
 
