@@ -1,7 +1,7 @@
 {
   "name": "aot-evals",
   "displayName": "AOT Evals",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Part of AOT, the Agent Optimization Toolkit, a Mahal Systems offering. Build and iterate the evals for a production agent, each written down as an estimator with four parts (the estimand, the sampling design, the measurement model and the decision rule). Three roles work on them at the same time: the owner says what the agent is for, which mistakes cost most and what a change must show; engineering wires the agent up, draws a quality set from real traffic, puts a check on each failure mode and runs baselines and changes; and the people who know what good looks like label runs in a local grader application, where the evals are held to them. A stdlib CLI records every attempt, and a fixed report.json schema renders into a local HTML diagnostic.",
   "author": {
     "name": "Mahal Systems",
