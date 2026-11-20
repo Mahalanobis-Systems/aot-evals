@@ -1,0 +1,107 @@
+<!-- Problem 5, "Count the evidence, not the cases" (docs/problems.md). n templates each fan out into k
+     test cases, k × n in all. A template's cases share its inputs, so they pass or fail together: the
+     evidence is n templates, not k × n cases.
+
+     The change in the pass rate is measured on whole templates (a template's cases move together). Its
+     95% interval, comparing the two scores:
+       counting k × n cases:   Δ ± 1.96 · √( (p(1−p) + p′(1−p′)) / (k·n) )     (as if independent)
+       counting n templates:   Δ ± 1.96 · √( (p(1−p) + p′(1−p′)) / n )         (a template's copies agree)
+     In general the effective count is k·n / (1 + (k − 1)ρ), ρ the correlation within a template (the
+     design effect); the two are its ends, ρ = 0 and ρ = 1. -->
+<div class="mc cl" data-clusters>
+  <div class="mc__compare">
+    <p class="fr__q">Your eval says <b data-out="claim"></b> on <span data-out="cases"></span> test cases. How sure can you be?</p>
+    <svg class="fr__ci" data-ci role="img" aria-label="95% intervals on the change, counting cases and counting templates"></svg>
+    <div class="fr__rows">
+      <p class="fr__row fr__row--without"><span class="fr__tag">Counting k × n cases</span><span data-out="naive"></span></p>
+      <p class="fr__row fr__row--with"><span class="fr__tag">Counting n templates</span><span data-out="honest"></span></p>
+    </div>
+  </div>
+
+  <div class="fr__controls">
+    <label class="fr__primary"><span>Change in pass rate <b data-out="delta"></b></span><input type="range" name="delta" min="0" max="30" step="1" value="10"></label>
+    <label><span>Templates (n) <b data-out="n"></b></span><input type="range" name="n" min="10" max="60" step="10" value="40"></label>
+    <label><span>Test cases per template (k) <b data-out="k"></b></span><input type="range" name="k" min="1" max="20" step="1" value="10"></label>
+    <label><span>Pass rate before the change <b data-out="p"></b></span><input type="range" name="p" min="40" max="95" step="1" value="70"></label>
+  </div>
+
+  <figure class="fr__grid mc__grid" aria-label="Each template fanning out into its test cases">
+    <figcaption class="fr__legend">
+      <b>n templates → k × n test cases</b>
+      <span><i class="st__k st__k--pass"></i>passes</span><span><i class="st__k st__k--fail"></i>fails</span><span><i class="st__k cl__k--gain"></i>fixed by the change</span>
+    </figcaption>
+    <svg class="cl__fan" data-fan role="img"></svg>
+    <p class="cl__note" data-out="note"></p>
+    <p class="cl__assume">We're making the simplifying assumption that a template's test cases fail in a completely dependent manner: when one fails, they all do.</p>
+  </figure>
+</div>
+<script>
+(() => {
+  const pts = (x) => `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(1)}`;
+  const Z = 1.96;
+
+  for (const root of document.querySelectorAll("[data-clusters]")) {
+    const input = (name) => root.querySelector(`input[name="${name}"]`);
+    const out = (name) => root.querySelector(`[data-out="${name}"]`);
+    const ci = root.querySelector("[data-ci]");
+    const fan = root.querySelector("[data-fan]");
+
+    const draw = () => {
+      const n = +input("n").value, k = +input("k").value, p = +input("p").value / 100, d = +input("delta").value / 100;
+      const before = Math.round(n * p), after = Math.min(n, Math.round(n * Math.min(1, p + d)));
+      const p0 = before / n, p1 = after / n, dlt = p1 - p0, v = p0 * (1 - p0) + p1 * (1 - p1);
+      const hN = Z * Math.sqrt(v / (k * n)), hT = Z * Math.sqrt(v / n);
+      const verdict = (h) => (dlt - h > 0 ? `<span class="mc__sig is-sig">a real gain</span>` : `<span class="mc__sig">could be noise</span>`);
+
+      out("delta").textContent = `${pts(dlt)} points`; out("n").textContent = String(n); out("k").textContent = String(k); out("p").textContent = `${Math.round(p * 100)}%`;
+      out("claim").textContent = `${pts(dlt)} points`; out("cases").textContent = String(k * n);
+      out("naive").innerHTML = `As if all ${k * n} were independent: <b>${pts(dlt)} ± ${(hN * 100).toFixed(1)} points</b> ${verdict(hN)}`;
+      out("honest").innerHTML = `A template's cases pass or fail together, so ${n} pieces of evidence: <b>${pts(dlt)} ± ${(hT * 100).toFixed(1)} points</b> ${verdict(hT)}`;
+      out("note").textContent = after > before
+        ? `${after - before} template${after - before === 1 ? "" : "s"} improved, and with ${k} cases each that's ${(after - before) * k} case${(after - before) * k === 1 ? "" : "s"} that moved together.`
+        : "No template moved.";
+
+      // The two intervals, on one axis around zero.
+      const W = ci.clientWidth || 600, L = 28, range = Math.max(0.1, Math.ceil((Math.abs(dlt) + hT) * 20) / 20);
+      const X = (x) => L + ((x + range) / (2 * range)) * (W - 2 * L);
+      const bar = (y, h, cls) => `<rect class="${cls} band" x="${X(dlt - h)}" y="${y - 9}" width="${Math.max(2, X(dlt + h) - X(dlt - h))}" height="18" rx="9"/><line class="${cls}" x1="${X(dlt - h)}" x2="${X(dlt + h)}" y1="${y}" y2="${y}"/><circle class="${cls}" cx="${X(dlt)}" cy="${y}" r="5"/>`;
+      let ticks = "";
+      const step = range > 0.3 ? 0.2 : range > 0.15 ? 0.1 : 0.05;
+      for (let t = -Math.floor(range / step) * step; t <= range + 1e-9; t += step) ticks += `<text class="lab" x="${X(t)}" y="96" text-anchor="middle">${Math.abs(t) < 1e-9 ? "0" : pts(t)}</text>`;
+      ci.setAttribute("viewBox", `0 0 ${W} 104`); ci.setAttribute("height", "104");
+      ci.innerHTML = `<line class="axis" x1="${L}" x2="${W - L}" y1="78" y2="78"/><line class="zero" x1="${X(0)}" x2="${X(0)}" y1="6" y2="80"/>${ticks}` + bar(24, hN, "without") + bar(56, hT, "with");
+
+      // The fan-out: a template dot over its k case dots, joined. Templates wrap into rows.
+      const FW = fan.clientWidth || 700, dot = 7, gap = 3, kc = Math.min(k, 5), kr = Math.ceil(k / kc);
+      const cw = kc * (dot + gap), colW = Math.max(cw + 10, 30), fit = Math.max(1, Math.floor(FW / colW));
+      let per = fit;
+      for (let q = fit; q >= Math.ceil(fit * 0.7); q--) if (n % q === 0) { per = q; break; }   // full rows when a divisor is close
+      const rows = Math.ceil(n / per);
+      const rowH = 26 + kr * (dot + gap) + 18;
+      let g = "";
+      for (let t = 0; t < n; t++) {
+        const r = Math.floor(t / per), c = t % per, cx = (FW - per * colW) / 2 + c * colW + colW / 2, ty = r * rowH + 8;
+        const cls = t < before ? "p" : t < after ? "g" : "f";
+        const by = ty + 22;
+        for (let j = 0; j < k; j++) {
+          const jx = cx - cw / 2 + (j % kc) * (dot + gap) + dot / 2, jy = by + Math.floor(j / kc) * (dot + gap) + dot / 2;
+          g += `<line class="cl__edge" x1="${cx}" y1="${ty + 5}" x2="${jx}" y2="${jy}"/>`;
+        }
+        g += `<circle class="cl__t ${cls}" cx="${cx}" cy="${ty}" r="5.5"/>`;
+        for (let j = 0; j < k; j++) {
+          const jx = cx - cw / 2 + (j % kc) * (dot + gap) + dot / 2, jy = by + Math.floor(j / kc) * (dot + gap) + dot / 2;
+          g += `<circle class="cl__c ${cls}" cx="${jx}" cy="${jy}" r="${dot / 2}"/>`;
+        }
+      }
+      const FH = rows * rowH;
+      fan.setAttribute("viewBox", `0 0 ${FW} ${FH}`); fan.setAttribute("height", String(FH));
+      fan.innerHTML = g;
+    };
+
+    root.querySelectorAll("input").forEach((el) => el.addEventListener("input", draw));
+    let lastW = 0;
+    new ResizeObserver(() => { if (root.clientWidth !== lastW) { lastW = root.clientWidth; draw(); } }).observe(root);
+    draw();
+  }
+})();
+</script>

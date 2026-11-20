@@ -1,0 +1,104 @@
+<!-- Problem 7, "Hold the whole eval to a person" (docs/problems.md). The eval is held to people's labels,
+     so how far people agree matters. g graders each label the same 100 runs pass or fail. Each grader
+     matches the true verdict with probability a, independently. They disagree, most of all on failures,
+     and that sets the ceiling on what any agent or judge can be shown to do against them.
+
+       all g agree on a run:             a^g + (1 − a)^g
+       two graders agree, overall:       a² + (1 − a)²
+       two graders agree on a failure:   2·P(both fail) / (P(A fails) + P(B fails))   (specific agreement)
+           P(fails) = f·a + (1 − f)(1 − a),   P(both fail) = f·a² + (1 − f)(1 − a)²,  f = share truly failing
+       ceiling against one grader:       a  (a perfect agent still "misses" every grader mistake)
+       ceiling against the majority:     P(more than half right), ties split
+     The grid is one simulated draw (a fixed random seed, so it moves smoothly with the sliders); the
+     numbers on top are the expected values. -->
+<div class="mc nf" data-noise>
+  <div class="mc__compare">
+    <p class="fr__q"><span data-out="g"></span> graders, each right <span data-out="aT"></span> of the time. How much do they agree, and on what?</p>
+    <div class="nf__tiles">
+      <div><b data-out="failAgree"></b><span>agreement between two graders on failures<br><small>(<span data-out="pairAgree"></span> on all runs)</small></span></div>
+      <div><b data-out="allAgree"></b><span>of runs where all <span data-out="g2"></span> graders agree</span></div>
+      <div><b data-out="ceil1"></b><span>the most a perfect agent can score against one grader</span></div>
+      <div><b data-out="ceilMaj"></b><span>against the majority of <span data-out="g3"></span> graders</span></div>
+    </div>
+    <p class="nf__foot" data-out="foot"></p>
+  </div>
+
+  <div class="fr__controls">
+    <label class="fr__primary"><span>How often each grader is right <b data-out="a"></b></span><input type="range" name="a" min="60" max="100" step="1" value="95">
+      <small>The share of runs each grader labels the way the standard says</small></label>
+    <label><span>Number of graders <b data-out="gN"></b></span><input type="range" name="g" min="2" max="8" step="1" value="4"></label>
+    <details class="fr__suite">
+      <summary>Runs <span data-out="suite"></span></summary>
+      <label><span>Truly failing <b data-out="f"></b></span><input type="range" name="f" min="5" max="50" step="1" value="20"></label>
+    </details>
+  </div>
+
+  <figure class="fr__grid mc__grid" aria-label="Each grader's verdict on each of 100 runs">
+    <figcaption class="fr__legend">
+      <b>100 runs, one row per grader</b>
+      <span><i class="k k--pass"></i>pass</span><span><i class="k k--fail"></i>fail</span><span><i class="nf__k"></i>against the other graders</span>
+    </figcaption>
+    <div class="nf__bands" data-bands></div>
+    <p class="nf__note" data-out="note"></p>
+  </figure>
+</div>
+<script>
+(() => {
+  const pct = (x) => `${(x * 100).toFixed(1)}%`;
+  const N = 100, PER = 25;
+
+  // A fixed stream of uniform draws: one per run for its truth, one per grader per run.
+  let s = 2654435761;
+  const U = Array.from({ length: N * 9 }, () => ((s = (s * 1103515245 + 12345) >>> 0) / 4294967296));
+
+  for (const root of document.querySelectorAll("[data-noise]")) {
+    const input = (name) => root.querySelector(`input[name="${name}"]`);
+    const out = (name) => root.querySelector(`[data-out="${name}"]`);
+    const bands = root.querySelector("[data-bands]");
+
+    const draw = () => {
+      const a = +input("a").value / 100, g = +input("g").value, f = +input("f").value / 100;
+      const truth = Array.from({ length: N }, (_, i) => U[i] >= f);                    // true: a good run
+      const says = Array.from({ length: g }, (_, j) => truth.map((t, i) => (U[N * (j + 1) + i] < a ? t : !t)));
+      const split = truth.map((_, i) => says.some((r) => r[i] !== says[0][i]));
+      // Which verdicts dissent: those against the majority; on a tie, every verdict in the column.
+      const odd = truth.map((_, i) => {
+        const yes = says.filter((r) => r[i]).length, no = g - yes;
+        return says.map((r) => (yes === no ? true : r[i] !== yes > no));
+      });
+      const splits = split.filter(Boolean).length;
+
+      // Expected values.
+      const all = a ** g + (1 - a) ** g, pair = a * a + (1 - a) ** 2;
+      const pf = f * a + (1 - f) * (1 - a), pff = f * a * a + (1 - f) * (1 - a) ** 2, failAgree = pf ? (2 * pff) / (2 * pf) : 1;
+      let maj = 0;
+      const C = (n, k) => { let r = 1; for (let i = 1; i <= k; i++) r = (r * (n - k + i)) / i; return r; };
+      for (let k = 0; k <= g; k++) { const p = C(g, k) * a ** k * (1 - a) ** (g - k); if (2 * k > g) maj += p; else if (2 * k === g) maj += p / 2; }
+
+      out("a").textContent = `${Math.round(a * 100)}%`; out("aT").textContent = `${Math.round(a * 100)}%`;
+      out("g").textContent = String(g); out("g2").textContent = String(g); out("g3").textContent = String(g); out("gN").textContent = String(g);
+      out("f").textContent = `${Math.round(f * 100)}%`; out("suite").textContent = `${N} runs · ${Math.round(f * 100)}% truly failing`;
+      out("allAgree").textContent = pct(all); out("pairAgree").textContent = pct(pair); out("failAgree").textContent = pct(failAgree);
+      out("ceil1").textContent = pct(a); out("ceilMaj").textContent = pct(maj);
+      out("foot").textContent = `Two graders agree on ${pct(pair)} of all runs but only ${pct(failAgree)} of the failures, the runs that matter most, so measure agreement on failures. `
+        + `Against one grader, ${pct(a)} is already the best possible score: below it is the agent, above it is noise. Settle each disagreement in writing, so the standard doesn't drift.`;
+      out("note").textContent = `Highlighted: a grader's verdict that goes against the others (on a tie, every verdict on that run). The graders split on ${splits} of ${N} runs.`;
+
+      let html = "";
+      for (let b = 0; b < N / PER; b++) {
+        html += `<div class="nf__band">`;
+        for (let j = 0; j < g; j++) {
+          html += `<div class="nf__row"><span class="nf__lab">Grader ${j + 1}</span><div class="nf__cells">`;
+          for (let i = b * PER; i < (b + 1) * PER; i++) html += `<i class="${says[j][i] ? "p" : "f"}${split[i] && odd[i][j] ? " x" : ""}"></i>`;
+          html += `</div></div>`;
+        }
+        html += `</div>`;
+      }
+      bands.innerHTML = html;
+    };
+
+    root.querySelectorAll("input").forEach((el) => el.addEventListener("input", draw));
+    draw();
+  }
+})();
+</script>

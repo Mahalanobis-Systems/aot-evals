@@ -1,0 +1,156 @@
+<!-- Problem 11, "'No difference' isn't 'no worse'" (docs/problems.md). A team ships a stream of changes. Each
+     change's true effect is drawn from Normal(+1 point, 1 point): usually a small gain, sometimes 2 or 3
+     points, sometimes a loss. The eval runs the agent before and after on the same n test cases and keeps
+     the change only if the 95% paired interval on it is above 0 (problem 10's interval). With few test
+     cases the smallest change it can see is large, so good changes are held back; with more, they get
+     through and quality climbs faster.
+
+     The smallest change it can see, 80% of the time, at flip rate d: (1.96 + 0.84) · √(d / n), with d about
+     3% here (each change breaks 1% of cases and fixes 1% plus its effect).
+
+     Every number is computed in the page from a fixed seed (the same proposed changes for every test-case
+     size, so switching sizes changes only the decisions). The pseudocode is printed under the widget. -->
+<div class="mc gs" data-growth>
+  <div class="mc__compare">
+    <p class="fr__q">Your team ships a change every week. Each one is worth about +1 point on average, some more, some less, some negative. You keep a change only when the eval says it's a real improvement. Where is the agent after 20 changes?</p>
+    <p class="gs__legend"><span><i class="gs__l gs__l--run"></i>10 simulated teams</span><span><i class="gs__l gs__l--mean"></i>average of 2,000</span><span><i class="gs__l gs__l--band"></i>middle two-thirds</span><span><i class="gs__l gs__l--ceil"></i>if you could see each change's true effect</span></p>
+    <svg class="gs__chart" data-chart role="img" aria-label="Quality gained over 20 changes, for 10 simulated teams"></svg>
+    <div class="fr__rows">
+      <p class="fr__row fr__row--with"><span class="fr__tag">After 20 changes</span><span data-out="gain"></span></p>
+      <p class="fr__row"><span class="fr__tag">Changes kept</span><span data-out="kept"></span></p>
+      <p class="fr__row"><span class="fr__tag">Smallest it can see</span><span data-out="mde"></span></p>
+      <p class="fr__row mc__row--cost"><span class="fr__tag">Held back</span><span data-out="held"></span></p>
+    </div>
+  </div>
+
+  <div class="fr__controls">
+    <label class="fr__primary"><span>Test cases <b data-out="n"></b></span><input type="range" name="n" min="0" max="6" step="1" value="1">
+      <small>Each change is checked before and after on the same test cases</small></label>
+    <p class="gs__fixed">20 changes · 10 teams shown · 2,000 simulated · changes worth +1 ± 1 point</p>
+  </div>
+
+  <figure class="fr__grid mc__grid" aria-label="Average gain after 20 changes for each number of test cases">
+    <figcaption class="fr__legend"><b>Average gain after 20 changes</b></figcaption>
+    <div class="gs__bars" data-bars></div>
+    <p class="gs__note">Bars: the average over 2,000 simulated teams. Whiskers: the middle two-thirds of teams. Dashed: the most you could gain if you shipped every change that truly helps.</p>
+    <p class="gs__note">This eval keeps a change only when it shows a gain. When the claim is "no worse", as for a cheaper model, test that claim directly: the drop has to be shown smaller than a margin you choose in advance.</p>
+  </figure>
+</div>
+<aside class="gs__foot">
+  <p class="gs__foot-h">How the simulation works</p>
+  <pre><code>for each of 2,000 simulated teams, and each n in 20, 100, 500, 1,000, 2,000, 5,000, 10,000:
+  gain = 0
+  for change in 1..20:
+    true_change ~ Normal(mean = +1 point, sd = 1 point)    # same draws for every test-case size
+
+    # run the agent before and after the change on the same n test cases
+    fix_rate   = 1% + true_change   # cases the change fixes   (if true_change < -1%: 0)
+    break_rate = 1%                 # cases the change breaks  (if true_change < -1%: -true_change)
+    fixes  ~ Binomial(n, fix_rate)
+    breaks ~ Binomial(n, break_rate)
+
+    observed = (fixes - breaks) / n
+    flips    = (fixes + breaks) / n
+    lower    = observed - 1.96 * sqrt((flips - observed^2) / n)   # 95% paired interval
+
+    if lower > 0:            # the eval says it's a real improvement
+      gain += true_change    # keep it: quality moves by its TRUE effect
+    # otherwise: discard the change, quality stays where it is
+
+report, for each n: the average gain after 20 changes, the middle two-thirds of teams,
+how many changes were kept (and how many of those were harmful), and how many good ones were held back</code></pre>
+</aside>
+<script>
+(() => {
+  const SIZES = [20, 100, 500, 1000, 2000, 5000, 10000], TURNS = 20, SHOWN = 10, RUNS = 2000, BREAK = 0.01, FLIPS = 0.03;
+
+  // A fixed-seed generator, so every reader sees the same simulation.
+  const rng = (seed) => () => { seed = (seed + 0x6d2b79f5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const normal = (u) => Math.sqrt(-2 * Math.log(1 - u())) * Math.cos(2 * Math.PI * u());
+  const binomial = (u, n, p) => {        // inversion: fine for small n·p
+    if (p <= 0) return 0;
+    if (n * p > 30) return Math.max(0, Math.min(n, Math.round(n * p + Math.sqrt(n * p * (1 - p)) * normal(u))));   // large n·p: normal approximation
+    let k = 0, q = Math.pow(1 - p, n), c = q;
+    const x = u();
+    while (x > c && k < n) { q *= ((n - k) / (k + 1)) * (p / (1 - p)); k++; c += q; }
+    return k;
+  };
+
+  // One simulated team: the same proposed changes for every size; only the eval's draws differ.
+  const team = (run) => {
+    const ud = rng(1000003 * (run + 1));
+    const deltas = Array.from({ length: TURNS }, () => 0.01 + 0.01 * normal(ud));
+    return SIZES.map((n, si) => {
+      const ue = rng(7919 * (run + 1) + 104729 * (si + 1));
+      let gain = 0, kept = 0, bad = 0, missed = 0;
+      const path = [0];
+      for (const d of deltas) {
+        const fix = d >= -BREAK ? BREAK + d : 0, brk = d >= -BREAK ? BREAK : -d;
+        const fixes = binomial(ue, n, fix), breaks = binomial(ue, n, brk);
+        const D = (fixes - breaks) / n, flips = (fixes + breaks) / n;
+        const lower = D - 1.96 * Math.sqrt(Math.max(flips - D * D, 0) / n);
+        if (lower > 0) { gain += d; kept++; if (d < 0) bad++; } else if (d > 0) missed++;
+        path.push(gain);
+      }
+      return { path, gain, kept, bad, missed };
+    });
+  };
+  const sims = Array.from({ length: RUNS }, (_, r) => team(r));
+  const stats = SIZES.map((_, si) => {
+    const g = sims.map((s) => s[si].gain).sort((a, b) => a - b);
+    const mean = g.reduce((a, b) => a + b, 0) / RUNS;
+    const avg = (f) => sims.reduce((a, s) => a + f(s[si]), 0) / RUNS;
+    const meanPath = Array.from({ length: TURNS + 1 }, (_, t) => sims.reduce((a, s) => a + s[si].path[t], 0) / RUNS);
+    const q = (p) => (t) => { const v = sims.map((s) => s[si].path[t]).sort((a, b) => a - b); return v[Math.floor(p * (RUNS - 1))]; };
+    const lo = Array.from({ length: TURNS + 1 }, (_, t) => q(1 / 6)(t)), hi = Array.from({ length: TURNS + 1 }, (_, t) => q(5 / 6)(t));
+    return { mean, p17: g[Math.floor(RUNS / 6)], p83: g[Math.floor((5 * RUNS) / 6)], kept: avg((x) => x.kept), bad: avg((x) => x.bad), missed: avg((x) => x.missed), meanPath, lo, hi };
+  });
+  const CEIL = 0.01 * (0.8413 + 0.2420);                                 // E[max(Δ, 0)] for Δ ~ N(1, 1) points
+  const pt = (x) => `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(1)}`;
+
+  for (const root of document.querySelectorAll("[data-growth]")) {
+    const input = root.querySelector('input[name="n"]');
+    const out = (name) => root.querySelector(`[data-out="${name}"]`);
+    const chart = root.querySelector("[data-chart]"), bars = root.querySelector("[data-bars]");
+
+    const draw = () => {
+      const si = +input.value, n = SIZES[si], st = stats[si];
+      const mde = (1.96 + 0.84) * Math.sqrt(FLIPS / n);
+      out("n").textContent = n.toLocaleString("en-US");
+      out("gain").innerHTML = `<b>${pt(st.mean)} points</b> on average` + (st.p83 - st.p17 < 0.001 ? ", and almost every team gains nothing: no change clears the interval" : `, most teams between ${pt(st.p17)} and ${pt(st.p83)}`);
+      out("kept").innerHTML = `${st.kept.toFixed(1)} of 20 on average${st.bad >= 0.05 ? `, ${st.bad.toFixed(1)} of them harmful` : ""}`;
+      out("mde").innerHTML = `About <b>${(mde * 100).toFixed(1)} points</b>, 80% of the time, against changes worth +1 on average. A change it calls "no difference" could be this big.`;
+      out("held").textContent = `${st.missed.toFixed(1)} good changes a team held back because the eval couldn't tell them from noise.`;
+
+      // Quality gained over the changes: 10 teams, the average and middle band of 2,000, the ceiling.
+      const W = chart.clientWidth || 640, H = 260, L = 44, R = 16, T = 12, B = 30;
+      const ymax = Math.ceil((CEIL * TURNS * 100 + 2) / 5) * 5 / 100, ymin = -0.05;
+      const X = (t) => L + (t / TURNS) * (W - L - R), Y = (v) => T + ((ymax - v) / (ymax - ymin)) * (H - T - B);
+      let g = "";
+      for (let v = -0.05; v <= ymax + 1e-9; v += 0.05) g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="lab" x="${L - 8}" y="${Y(v) + 4}" text-anchor="end">${Math.abs(v) < 1e-9 ? "0" : `${v > 0 ? "+" : "−"}${Math.round(Math.abs(v) * 100)}`}</text>`;
+      for (let t = 0; t <= TURNS; t += W < 520 ? 10 : 5) g += `<text class="lab" x="${X(t)}" y="${H - 8}" text-anchor="${t === 0 ? "start" : t === TURNS ? "end" : "middle"}">${t === 0 ? "start" : `change ${t}`}</text>`;
+      g += `<path class="band" d="M${st.hi.map((v, t) => `${X(t)} ${Y(v)}`).join("L")}L${st.lo.map((v, t) => `${X(t)} ${Y(v)}`).reverse().join("L")}Z"/>`;
+      g += `<line class="ceil" x1="${X(0)}" y1="${Y(0)}" x2="${X(TURNS)}" y2="${Y(CEIL * TURNS)}"/>`;
+      for (let r = 0; r < SHOWN; r++) g += `<path class="run" d="M${sims[r][si].path.map((v, t) => `${X(t)} ${Y(v)}`).join("L")}"/>`;
+      g += `<path class="mean" d="M${st.meanPath.map((v, t) => `${X(t)} ${Y(v)}`).join("L")}"/>`;
+      g += `<line class="zero" x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}"/>`;
+      chart.setAttribute("viewBox", `0 0 ${W} ${H}`); chart.setAttribute("height", String(H));
+      chart.innerHTML = g;
+
+      // Every size side by side.
+      const top = Math.max(CEIL * TURNS, ...stats.map((s) => s.p83));
+      bars.innerHTML = SIZES.map((sz, j) => {
+        const s = stats[j], w = (v) => `${Math.max(0, (v / top) * 100)}%`;
+        return `<div class="gs__bar${j === si ? " is-on" : ""}"><span class="gs__bl">${sz.toLocaleString("en-US")} cases</span>`
+          + `<span class="gs__track"><i class="gs__fill" style="width:${w(s.mean)}"></i><i class="gs__wh" style="left:${w(s.p17)};width:calc(${w(s.p83)} - ${w(s.p17)})"></i><i class="gs__ceil" style="left:${w(CEIL * TURNS)}"></i></span>`
+          + `<span class="gs__bv">${pt(s.mean)}</span></div>`;
+      }).join("");
+    };
+
+    input.addEventListener("input", draw);
+    let lastW = 0;
+    new ResizeObserver(() => { if (root.clientWidth !== lastW) { lastW = root.clientWidth; draw(); } }).observe(root);
+    draw();
+  }
+})();
+</script>

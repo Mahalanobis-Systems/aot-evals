@@ -1,0 +1,123 @@
+<!-- Problem 6, "Your grader is wrong sometimes" (docs/problems.md). People label every run good or bad; the
+     judge passes or fails each one. Its confusion matrix against people, with a failure as the positive
+     (TP: a bad run it failed; FP: a good run it failed; FN: a bad run it passed; TN: a good run it passed),
+     read down its columns:
+       catch rate      = TP / (TP + FN)      of the bad runs, the share the judge fails
+       clean pass rate = TN / (FP + TN)      of the good runs, the share the judge passes
+     and across its top row, precision = TP / (TP + FP). The failure rate the judge reports mixes its errors
+     in; the Rogan–Gladen estimator takes them back out:
+       judge fails = catch · bad + (1 − clean) · good,   corrected = (judge fails + clean − 1) / (catch + clean − 1)
+     The denominator is J (Youden's J): every real change in the failure rate looks J times its size.
+     At the defaults this is problem 6's refund judge: 1,000 runs, 30 bad, catch 80%, clean 90%, so the judge
+     fails 121 runs (12.1%) and 97 of them are good. -->
+<div class="mc jc" data-judgecal>
+  <div class="mc__compare">
+    <p class="fr__q">Your judge fails <b data-out="judge"></b> of runs. How many are really bad?</p>
+    <svg class="fr__ci" data-ci role="img" aria-label="The judge's failure rate, the corrected rate and the rate people give"></svg>
+    <div class="fr__rows">
+      <p class="fr__row fr__row--without"><span class="fr__tag">Your judge says</span><span data-out="judgeRow"></span></p>
+      <p class="fr__row fr__row--with"><span class="fr__tag">Corrected</span><span data-out="corrRow"></span></p>
+      <p class="fr__row"><span class="fr__tag">People say</span><span data-out="trueRow"></span></p>
+      <p class="fr__row mc__row--cost"><span class="fr__tag">What it flags</span><span data-out="precRow"></span></p>
+    </div>
+  </div>
+
+  <div class="fr__controls">
+    <label class="fr__primary"><span>Runs people label bad <b data-out="fail"></b></span><input type="range" name="fail" min="1" max="60" step="1" value="3">
+      <small>The agent's real failure rate</small></label>
+    <label><span>Catch rate <b data-out="catch"></b></span><input type="range" name="catch" min="0" max="100" step="1" value="80">
+      <small>Of the bad runs, the share the judge fails</small></label>
+    <label><span>Clean pass rate <b data-out="clean"></b></span><input type="range" name="clean" min="50" max="100" step="1" value="90">
+      <small>Of the good runs, the share the judge passes</small></label>
+    <details class="fr__suite">
+      <summary>Labeled runs <span data-out="suite"></span></summary>
+      <label><span>Runs <b data-out="n"></b></span><input type="range" name="n" min="100" max="1000" step="50" value="1000"></label>
+    </details>
+  </div>
+
+  <figure class="fr__grid mc__grid" aria-label="Each labeled run, by what people and the judge said">
+    <figcaption class="fr__legend"><b>Each run: what people said, and what the judge said</b></figcaption>
+    <div class="jc__body">
+      <div class="jc__grid" data-grid></div>
+      <table class="jc__cm">
+        <thead><tr><th></th><th scope="col">People: bad</th><th scope="col">People: good</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Judge fails</th><td><i class="jc__c bf"></i><span>caught (TP)</span><b data-out="tp"></b></td><td><i class="jc__c gf"></i><span>false alarm (FP)</span><b data-out="fp"></b></td></tr>
+          <tr><th scope="row">Judge passes</th><td class="jc__cm--focus"><i class="jc__c bp"></i><span>missed (FN)</span><b data-out="fn"></b></td><td><i class="jc__c gp"></i><span>passed (TN)</span><b data-out="tn"></b></td></tr>
+        </tbody>
+        <tfoot><tr><th scope="row">Down the column</th><td>catch rate <b data-out="catchCol"></b></td><td>clean pass rate <b data-out="cleanCol"></b></td></tr></tfoot>
+      </table>
+    </div>
+    <p class="jc__caption" data-out="caption"></p>
+  </figure>
+</div>
+<script>
+(() => {
+  const pct = (x) => `${(x * 100).toFixed(1)}%`;
+  const whole = (x) => `${Math.round(x * 100)}%`;
+  const fmt = (x) => x.toLocaleString("en-US");
+
+  for (const root of document.querySelectorAll("[data-judgecal]")) {
+    const input = (name) => root.querySelector(`input[name="${name}"]`);
+    const out = (name) => root.querySelector(`[data-out="${name}"]`);
+    const grid = root.querySelector("[data-grid]");
+    const ci = root.querySelector("[data-ci]");
+
+    const draw = () => {
+      const n = +input("n").value, f = +input("fail").value / 100, cat = +input("catch").value / 100, cln = +input("clean").value / 100;
+      const bad = Math.round(n * f), good = n - bad;
+      const tp = Math.round(bad * cat), fn = bad - tp, tn = Math.round(good * cln), fp = good - tn;
+      const judge = (tp + fp) / n, truth = bad / n, J = cat + cln - 1;
+      const corr = J > 0 ? Math.min(1, Math.max(0, (judge + cln - 1) / J)) : NaN;
+
+      out("fail").textContent = whole(f); out("catch").textContent = whole(cat); out("clean").textContent = whole(cln);
+      out("n").textContent = fmt(n); out("suite").textContent = `${fmt(n)} runs labeled by people`;
+      out("judge").textContent = pct(judge);
+      out("judgeRow").innerHTML = `It fails ${fmt(tp + fp)} of ${fmt(n)}: <b>${pct(judge)}</b>, ${Math.abs((judge - truth) * 100).toFixed(1)} points ${judge >= truth ? "above" : "below"} the truth.`;
+      out("corrRow").innerHTML = J > 0
+        ? `Rogan–Gladen: (${(judge * 100).toFixed(1)} + ${whole(cln).slice(0, -1)} − 100) ÷ (${whole(cat).slice(0, -1)} + ${whole(cln).slice(0, -1)} − 100) = <b>${pct(corr)}</b>`
+        : `A judge whose catch rate plus clean pass rate is 100% or less is no better than a coin flip: nothing can be corrected.`;
+      out("trueRow").innerHTML = `${fmt(bad)} of ${fmt(n)} runs are bad: <b>${pct(truth)}</b>.`;
+      out("precRow").innerHTML = tp + fp
+        ? `${fmt(tp)} of the ${fmt(tp + fp)} runs it fails are really bad (precision ${whole(tp / (tp + fp))}). A reviewer who only checks what it flags ${fp > tp ? "spends most of the time on good runs and " : ""}never sees the ${fmt(fn)} it missed.${J > 0 ? ` Its J is ${J.toFixed(2)}, so every real change in the failure rate looks ${J.toFixed(2)} times its size.` : ""}`
+        : "It fails nothing, so it flags nothing to check.";
+      out("tp").textContent = fmt(tp); out("fp").textContent = fmt(fp); out("fn").textContent = fmt(fn); out("tn").textContent = fmt(tn);
+      out("catchCol").textContent = bad ? `${fmt(tp)} of ${fmt(bad)}` : "no bad runs";
+      out("cleanCol").textContent = `${fmt(tn)} of ${fmt(good)}`;
+      out("caption").textContent = `${fmt(n)} runs: ${fmt(good)} good, ${fmt(bad)} bad. Catch rate ${whole(cat)}: it fails ${fmt(tp)} of the ${fmt(bad)} bad runs. Clean pass rate ${whole(cln)}: it passes ${fmt(tn)} of the ${fmt(good)} good ones, and fails the other ${fmt(fp)}.`;
+
+      // The good runs first, the judge's false alarms scattered through them by a fixed shuffle; then the bad, alternating.
+      const cells = [];
+      let seed = 2654435761 ^ good; const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296);
+      const order = Array.from({ length: good }, (_, i) => i);
+      for (let i = good - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+      const fpAt = new Set(order.slice(0, fp));
+      for (let i = 0; i < good; i++) cells.push(fpAt.has(i) ? "gf" : "gp");
+      for (let i = 0, a = 0, b = 0; i < bad; i++) {
+        const miss = a < fn && (b >= tp || i % 2 === 0);
+        if (miss) { cells.push("bp"); a++; } else { cells.push("bf"); b++; }
+      }
+      grid.style.setProperty("--cols", String(n <= 300 ? 30 : root.clientWidth < 600 ? 40 : 50));   // fewer, bigger cells on a phone
+      grid.innerHTML = cells.map((c) => `<i class="jc__c ${c}"></i>`).join("");
+
+      // Three pins on one axis.
+      const vals = [judge, J > 0 ? corr : judge, truth];
+      const W = ci.clientWidth || 600, L = 28, lo = Math.max(0, Math.floor((Math.min(...vals) - 0.02) * 20) / 20), hi = Math.min(1, Math.ceil((Math.max(...vals) + 0.02) * 20) / 20);
+      const X = (v) => L + ((v - lo) / (hi - lo)) * (W - 2 * L - 90);
+      let ticks = "";
+      const step = hi - lo > 0.3 ? 0.1 : 0.05;
+      for (let t = Math.ceil(lo / step) * step; t <= hi + 1e-9; t += step) ticks += `<text class="lab" x="${X(t)}" y="96" text-anchor="middle">${Math.round(t * 100)}%</text>`;
+      const pin = (y, v, cls, label) => `<line class="${cls}" x1="${X(lo)}" x2="${X(v)}" y1="${y}" y2="${y}"/><circle class="${cls}" cx="${X(v)}" cy="${y}" r="6"/><text class="lab" x="${X(v) + 12}" y="${y + 4}">${label}</text>`;
+      ci.setAttribute("viewBox", `0 0 ${W} 104`); ci.setAttribute("height", "104");
+      ci.innerHTML = `<line class="axis" x1="${L}" x2="${W - L}" y1="76" y2="76"/>${ticks}`
+        + `<line class="truth" x1="${X(truth)}" x2="${X(truth)}" y1="6" y2="78"/><text class="lab truth-lab" x="${X(truth) + 6}" y="70">people ${pct(truth)}</text>`
+        + pin(22, judge, "without", `judge ${pct(judge)}`) + (J > 0 ? pin(50, corr, "with", `corrected ${pct(corr)}`) : "");
+    };
+
+    root.querySelectorAll("input").forEach((el) => el.addEventListener("input", draw));
+    let lastW = 0;
+    new ResizeObserver(() => { if (root.clientWidth !== lastW) { lastW = root.clientWidth; draw(); } }).observe(root);
+    draw();
+  }
+})();
+</script>

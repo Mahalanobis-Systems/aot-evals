@@ -1,0 +1,111 @@
+<!-- Problem 4, "Test what your users actually ask" (docs/problems.md). The quality set draws the same
+     number of cases at random from each kind of request, so the rare kinds have enough cases to say
+     something. Traffic doesn't look like that: its mix (the shares from problems.md's store) decides how
+     much each kind counts. Averaging the set as it is gives every kind an equal say; weighting each kind's
+     pass rate by its share of traffic gives what customers see.
+
+       as drawn  = (1/K) Σ pass_k              (each kind's pass rate counted once)
+       weighted  = Σ share_k · pass_k          (stratified estimate, weighted back to the traffic mix)
+     Plain pass rates for illustration; in practice the weights carry what a mistake costs too (problem 1).
+
+     data-config holds the store from problems.md (tests/test_interactive.py checks it). -->
+<div class="mc st" data-strat data-config='{"kinds": [
+  {"id": "status", "label": "Where&apos;s my order?", "n": 700, "pass": 95},
+  {"id": "return", "label": "Start a return", "n": 200, "pass": 80},
+  {"id": "address", "label": "Change my address", "n": 80, "pass": 90},
+  {"id": "refund", "label": "Refund me", "n": 20, "pass": 70}]}'>
+  <div class="mc__compare">
+    <p class="fr__q">The quality set as drawn vs weighted to traffic</p>
+    <svg class="fr__ci" data-ci role="img" aria-label="Pass rate: the quality set averaged as drawn, and weighted to traffic"></svg>
+    <div class="fr__rows">
+      <p class="fr__row fr__row--without"><span class="fr__tag">As drawn</span><span data-out="asis"></span></p>
+      <p class="fr__row fr__row--with"><span class="fr__tag">Weighted to traffic</span><span data-out="weighted"></span></p>
+    </div>
+    <p class="st__foot">Plain pass rates, for illustration. In practice, weight each kind by its share of traffic times what one of its mistakes costs (problem 1).</p>
+  </div>
+
+  <div class="fr__controls">
+    <fieldset class="mc__costs st__mix" data-mix>
+      <legend>Traffic mix</legend>
+      <small>Shares are rescaled to add up to 100%.</small>
+    </fieldset>
+    <details class="fr__suite">
+      <summary>Quality set <span data-out="suite"></span></summary>
+      <div data-passes></div>
+      <label><span>Cases drawn per kind <b data-out="perN"></b></span><input type="range" name="per" min="10" max="60" step="5" value="20"></label>
+    </details>
+  </div>
+
+  <figure class="fr__grid mc__grid" aria-label="Each kind's cases beside its share of traffic">
+    <figcaption class="fr__legend">
+      <b>Equal cases, unequal traffic</b>
+      <span><i class="st__k st__k--pass"></i>case passes</span><span><i class="st__k st__k--fail"></i>fails</span><span><i class="st__k st__k--prod"></i>real requests, per 500</span>
+    </figcaption>
+    <div class="st__rows" data-rows></div>
+  </figure>
+</div>
+<script>
+(() => {
+  const pct = (x) => `${(x * 100).toFixed(1)}%`;
+  const words = ["", "all", "a half", "a third", "a quarter", "a fifth", "a sixth"];
+
+  for (const root of document.querySelectorAll("[data-strat]")) {
+    const kinds = JSON.parse(root.dataset.config).kinds;
+    const N = kinds.reduce((s, k) => s + k.n, 0);
+    const input = (name) => root.querySelector(`input[name="${name}"]`);
+    const out = (name) => root.querySelector(`[data-out="${name}"]`);
+    const rowsEl = root.querySelector("[data-rows]");
+    const ci = root.querySelector("[data-ci]");
+    const dots = (n, cls) => Array.from({ length: n }, (_, i) => `<i class="${cls(i)}"></i>`).join("");
+
+    root.querySelector("[data-mix] legend").insertAdjacentHTML("afterend", kinds.map((k) =>
+      `<label class="st__mixrow"><span>${k.label} <b data-out="s-${k.id}"></b></span><input type="range" name="share-${k.id}" min="0" max="80" step="1" value="${Math.round((k.n / N) * 100)}"></label>`).join(""));
+    root.querySelector("[data-passes]").innerHTML = kinds.map((k) =>
+      `<label><span>${k.label} passes <b data-out="p-${k.id}"></b></span><input type="range" name="pass-${k.id}" min="0" max="100" step="1" value="${k.pass}"></label>`).join("");
+
+    const draw = () => {
+      const per = +input("per").value;
+      const raw = kinds.map((k) => +input(`share-${k.id}`).value), tot = raw.reduce((a, b) => a + b, 0) || 1;
+      const rows = kinds.map((k, i) => {
+        const share = raw[i] / tot, pass = +input(`pass-${k.id}`).value / 100, passed = Math.round(per * pass);
+        return { k, share, pass, passed };
+      });
+      const asis = rows.reduce((s, r) => s + r.passed / per, 0) / rows.length;
+      const weighted = rows.reduce((s, r) => s + r.share * (r.passed / per), 0);
+
+      out("perN").textContent = String(per);
+      out("suite").textContent = `${per} cases per kind, drawn at random`;
+      rows.forEach((r) => { out(`s-${r.k.id}`).textContent = `${(r.share * 100).toFixed(0)}%`; out(`p-${r.k.id}`).textContent = `${Math.round(r.pass * 100)}%`; });
+      out("asis").innerHTML = `Every kind counts ${words[rows.length] ?? `1/${rows.length}`}: <b>${pct(asis)}</b> pass rate.`;
+      const gap = weighted - asis;
+      out("weighted").innerHTML = `Each kind counts by its share of traffic: <b>${pct(weighted)}</b>, ${Math.abs(gap * 100).toFixed(1)} points ${gap >= 0 ? "higher" : "lower"} than the set as drawn.`;
+
+      // The two on one axis. A label that won't fit right of its dot (on a phone) sits above the line, ending at the dot.
+      const W = ci.clientWidth || 600, L = 16, lo = Math.max(0, Math.floor((Math.min(asis, weighted) - 0.08) * 10) / 10), hi = 1;
+      const X = (v) => L + ((v - lo) / (hi - lo)) * (W - 2 * L);
+      let ticks = "";
+      for (let t = Math.ceil(lo * 10) / 10; t <= hi + 1e-9; t += 0.1) ticks += `<text class="lab" x="${X(t)}" y="${88 + 12}" text-anchor="middle">${Math.round(t * 100)}%</text>`;
+      const T = 12;
+      const pin = (y, v, cls, label) => {
+        const text = `${label} ${pct(v)}`, fits = X(v) + 12 + text.length * 7 <= W;
+        return `<line class="${cls}" x1="${X(lo)}" x2="${X(v)}" y1="${y + T}" y2="${y + T}"/><circle class="${cls}" cx="${X(v)}" cy="${y + T}" r="6"/>`
+          + (fits ? `<text class="lab" x="${X(v) + 12}" y="${y + T + 4}">${text}</text>` : `<text class="lab" x="${X(v) + 6}" y="${y + T - 11}" text-anchor="end">${text}</text>`);
+      };
+      ci.setAttribute("viewBox", `0 0 ${W} ${96 + T}`); ci.setAttribute("height", String(96 + T));
+      ci.innerHTML = `<line class="axis" x1="${L}" x2="${W - L}" y1="${70 + T}" y2="${70 + T}"/>${ticks}` + pin(20, asis, "without", "as drawn") + pin(52, weighted, "with", "weighted to traffic");
+
+      // Each kind: its equal block of cases, beside its share of traffic as dots per 500 requests.
+      rowsEl.innerHTML = rows.map((r) => `<div class="st__row${r.k.id === "refund" ? " st__row--focus" : ""}">
+          <div class="st__name"><b>${r.k.label}</b><small>${(r.share * 100).toFixed(0)}% of traffic · passes ${Math.round((r.passed / per) * 100)}%</small></div>
+          <div class="st__test">${dots(per, (i) => (i < r.passed ? "p" : "f"))}</div>
+          <div class="st__prod">${dots(Math.round(r.share * 500), () => "q")}</div>
+        </div>`).join("");
+    };
+
+    root.querySelectorAll("input").forEach((el) => el.addEventListener("input", draw));
+    let lastW = 0;
+    new ResizeObserver(() => { if (root.clientWidth !== lastW) { lastW = root.clientWidth; draw(); } }).observe(root);
+    draw();
+  }
+})();
+</script>

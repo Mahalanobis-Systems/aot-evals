@@ -1,0 +1,143 @@
+<!-- Problem 12, "Stop peeking" (docs/problems.md), its prompt-search case. The optimization loop from
+     problem 11 tries K changes, each truly worth Normal(+1, 1) points, and keeps the ones whose paired 95%
+     interval on the test set is above 0. The test set then credits the agent with the kept changes' MEASURED
+     gains, and the ones it kept are partly the ones the noise flattered. A fresh holdout set the loop never
+     saw credits their TRUE gains. The gap grows with the number of changes tried and shrinks with more
+     test cases.
+
+     Computed in the page from a fixed seed: 2,000 simulated loops per test-case size, the same proposed
+     changes for every size. The pseudocode is printed under the widget. -->
+<div class="mc gs ho" data-holdout>
+  <div class="mc__compare">
+    <p class="fr__q">Your optimization loop tried <span data-out="k"></span> changes and kept the ones the test set called real improvements. The test set says the agent gained <span data-out="claimT"></span> points. What will a fresh holdout set say?</p>
+    <p class="gs__legend"><span><i class="gs__l ho__l--test"></i>what the test set says</span><span><i class="gs__l gs__l--mean"></i>what a holdout set says</span><span><i class="gs__l ho__l--gap"></i>the gap: gains that were only noise</span><span><i class="gs__l gs__l--run"></i>6 single loops (averages of 2,000 in bold)</span></p>
+    <svg class="gs__chart" data-chart role="img" aria-label="Gain the test set reports versus gain a holdout set reports, as the loop tries more changes"></svg>
+    <div class="fr__rows">
+      <p class="fr__row fr__row--without"><span class="fr__tag">Test set says</span><span data-out="test"></span></p>
+      <p class="fr__row fr__row--with"><span class="fr__tag">Holdout says</span><span data-out="hold"></span></p>
+      <p class="fr__row mc__row--cost"><span class="fr__tag">Overstated by</span><span data-out="gap"></span></p>
+    </div>
+  </div>
+
+  <div class="fr__controls">
+    <label class="fr__primary"><span>Changes tried <b data-out="kN"></b></span><input type="range" name="k" min="5" max="30" step="5" value="20">
+      <small>How many changes the loop tries, keeping the ones the test set approves</small></label>
+    <label><span>Test cases <b data-out="n"></b></span><input type="range" name="n" min="0" max="6" step="1" value="1">
+      <small>Each change is checked before and after on the same test cases</small></label>
+    <p class="gs__fixed">Changes worth +1 ± 1 point · 2,000 simulated loops · holdout set never used to pick changes</p>
+  </div>
+
+  <figure class="fr__grid mc__grid" aria-label="Test set versus holdout gain for each number of test cases">
+    <figcaption class="fr__legend"><b data-out="barsHead"></b><span><i class="ho__sw ho__sw--t"></i>test set says</span><span><i class="ho__sw ho__sw--h"></i>holdout says</span></figcaption>
+    <div class="gs__bars ho__bars" data-bars></div>
+    <p class="gs__note">For each number of test cases: the gain the test set reports, the gain a holdout set reports, and the difference between them, which is noise the loop selected for. Averages over 2,000 simulated loops.</p>
+    <p class="gs__note">The same thing happens whenever you look more than once: labeling until an eval clears its bar, or checking ten kinds of request and acting on the one that moved. Decide how much you'll look before you start, and check the holdout set once.</p>
+  </figure>
+</div>
+<aside class="gs__foot">
+  <p class="gs__foot-h">How the simulation works</p>
+  <pre><code>for each of 2,000 simulated loops, and each n in 20, 100, 500, 1,000, 2,000, 5,000, 10,000:
+  test_gain = 0; holdout_gain = 0
+  for change in 1..K:                                         # K = changes tried, up to 30
+    true_change ~ Normal(mean = +1 point, sd = 1 point)       # same draws for every n
+
+    # measure it on the test set: before and after on the same n test cases (as in problem 11)
+    fixes  ~ Binomial(n, 1% + true_change)                    # (if true_change < -1%: 0)
+    breaks ~ Binomial(n, 1%)                                  # (if true_change < -1%: -true_change)
+    observed = (fixes - breaks) / n
+    flips    = (fixes + breaks) / n
+    lower    = observed - 1.96 * sqrt((flips - observed^2) / n)
+
+    if lower > 0:                       # the test set calls it a real improvement: keep it
+      test_gain    += observed          # what the test set reports
+      holdout_gain += true_change       # what a fresh holdout set reports, on average
+
+report, for each n and K: the average test_gain and holdout_gain, and the gap between them</code></pre>
+</aside>
+<script>
+(() => {
+  const SIZES = [20, 100, 500, 1000, 2000, 5000, 10000], SHOWN = 6, KMAX = 30, RUNS = 2000, BREAK = 0.01;
+  const rng = (seed) => () => { seed = (seed + 0x6d2b79f5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const normal = (u) => Math.sqrt(-2 * Math.log(1 - u())) * Math.cos(2 * Math.PI * u());
+  const binomial = (u, n, p) => {
+    if (p <= 0) return 0;
+    if (n * p > 30) return Math.max(0, Math.min(n, Math.round(n * p + Math.sqrt(n * p * (1 - p)) * normal(u))));
+    let k = 0, q = Math.pow(1 - p, n), c = q;
+    const x = u();
+    while (x > c && k < n) { q *= ((n - k) / (k + 1)) * (p / (1 - p)); k++; c += q; }
+    return k;
+  };
+
+  // Average cumulative gain after each change tried: what the test set reports, and the true gain
+  // (what a holdout set reports, on average).
+  const avg = SIZES.map((n, si) => {
+    const test = new Array(KMAX + 1).fill(0), hold = new Array(KMAX + 1).fill(0), runsT = [], runsH = [];
+    for (let run = 0; run < RUNS; run++) {
+      const ud = rng(1000003 * (run + 1)), ue = rng(7919 * (run + 1) + 104729 * (si + 1));
+      let t = 0, h = 0;
+      const pT = [0], pH = [0];
+      for (let k = 1; k <= KMAX; k++) {
+        const d = 0.01 + 0.01 * normal(ud);
+        const fix = d >= -BREAK ? BREAK + d : 0, brk = d >= -BREAK ? BREAK : -d;
+        const fixes = binomial(ue, n, fix), breaks = binomial(ue, n, brk);
+        const D = (fixes - breaks) / n, flips = (fixes + breaks) / n;
+        if (D - 1.96 * Math.sqrt(Math.max(flips - D * D, 0) / n) > 0) { t += D; h += d; }
+        test[k] += t / RUNS; hold[k] += h / RUNS; pT.push(t); pH.push(h);
+      }
+      if (run < SHOWN) { runsT.push(pT); runsH.push(pH); }
+    }
+    return { test, hold, runsT, runsH };
+  });
+  const pt = (x) => `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(1)}`;
+
+  for (const root of document.querySelectorAll("[data-holdout]")) {
+    const input = (name) => root.querySelector(`input[name="${name}"]`);
+    const out = (name) => root.querySelector(`[data-out="${name}"]`);
+    const chart = root.querySelector("[data-chart]"), bars = root.querySelector("[data-bars]");
+
+    const draw = () => {
+      const K = +input("k").value, si = +input("n").value, n = SIZES[si], a = avg[si];
+      const T = a.test[K], H = a.hold[K], G = T - H;
+      out("k").textContent = String(K); out("kN").textContent = String(K); out("n").textContent = n.toLocaleString("en-US");
+      out("claimT").textContent = pt(T);
+      out("test").innerHTML = `<b>${pt(T)} points</b> after ${K} changes tried`;
+      out("hold").innerHTML = `<b>${pt(H)} points</b>: what the kept changes really did`;
+      out("gap").innerHTML = T > 0.0005
+        ? `<b>${(G * 100).toFixed(1)} points</b>: ${Math.round((G / T) * 100)}% of the gain the test set reports was noise the loop selected for.`
+        : "The test set kept almost nothing, so there's nothing to overstate.";
+
+      // The two averages over changes tried, the gap shaded between them.
+      const W = chart.clientWidth || 640, Hh = 240, L = 44, R = 16, Tm = 12, B = 30;
+      const ymax = Math.max(0.05, Math.ceil((Math.max(...a.test, ...a.runsT.map((p) => Math.max(...p))) * 100 + 1) / 5) * 5 / 100);
+      const X = (k) => L + (k / KMAX) * (W - L - R), Y = (v) => Tm + ((ymax - v) / ymax) * (Hh - Tm - B);
+      let g = "";
+      for (let v = 0; v <= ymax + 1e-9; v += ymax > 0.2 ? 0.1 : 0.05) g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="lab" x="${L - 8}" y="${Y(v) + 4}" text-anchor="end">${v < 1e-9 ? "0" : `+${Math.round(v * 100)}`}</text>`;
+      for (let k = 0; k <= KMAX; k += W < 520 ? 10 : 5) g += `<text class="lab" x="${X(k)}" y="${Hh - 8}" text-anchor="${k === 0 ? "start" : k === KMAX ? "end" : "middle"}">${k === 0 ? "start" : `${k} tried`}</text>`;
+      const line = (arr) => arr.map((v, k) => `${X(k)} ${Y(v)}`).join("L");
+      g += `<path class="gap" d="M${line(a.test)}L${a.hold.map((v, k) => `${X(k)} ${Y(v)}`).reverse().join("L")}Z"/>`;
+      for (let r = 0; r < SHOWN; r++) g += `<path class="run-t" d="M${line(a.runsT[r])}"/><path class="run-h" d="M${line(a.runsH[r])}"/>`;
+      g += `<path class="testline" d="M${line(a.test)}"/><path class="mean" d="M${line(a.hold)}"/>`;
+      g += `<line class="now" x1="${X(K)}" x2="${X(K)}" y1="${Tm}" y2="${Hh - B}"/><circle class="testdot" cx="${X(K)}" cy="${Y(T)}" r="5"/><circle class="holddot" cx="${X(K)}" cy="${Y(H)}" r="5"/>`;
+      g += `<line class="zero" x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}"/>`;
+      chart.setAttribute("viewBox", `0 0 ${W} ${Hh}`); chart.setAttribute("height", String(Hh));
+      chart.innerHTML = g;
+
+      // Every size at this many changes tried: the test set's claim over the holdout's.
+      out("barsHead").textContent = `After ${K} changes tried, by number of test cases`;
+      const top = Math.max(...avg.map((x) => x.test[K]), 0.01);
+      bars.innerHTML = SIZES.map((sz, j) => {
+        const t = avg[j].test[K], h = avg[j].hold[K], w = (v) => `${Math.max(0, (v / top) * 100)}%`;
+        return `<div class="gs__bar${j === si ? " is-on" : ""}"><span class="gs__bl">${sz.toLocaleString("en-US")} cases</span>`
+          + `<span class="ho__pair"><span class="gs__track"><i class="ho__t" style="width:${w(t)}"></i></span><span class="gs__track"><i class="gs__fill" style="width:${w(h)}"></i></span></span>`
+          + `<span class="gs__bv ho__bv"><span>${pt(t)} <small>test set</small></span><span>${pt(h)} <small>holdout</small></span></span>`
+          + `<span class="ho__gap">${t - h >= 0.0005 ? `${((t - h) * 100).toFixed(1)} pts noise` : "no gap"}</span></div>`;
+      }).join("");
+    };
+
+    root.querySelectorAll("input").forEach((el) => el.addEventListener("input", draw));
+    let lastW = 0;
+    new ResizeObserver(() => { if (root.clientWidth !== lastW) { lastW = root.clientWidth; draw(); } }).observe(root);
+    draw();
+  }
+})();
+</script>

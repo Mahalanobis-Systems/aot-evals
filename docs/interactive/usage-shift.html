@@ -1,0 +1,119 @@
+<!-- Problem 3, "Keep the test current" (docs/problems.md). The test set was drawn when returns were 20 of
+     every 100 requests. Week by week after the holidays, more of the traffic is returns (a slider per
+     week). The agent doesn't change: returns pass at one rate and everything else at another. The test set
+     keeps saying the same thing, while what customers get, and what its mistakes cost, moves.
+
+     Per 100 requests in a week with r returns, the other kinds share the rest in the test set's proportions:
+       pass rate = ((100 − r) · pass_rest + r · pass_return) / 100
+       cost      = Σ n_k · (1 − pass_k) · cost_k
+     The test set's numbers are those of the week it was drawn, every week. Reweighting it to a week's mix
+     (post-stratification) gives that week's numbers without running anything. At the defaults the pass
+     rate goes from 92% to 87.5% once returns are half of all requests, as problem 3 says.
+
+     data-config holds the store from problems.md (tests/test_interactive.py checks it). -->
+<div class="mc us" data-usage data-config='{"kinds": [
+  {"id": "status", "label": "Where&apos;s my order?", "n": 700, "cost": 1},
+  {"id": "return", "label": "Start a return", "n": 200, "cost": 5},
+  {"id": "address", "label": "Change my address", "n": 80, "cost": 20},
+  {"id": "refund", "label": "Refund me", "n": 20, "cost": 50}],
+  "weeks": [20, 26, 33, 42, 50]}'>
+  <div class="mc__compare">
+    <p class="fr__q" data-out="headline"></p>
+    <svg class="us__chart" data-chart role="img" aria-label="Cost of mistakes per 100 requests, week by week, against what the test set says"></svg>
+    <div class="fr__rows">
+      <p class="fr__row fr__row--without"><span class="fr__tag">Your test set</span><span data-out="testRow"></span></p>
+      <p class="fr__row fr__row--with"><span class="fr__tag">In production</span><span data-out="prodRow"></span></p>
+      <p class="fr__row mc__row--cost"><span class="fr__tag">The fix</span><span data-out="fixRow"></span></p>
+    </div>
+  </div>
+
+  <div class="fr__controls">
+    <label class="fr__primary"><span>Returns pass <b data-out="pRet"></b></span><input type="range" name="pRet" min="0" max="100" step="5" value="80">
+      <small>The agent's weak spot: a botched return costs $5</small></label>
+    <label><span>Everything else passes <b data-out="pRest"></b></span><input type="range" name="pRest" min="50" max="100" step="1" value="95"></label>
+    <p class="us__note">The agent doesn't change from week to week. Only the mix of requests does.</p>
+  </div>
+
+  <figure class="fr__grid mc__grid" aria-label="Returns in every 100 requests, week by week">
+    <figcaption class="fr__legend">
+      <b>Returns in every 100 requests</b>
+      <span><i class="k k--pass"></i>pass</span><span><i class="k k--fail"></i>fail</span>
+    </figcaption>
+    <div class="us__weeks" data-weeks></div>
+  </figure>
+</div>
+<script>
+(() => {
+  const pct = (x) => `${(x * 100).toFixed(1)}%`;
+  const usd = (x) => `$${x.toFixed(2)}`;
+
+  for (const root of document.querySelectorAll("[data-usage]")) {
+    const config = JSON.parse(root.dataset.config), kinds = config.kinds;
+    const input = (name) => root.querySelector(`input[name="${name}"]`);
+    const out = (name) => root.querySelector(`[data-out="${name}"]`);
+    const chart = root.querySelector("[data-chart]");
+    const ret = kinds.find((k) => k.id === "return"), others = kinds.filter((k) => k !== ret);
+    const othersN = others.reduce((s, k) => s + k.n, 0), N = kinds.reduce((s, k) => s + k.n, 0);
+    const drawn = Math.round((ret.n / N) * 100);                       // returns in every 100 when the test set was drawn
+
+    root.querySelector("[data-weeks]").innerHTML =
+      `<div class="us__week us__week--test"><span class="us__name">Your test set<small>drawn before the holidays, unchanged</small></span>
+        <span class="us__count">${drawn}</span><div class="pm__cases us__cells" data-cells="test"></div><span class="us__cost" data-out="testCost"></span></div>`
+      + config.weeks.map((r, i) => `<div class="us__week"><span class="us__name">Week ${i}</span>
+        <label class="us__slider"><b data-out="r${i}"></b><input type="range" name="r${i}" min="0" max="60" step="1" value="${r}" aria-label="Returns in every 100 requests, week ${i}"></label>
+        <div class="pm__cases us__cells" data-cells="${i}"></div><span class="us__cost" data-out="c${i}"></span></div>`).join("");
+    const weeks = root.querySelectorAll('input[name^="r"]');
+
+    // A week with r returns in 100: the other kinds split the rest in the test set's proportions.
+    const week = (r, pRet, pRest) => {
+      const scale = (100 - r) / othersN;
+      const restCost = others.reduce((s, k) => s + k.n * scale * (1 - pRest) * k.cost, 0);
+      return { acc: ((100 - r) * pRest + r * pRet) / 100, cost: restCost + r * (1 - pRet) * ret.cost };
+    };
+    const cells = (n, p) => Array.from({ length: n }, (_, i) => `<span><i class="${i < Math.round(n * p) ? "pass" : "fail"}"></i></span>`).join("");
+
+    const draw = () => {
+      const pRet = +input("pRet").value / 100, pRest = +input("pRest").value / 100;
+      const rs = [...weeks].map((w) => +w.value), test = week(drawn, pRet, pRest), ws = rs.map((r) => week(r, pRet, pRest));
+      const last = ws.length - 1, wl = ws[last], rl = rs[last];
+      out("pRet").textContent = `${Math.round(pRet * 100)}%`; out("pRest").textContent = `${Math.round(pRest * 100)}%`;
+      out("headline").textContent = `Your test set was drawn when ${drawn}% of requests were returns. `
+        + (rl === drawn ? "Four weeks later, they still are." : `Four weeks later, they're ${rl}%.`);
+      out("testCost").textContent = `${usd(test.cost)} of mistakes`;
+      root.querySelector('[data-cells="test"]').innerHTML = cells(drawn, pRet);
+      rs.forEach((r, i) => {
+        out(`r${i}`).textContent = String(r);
+        out(`c${i}`).textContent = `${usd(ws[i].cost)} of mistakes`;
+        root.querySelector(`[data-cells="${i}"]`).innerHTML = cells(r, pRet);
+      });
+      const dc = wl.cost / test.cost - 1;
+      out("testRow").innerHTML = `Every week: <b>${pct(test.acc)}</b> pass rate, <b>${usd(test.cost)}</b> of mistakes per 100 requests.`;
+      out("prodRow").innerHTML = `Week ${last}, ${rl} returns in every 100: <b>${pct(wl.acc)}</b> pass rate (${wl.acc >= test.acc ? "+" : "−"}${Math.abs((wl.acc - test.acc) * 100).toFixed(1)} points), <b>${usd(wl.cost)}</b> of mistakes per 100 requests, <b>${dc >= 0 ? "+" : "−"}${Math.abs(dc * 100).toFixed(0)}%</b>.`;
+      out("fixRow").textContent = "Recheck the mix on a schedule and after every routing change, and reweight the test set to it: its pass rate for each kind of request, under this week's shares, gives this week's numbers without running anything.";
+
+      // Cost of mistakes per 100 requests, week by week (bars), against the test set's (dashed).
+      // On a phone the dashed line's label moves to a key above the bars, so the bars get the full width.
+      const W = chart.clientWidth || 600, narrow = W < 520, H = narrow ? 172 : 150, L = 16, PW = narrow ? W - L : W - 175,
+        top = Math.max(...ws.map((w) => w.cost), test.cost) * 1.15;
+      const bw = Math.min(70, (PW - L) / ws.length - (narrow ? 14 : 24)), Y = (v) => H - 30 - (v / top) * (H - 50);
+      let g = `<line class="axis" x1="${L}" x2="${PW}" y1="${H - 30}" y2="${H - 30}"/>`;
+      ws.forEach((w, i) => {
+        const x = L + (narrow ? 7 : 12) + i * ((PW - L) / ws.length);
+        g += `<rect class="${i === 0 ? "now" : "bar"}" x="${x}" y="${Y(w.cost)}" width="${bw}" height="${H - 30 - Y(w.cost)}" rx="4"/>`
+          + `<text class="val" x="${x + bw / 2}" y="${Y(w.cost) - 6}" text-anchor="middle">${usd(w.cost)}</text>`
+          + `<text class="lab" x="${x + bw / 2}" y="${H - 12}" text-anchor="middle">Week ${i}</text>`;
+      });
+      g += narrow
+        ? `<line class="test" x1="${L}" x2="${PW}" y1="${Y(test.cost)}" y2="${Y(test.cost)}"/><line class="test" x1="${L}" x2="${L + 22}" y1="10" y2="10"/><text class="lab test-lab" x="${L + 30}" y="14">what your test set says</text>`
+        : `<line class="test" x1="${L}" x2="${PW + 8}" y1="${Y(test.cost)}" y2="${Y(test.cost)}"/><text class="lab test-lab" x="${PW + 14}" y="${Y(test.cost) + 4}">what your test set says</text>`;
+      chart.setAttribute("viewBox", `0 0 ${W} ${H}`); chart.setAttribute("height", String(H));
+      chart.innerHTML = g;
+    };
+
+    root.querySelectorAll("input").forEach((el) => el.addEventListener("input", draw));
+    let lastW = 0;
+    new ResizeObserver(() => { if (root.clientWidth !== lastW) { lastW = root.clientWidth; draw(); } }).observe(root);
+    draw();
+  }
+})();
+</script>

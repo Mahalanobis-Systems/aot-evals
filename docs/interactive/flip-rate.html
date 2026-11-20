@@ -1,0 +1,201 @@
+<!-- Problem 10, "Compare case by case" (docs/problems.md). The same change in the pass rate is a clear win
+     or noise depending on how many cases flipped, so counting flips (a paired comparison) changes the
+     confidence interval on the change. The presets are problem 10's examples (10 fixed and none broken;
+     30 fixed and 20 broken) and problem 11's (4 fixed, 4 broken on 50 cases).
+
+     On the paired outcome (b breaks: pass → fail, c fixes: fail → pass):
+       Δ = (c − b)/N, d = (b + c)/N, so c = N(d + Δ)/2 and b = N(d − Δ)/2
+       with flip rate (paired) 95% interval: Δ ± 1.96 · √((d − Δ²)/N)    (each case moves −1, 0 or +1)
+       without (unpaired):                   Δ ± 1.96 · √(p(1−p)/N + p′(1−p′)/N)
+       McNemar mid-p: 2 · [P(X < k) + ½ P(X = k)], X ~ Binomial(b + c, ½), k = min(b, c)
+       each run's own pass rate: the Wilson interval
+     Constraints: |Δ| ≤ d; fixes come from cases the baseline failed (c ≤ N(1 − p)) and breaks from cases
+     it passed (b ≤ Np); d is held inside them as the other sliders move. -->
+<div class="fr" data-fliprate>
+  <div class="fr__compare">
+    <p class="fr__q">Your eval says <b data-out="claim"></b>. How sure can you be?</p>
+    <svg class="fr__ci" data-ci role="img" aria-label="95% intervals on the change, without and with the flip rate"></svg>
+    <div class="fr__rows">
+      <p class="fr__row fr__row--without"><span class="fr__tag">Without flip rate</span><span data-out="without"></span></p>
+      <p class="fr__row fr__row--with"><span class="fr__tag">With flip rate</span><span data-out="with"></span></p>
+    </div>
+    <p class="fr__note muted" data-out="note"></p>
+  </div>
+
+  <div class="fr__controls">
+    <label class="fr__primary"><span>Change in pass rate <b data-out="delta"></b></span><input type="range" name="delta" min="-20" max="20" step="0.5" value="4"></label>
+    <label><span>Flip rate <b data-out="d"></b></span><input type="range" name="d" min="0" max="40" step="0.5" value="4">
+      <small>Share of test cases whose verdict changed, either way</small></label>
+    <details class="fr__suite">
+      <summary>Test suite <span data-out="suite"></span></summary>
+      <label><span>Test cases <b data-out="n"></b></span><input type="range" name="n" min="20" max="1000" step="10" value="250"></label>
+      <label><span>Pass rate before <b data-out="p"></b></span><input type="range" name="p" min="50" max="98" step="1" value="70"></label>
+    </details>
+    <p class="fr__presets">Try:
+      <button type="button" data-preset="250,70,4,4">10 fixes, 0 breaks</button>
+      <button type="button" data-preset="200,70,5,25">30 fixes, 20 breaks</button>
+      <button type="button" data-preset="50,70,0,16">4 fixes, 4 breaks</button>
+    </p>
+  </div>
+
+  <figure class="fr__grid" aria-label="One column per test case: the baseline's verdict above the changed agent's">
+    <figcaption class="fr__legend">
+      <b>Each test case, before and after the change</b>
+      <span><i class="k k--pass"></i>pass</span><span><i class="k k--fail"></i>fail</span>
+      <span><i class="k k--gain"></i>fixed</span><span><i class="k k--loss">×</i>broken</span>
+    </figcaption>
+    <svg data-grid role="img"></svg>
+    <dl class="fr__stats">
+      <div><dt>Fixed / broken</dt><dd data-out="flips"></dd></div>
+      <div><dt>Score, before → after (95%)</dt><dd data-out="scores"></dd></div>
+      <div><dt>McNemar mid-p</dt><dd data-out="midp"></dd></div>
+    </dl>
+  </figure>
+</div>
+<script>
+(() => {
+  const Z = 1.96;
+  const pts = (x) => `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(1)}`;
+  const pct = (x) => `${(x * 100).toFixed(1)}%`;
+  const wilson = (k, n) => {
+    const ph = k / n, z2 = Z * Z, den = 1 + z2 / n;
+    const mid = (ph + z2 / (2 * n)) / den, half = (Z * Math.sqrt((ph * (1 - ph)) / n + z2 / (4 * n * n))) / den;
+    return [mid - half, mid + half];
+  };
+  const lchoose = (n, k) => { let s = 0; for (let i = 1; i <= k; i++) s += Math.log((n - k + i) / i); return s; };
+  const midP = (b, c) => {
+    const n = b + c, k = Math.min(b, c);
+    if (!n) return 1;
+    let below = 0;
+    for (let i = 0; i < k; i++) below += Math.exp(lchoose(n, i) - n * Math.LN2);
+    return Math.min(1, 2 * (below + 0.5 * Math.exp(lchoose(n, k) - n * Math.LN2)));
+  };
+  // A fixed shuffle per N, so cases keep their places as the sliders move.
+  const order = (n) => {
+    let s = 2654435761 ^ n; const r = () => ((s = (s * 1103515245 + 12345) >>> 0) / 4294967296);
+    const a = Array.from({ length: n }, (_, i) => i);
+    for (let i = n - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  };
+  const verdict = (lo, hi) => (lo > 0 ? "a real gain" : hi < 0 ? "a real loss" : "can't tell it from no change");
+
+  for (const root of document.querySelectorAll("[data-fliprate]")) {
+    const input = (name) => root.querySelector(`input[name="${name}"]`);
+    const out = (name) => root.querySelector(`[data-out="${name}"]`);
+    const grid = root.querySelector("[data-grid]");
+    const ciSvg = root.querySelector("[data-ci]");
+
+    const draw = () => {
+      const n = +input("n").value, p = +input("p").value / 100, delta = +input("delta").value / 100;
+      let d = +input("d").value / 100;
+      const pass = Math.round(n * p), fail = n - pass;
+      const dMin = Math.abs(delta), dMax = Math.min(2 * fail / n - delta, 2 * pass / n + delta);
+      let note = "";
+      if (dMax < dMin) note = `A ${pts(delta)}-point change can't happen from a ${pct(p)} pass rate.`;
+      if (d < dMin) { d = dMin; note ||= `At least ${pct(d)} of cases have to flip for a ${pts(delta)}-point change.`; }
+      if (d > dMax && dMax >= dMin) { d = dMax; note ||= `With ${fail} failing and ${pass} passing cases, the flip rate tops out at ${pct(d)}.`; }
+      input("d").value = String(Math.round(d * 200) / 2);
+      let c = Math.round((n * (d + delta)) / 2), b = Math.round((n * (d - delta)) / 2);
+      c = Math.max(0, Math.min(c, fail)); b = Math.max(0, Math.min(b, pass));
+      const dHat = (b + c) / n, dlt = (c - b) / n, p2 = (pass - b + c) / n;
+
+      out("n").textContent = String(n); out("p").textContent = pct(p);
+      out("suite").textContent = `${n} cases · ${Math.round(p * 100)}% pass before`;
+      out("delta").textContent = `${pts(delta)} points`; out("d").textContent = pct(dHat);
+      out("claim").textContent = `${pts(dlt)} points`;
+
+      // The two intervals.
+      const hW = Math.sqrt((p * (1 - p)) / n + (p2 * (1 - p2)) / n) * Z;
+      const hP = Math.sqrt(Math.max(0, dHat - dlt * dlt) / n) * Z;
+      out("without").innerHTML = `Comparing the two scores: <b>${pts(dlt)} ± ${(hW * 100).toFixed(1)} points</b>, ${verdict(dlt - hW, dlt + hW)}.`;
+      out("with").innerHTML = `Counting the ${b + c} cases that flipped: <b>${pts(dlt)} ± ${(hP * 100).toFixed(1)} points</b>, ${verdict(dlt - hP, dlt + hP)}.`;
+      root.querySelector(".fr__row--with").className = `fr__row fr__row--with ${dlt - hP > 0 ? "is-gain" : dlt + hP < 0 ? "is-loss" : ""}`;
+      out("note").textContent = note;
+
+      const CW = ciSvg.clientWidth || 560, M = 16;
+      const range = Math.max(0.1, Math.ceil((Math.abs(dlt) + Math.max(hW, hP)) * 20) / 20);
+      const X = (v) => M + ((v + range) / (2 * range)) * (CW - 2 * M);
+      const bar = (y, h, cls) =>
+        `<rect class="${cls} band" x="${X(dlt - h)}" y="${y - 9}" width="${Math.max(2, X(dlt + h) - X(dlt - h))}" height="18" rx="9"/>`
+        + `<line class="${cls}" x1="${X(dlt - h)}" x2="${X(dlt + h)}" y1="${y}" y2="${y}"/><circle class="${cls}" cx="${X(dlt)}" cy="${y}" r="5"/>`;
+      let ticks = "";
+      const step = range > 0.15 ? 0.1 : 0.05;
+      for (let t = -Math.floor(range / step) * step; t <= range + 1e-9; t += step) ticks += `<text class="lab" x="${X(t)}" y="96" text-anchor="middle">${Math.abs(t) < 1e-9 ? "0" : pts(t)}</text>`;
+      ciSvg.setAttribute("viewBox", `0 0 ${CW} 104`); ciSvg.setAttribute("height", "104");
+      ciSvg.innerHTML = `<line class="axis" x1="${M}" x2="${CW - M}" y1="78" y2="78"/><line class="zero" x1="${X(0)}" x2="${X(0)}" y1="6" y2="80"/>`
+        + ticks + bar(24, hW, "without") + bar(56, hP, "with");
+
+      // The cases: passes first in a fixed shuffle; breaks among the passes, fixes among the failures.
+      const ord = order(n), base = new Array(n), cand = new Array(n);
+      ord.forEach((ci, i) => { base[ci] = i < pass; });
+      let lost = 0, won = 0;
+      for (const ci of ord) {
+        if (base[ci] && lost < b && ci % 2 === 0) { cand[ci] = "loss"; lost++; }
+        else if (!base[ci] && won < c && ci % 2 === 0) { cand[ci] = "gain"; won++; }
+      }
+      for (const ci of ord) {
+        if (cand[ci]) continue;
+        if (base[ci] && lost < b) { cand[ci] = "loss"; lost++; }
+        else if (!base[ci] && won < c) { cand[ci] = "gain"; won++; }
+        else cand[ci] = base[ci] ? "pass" : "fail";
+      }
+      const W = grid.clientWidth || 900, L = 26, gap = 3;
+      // Beside the sliders, the cases fill the card down to its bottom (the sliders' card sets the
+      // height); stacked on a phone, only the width counts. Largest cell wins; a band count that fills
+      // the last band exactly breaks a tie.
+      const fig = grid.closest("figure"), controls = root.querySelector(".fr__controls");
+      const beside = fig.offsetTop === controls.offsetTop;
+      const over = 48 + 3 + fig.querySelector(".fr__legend").offsetHeight + 14 + fig.querySelector(".fr__stats").offsetHeight + 16;
+      const H = beside ? controls.offsetHeight - over : Infinity;
+      const best = (exactOnly) => {
+        let per = n, cl = 0;
+        for (let k = 1; k <= 24; k++) {
+          const pr = Math.ceil(n / k);
+          if (exactOnly && n % pr) continue;
+          const cc = Math.min(26, Math.floor((W - L) / pr) - gap, Math.floor((H / k - 10 - 2 * gap) / 2));
+          if (cc > cl) { cl = cc; per = pr; }
+        }
+        return [per, cl];
+      };
+      let [perRow, cell] = best(false);
+      const [ep, ec] = best(true);
+      if (ec >= cell - 2 && ec >= 8) { perRow = ep; cell = ec; } // full bands, if it costs at most 2px a cell
+      if (!beside) { // a phone: as few bands as keep a cell readable
+        for (let k = 1; k <= 24; k++) { const per = Math.ceil(n / k), cc = Math.min(22, Math.floor((W - L) / per) - gap); if (cc >= 11) { perRow = per; cell = cc; break; } }
+      }
+      cell = Math.max(cell, 5);
+      const bands = Math.ceil(n / perRow);
+      // Spread the columns to the card's right edge and, beside the sliders, the bands to its bottom.
+      const gx = perRow > 1 ? Math.min(cell * 0.7, Math.max(gap, (W - L - perRow * cell) / (perRow - 1))) : gap;
+      const pair = cell * 2 + gap;
+      const bg = beside && bands > 1 ? Math.min(48, Math.max(10, (H - bands * pair) / (bands - 1))) : 14;
+      const totalH = bands * pair + (bands - 1) * bg;
+      grid.setAttribute("viewBox", `0 0 ${W} ${totalH}`); grid.setAttribute("height", String(totalH));
+      let s = "";
+      for (let i = 0; i < n; i++) {
+        const band = Math.floor(i / perRow), col = i % perRow, x = L + col * (cell + gx);
+        const by = band * (pair + bg), cy = by + cell + gap, k = cand[i];
+        s += `<rect class="${base[i] ? "pass" : "fail"}" x="${x}" y="${by}" width="${cell}" height="${cell}" rx="1.5"/>`;
+        s += `<rect class="${k}" x="${x}" y="${cy}" width="${cell}" height="${cell}" rx="1.5"/>`;
+        if (k === "loss") s += `<path class="x" d="M${x + cell * .28} ${cy + cell * .28}L${x + cell * .72} ${cy + cell * .72}M${x + cell * .72} ${cy + cell * .28}L${x + cell * .28} ${cy + cell * .72}"/>`;
+        if (col === 0) s += `<text class="lab" x="0" y="${by + cell / 2 + 4}">θ</text><text class="lab" x="0" y="${cy + cell / 2 + 4}">θ′</text>`;
+      }
+      grid.innerHTML = s;
+
+      const [bl, bh] = wilson(pass, n), [cl, chh] = wilson(pass - b + c, n), mp = midP(b, c);
+      out("flips").textContent = `${c} fixed, ${b} broken · flip rate ${pct(dHat)}`;
+      out("scores").textContent = `${pct(pass / n)} (${pct(bl)}–${pct(bh)}) → ${pct(p2)} (${pct(cl)}–${pct(chh)})`;
+      out("midp").textContent = mp < 0.001 ? "below 0.001" : mp.toFixed(mp < 0.01 ? 4 : 3);
+    };
+
+    root.querySelectorAll("input").forEach((el) => el.addEventListener("input", draw));
+    root.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => {
+      const [n, p, delta, d] = b.dataset.preset.split(",");
+      input("n").value = n; input("p").value = p; input("delta").value = delta; input("d").value = d; draw();
+    }));
+    let lastW = 0;
+    new ResizeObserver(() => { if (root.clientWidth !== lastW) { lastW = root.clientWidth; draw(); } }).observe(root);
+    draw();
+  }
+})();
+</script>

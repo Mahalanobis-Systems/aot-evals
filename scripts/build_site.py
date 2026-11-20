@@ -17,11 +17,17 @@ Writes two files, which the release workflow attaches to each GitHub release and
        "spec_fields": [...], "report_keys": [...], "gates": [...], "judge_backends": [...],
        "docs": {"estimators": {...}, "problems": {...}, "statistics": {...}}, "terms": [...],
        "rules": [...], "example": {...}, "practices": {...}, "benchmarks": {...}, "situations": [...],
-       "templates": [...], "plugin": {...}, "download": {...}}
+       "templates": [...], "plugin": {...}, "download": {...}, "interactive": {...}}
+
+  `interactive` carries the interactive problems (docs/interactive/): the shared stylesheet, and for
+  each problem its page's title, lead and address on the site, and its widget as an HTML fragment
+  (markup, then one script) for the site to place on that page.
 
   Relative links in the Markdown become absolute links to the release tag on GitHub, so text read
   on the site still points somewhere real. Keys may be added within a schema version, never
   removed or renamed.
+- `interactive/`: each interactive problem as a page of its own, with an index, to open in a
+  browser and check before a release. The release doesn't attach them.
 - `aot-evals-method-<version>.zip`: the method, the guiding documents, the store example,
   references and templates as plain files, to read or hand to any coding agent without installing
   the plugin. The same version always builds the same bytes.
@@ -64,6 +70,7 @@ EXAMPLE_FILES = [
     "evals/agents/store/refund-subagent/checks/code/amount-matches.py",
     "evals/agents/store/labels/standard.md",
 ]
+INTERACTIVE = ROOT / "docs" / "interactive"
 TEMPLATES = ROOT / "templates"
 SKILLS = ROOT / "skills"
 SCHEMA = "aot-evals/site@2"
@@ -416,7 +423,59 @@ def build(today: str) -> dict:
                       for f in sorted(TEMPLATES.rglob("*")) if f.is_file()],
         "plugin": plugin(),
         "download": {"zip": zip_name, "url": f"https://github.com/{REPO}/releases/download/{tag}/{zip_name}"},
+        "interactive": interactive(),
     }
+
+
+def interactive() -> dict:
+    """docs/interactive/: the manifest (widgets.json), one fragment per problem and the shared
+    stylesheet. Every problem in problems.md has exactly one widget."""
+    manifest = json.loads((INTERACTIVE / "widgets.json").read_text())
+    site = manifest["site"]
+    widgets = []
+    for w in manifest["widgets"]:
+        html = (INTERACTIVE / f"{w['slug']}.html").read_text()
+        widgets.append({**w, "url": f"{site}{w['slug']}/", "html": html})
+    numbers = sorted(w["problem"] for w in widgets)
+    if numbers != list(range(1, len(widgets) + 1)):
+        raise ValueError(f"docs/interactive/widgets.json: problems must be 1..N once each, found {numbers}")
+    return {"site": site, "css": (INTERACTIVE / "widgets.css").read_text(), "widgets": widgets}
+
+
+PREVIEW = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Roboto:wght@400;500&display=swap">
+<style>
+body {{ margin: 0; background: #F9FAF9; color: #3F4541; font: 16px/1.5 "Roboto", system-ui, sans-serif; }}
+main {{ max-width: 1200px; margin: 0 auto; padding: 32px 16px 64px; }}
+h1 {{ margin: 4px 0 12px; font: 700 34px/1.15 "Montserrat", system-ui, sans-serif; color: #225734; }}
+.eyebrow {{ margin: 0; font: 700 12px/1.3 "Montserrat", system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: #6f9a2a; }}
+.lead {{ max-width: 52em; font-size: 18px; }}
+a {{ color: #225734; }}
+{css}
+</style></head>
+<body><main>
+{body}
+</main></body></html>
+"""
+
+
+def write_previews(out: Path, doc: dict) -> None:
+    """dist/interactive/: each widget on a page of its own, and an index of them."""
+    d = out / "interactive"
+    d.mkdir(parents=True, exist_ok=True)
+    css = doc["interactive"]["css"]
+    items = []
+    for w in doc["interactive"]["widgets"]:
+        body = (f'<p class="eyebrow">Problem {w["problem"]}</p>\n<h1>{w["title"]}</h1>\n'
+                f'<p class="lead">{w["lead"]}</p>\n{w["html"]}\n'
+                f'<p><a href="index.html">All problems</a></p>')
+        (d / f"{w['slug']}.html").write_text(PREVIEW.format(title=w["title"], css=css, body=body))
+        items.append(f'<li><a href="{w["slug"]}.html">{w["problem"]}. {w["title"]}</a></li>')
+    (d / "index.html").write_text(PREVIEW.format(
+        title="Interactive problems", css="",
+        body='<h1>Interactive problems</h1>\n<ol style="list-style:none;padding:0">' + "".join(items) + "</ol>"))
 
 
 def main(argv: list[str]) -> int:
@@ -429,7 +488,8 @@ def main(argv: list[str]) -> int:
     doc = build(args.today)
     (out / "evals.json").write_text(json.dumps(doc, indent=2, ensure_ascii=False, allow_nan=False) + "\n")
     write_zip(out / doc["download"]["zip"], doc["version"])
-    print(f"wrote {out / 'evals.json'} and {out / doc['download']['zip']}")
+    write_previews(out, doc)
+    print(f"wrote {out / 'evals.json'}, {out / doc['download']['zip']} and {out / 'interactive'}/")
     return 0
 
 
