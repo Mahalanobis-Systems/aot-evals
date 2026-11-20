@@ -1,0 +1,129 @@
+<!-- Problem 1, "Decide which mistakes matter" (docs/problems.md). A day of the store's 1,000 requests,
+     in a box per kind of request. A change makes refunds go wrong more often (a slider, from 5%); the answer
+     is what that does to the plain pass rate (every request counts the same), to the weighted score (each
+     kind weighted by share × what one mistake costs) and to the dollar cost of the day's mistakes.
+
+       pass rate      = Σ passes / N
+       weighted score = Σ w_k · pass rate_k,  w_k = n_k · cost_k / Σ n_j · cost_j
+       cost           = Σ failures_k · cost_k,  so 1 − weighted score = cost / Σ n_k · cost_k
+
+     data-config holds the store from problems.md (tests/test_interactive.py checks it): requests a day,
+     what one mistake costs, and how many of each kind pass before the change. At the defaults the pass
+     rate moves 91.0% → 90.8% and the weighted score 2.3 points, as problem 1 says. -->
+<div class="mc" data-mistakecost data-config='{"kinds": [
+  {"id": "status", "label": "Where&apos;s my order?", "n": 700, "cost": 1, "pass": 644},
+  {"id": "return", "label": "Start a return", "n": 200, "cost": 5, "pass": 175},
+  {"id": "address", "label": "Change my address", "n": 80, "cost": 20, "pass": 72},
+  {"id": "refund", "label": "Refund me", "n": 20, "cost": 50, "pass": 19}]}'>
+  <div class="mc__compare">
+    <p class="fr__q">A change to the refund subagent makes refunds go wrong more often. <span data-out="headline"></span></p>
+    <p class="mc__story-h">But the story doesn't end here.</p>
+    <p class="mc__story" data-out="story"></p>
+    <svg class="mc__drop" data-drop role="img" aria-label="How far the pass rate and the weighted score fall"></svg>
+    <div class="fr__rows">
+      <p class="fr__row fr__row--without"><span class="fr__tag">Pass rate</span><span data-out="acc"></span></p>
+      <p class="fr__row fr__row--with"><span class="fr__tag">Weighted score</span><span data-out="obj"></span></p>
+      <p class="fr__row mc__row--cost"><span class="fr__tag">Cost of mistakes</span><span data-out="cost"></span></p>
+    </div>
+  </div>
+
+  <div class="fr__controls mc__controls">
+    <div class="mc__scores">
+      <div><span>Pass rate</span><b data-out="accNow"></b><small data-out="accWas"></small></div>
+      <div><span>Weighted score</span><b data-out="objNow"></b><small data-out="objWas"></small></div>
+    </div>
+    <fieldset class="mc__costs" data-costs>
+      <legend>What one mistake costs</legend>
+    </fieldset>
+    <label class="fr__primary"><span>Refunds that go wrong after the change <b data-out="redPct"></b></span><input type="range" name="red" min="5" max="60" step="5" value="15">
+      <small>5% before the change</small></label>
+  </div>
+
+  <figure class="fr__grid mc__grid" aria-label="A day's requests, in a box per kind of request">
+    <figcaption class="fr__legend">
+      <b><span data-out="total"></span> requests a day, by kind</b>
+      <span><i class="k k--pass"></i>pass</span><span><i class="k k--fail"></i>fail</span><span><i class="k k--loss">×</i>broken by the change</span>
+    </figcaption>
+    <div class="mc__boxes" data-boxes></div>
+  </figure>
+</div>
+<script>
+(() => {
+  const pct = (x) => `${(x * 100).toFixed(1)}%`;
+  const pts = (x) => `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(1)}`;
+  const usd = (x) => `$${Math.round(x).toLocaleString("en-US")}`;
+
+  for (const root of document.querySelectorAll("[data-mistakecost]")) {
+    const kinds = JSON.parse(root.dataset.config).kinds;
+    const input = (name) => root.querySelector(`input[name="${name}"]`);
+    const out = (name) => root.querySelector(`[data-out="${name}"]`);
+    const boxes = root.querySelector("[data-boxes]");
+    const drop = root.querySelector("[data-drop]");
+    const N = kinds.reduce((s, c) => s + c.n, 0);
+    const refund = kinds.find((c) => c.id === "refund");
+
+    // What one mistake costs, refunds first; the boxes, built once (draw() only sets each request's state).
+    root.querySelector("[data-costs]").insertAdjacentHTML("beforeend", [refund, ...kinds.filter((c) => c !== refund)].map((c) =>
+      `<label class="${c === refund ? "mc__cost--focus" : ""}"><span>${c.label}</span><span class="mc__usd">$<input type="number" name="cost-${c.id}" min="0" max="10000" step="1" value="${c.cost}"></span></label>`).join(""));
+    boxes.innerHTML = kinds.map((c) => {
+      const small = c.n > 100, cols = c.n <= 4 ? "2" : small ? "auto-fill" : String(Math.ceil(Math.sqrt(c.n * 1.6)));
+      return `<section class="mc__box${c === refund ? " mc__box--focus" : ""}" data-cat="${c.id}">
+        <h4>${c.label}</h4><p class="mc__meta" data-meta></p>
+        <div class="mc__cells${small ? " mc__cells--small" : ""}" style="--cols:${cols}">${"<i></i>".repeat(c.n)}</div></section>`;
+    }).join("");
+
+    const draw = () => {
+      const broken = +input("red").value / 100;
+      const cost = (c) => Math.max(0, +input(`cost-${c.id}`).value || 0);
+      const rows = kinds.map((c) => ({ c, before: c.pass, after: c === refund ? Math.min(c.pass, Math.round(c.n * (1 - broken))) : c.pass, cost: cost(c) }));
+      const atRisk = rows.reduce((s, r) => s + r.c.n * r.cost, 0) || 1;
+      const acc = (k) => rows.reduce((s, r) => s + r[k], 0) / N;
+      const obj = (k) => rows.reduce((s, r) => s + (r.c.n * r.cost / atRisk) * (r[k] / r.c.n), 0);
+      const bill = (k) => rows.reduce((s, r) => s + (r.c.n - r[k]) * r.cost, 0);
+      const a0 = acc("before"), a1 = acc("after"), o0 = obj("before"), o1 = obj("after");
+
+      const accDrop = a0 - a1;
+      out("headline").textContent = accDrop < 0.0005 ? "The pass rate doesn't move." : `The pass rate drops ${(accDrop * 100).toFixed(1)} points.`;
+      const ref = rows.find((r) => r.c === refund), wRef = ref.c.n * ref.cost / atRisk;
+      const others = rows.filter((r) => r !== ref).map((r) => r.cost), lowC = Math.min(...others), highC = Math.max(...others);
+      out("story").innerHTML = `Refunds go wrong more often: ${ref.before} of the day's ${ref.c.n} refunds were handled right before, ${ref.after} now. `
+        + `Refunds are only ${((ref.c.n / N) * 100).toFixed(0)}% of requests, so the pass rate barely moves. `
+        + `But a bad refund costs ${usd(ref.cost)}, against ${usd(lowC)} to ${usd(highC)} for any other mistake here. `
+        + `Weight each kind of request by its share × what one mistake costs, and refunds carry <b>${(wRef * 100).toFixed(0)}% of the score</b>. The same change moves it ${((o0 - o1) * 100).toFixed(1)} points.`;
+      out("total").textContent = N.toLocaleString("en-US"); out("redPct").textContent = `${Math.round(broken * 100)}%`;
+      out("accNow").textContent = pct(a1); out("accWas").textContent = `was ${pct(a0)}`;
+      out("objNow").textContent = (o1 * 100).toFixed(1); out("objWas").textContent = `was ${(o0 * 100).toFixed(1)}`;
+      out("acc").innerHTML = `Every request counts the same: <b>${pct(a0)} → ${pct(a1)}</b>, ${pts(a1 - a0)} points.`;
+      out("obj").innerHTML = `Weighted by share × what a mistake costs: <b>${(o0 * 100).toFixed(1)} → ${(o1 * 100).toFixed(1)}</b>, ${pts(o1 - o0)} points.`;
+      out("cost").innerHTML = `A day's mistakes: ${usd(bill("before"))} → ${usd(bill("after"))}.`;
+
+      // How far each falls, on one axis.
+      const W = drop.clientWidth || 600, M = 16, fall = [a0 - a1, o0 - o1], top = Math.max(0.05, Math.ceil(Math.max(...fall) * 1.25 * 20) / 20);
+      const X = (v) => M + (v / top) * (W - 2 * M);
+      let ticks = "";
+      const step = top > 0.2 ? 0.05 : top > 0.1 ? 0.02 : 0.01;
+      for (let t = 0; t <= top + 1e-9; t += step) ticks += `<text class="lab" x="${X(t)}" y="96" text-anchor="middle">${t ? `−${(t * 100).toFixed(0)}` : "0"}</text>`;
+      drop.setAttribute("viewBox", `0 0 ${W} 104`); drop.setAttribute("height", "104");
+      drop.innerHTML = `<line class="axis" x1="${M}" x2="${W - M}" y1="78" y2="78"/>${ticks}`
+        + `<rect class="without" x="${M}" y="14" width="${Math.max(2, X(fall[0]) - M)}" height="18" rx="9"/>`
+        + `<text class="lab" x="${Math.max(2, X(fall[0]) - M) + M + 8}" y="27">pass rate ${pts(-fall[0])}</text>`
+        + `<rect class="with" x="${M}" y="46" width="${Math.max(2, X(fall[1]) - M)}" height="18" rx="9"/>`
+        + (X(fall[1]) + 150 < W
+          ? `<text class="lab" x="${X(fall[1]) + 8}" y="59">weighted score ${pts(-fall[1])}</text>`
+          : `<text class="lab lab--in" x="${X(fall[1]) - 10}" y="59" text-anchor="end">weighted score ${pts(-fall[1])}</text>`);   // no room after the bar: inside it
+
+      // Each box: its requests, and its share of requests against its share of the score.
+      for (const r of rows) {
+        const box = boxes.querySelector(`[data-cat="${r.c.id}"]`);
+        box.querySelector("[data-meta]").innerHTML = `${usd(r.cost)} a mistake · <b>${((r.c.n / N) * 100).toFixed(0)}%</b> of requests, <b class="mc__w">${((r.c.n * r.cost / atRisk) * 100).toFixed(0)}%</b> of the score`;
+        box.querySelectorAll("i").forEach((cell, i) => { cell.className = i < r.after ? "pass" : i < r.before ? "loss" : "fail"; });
+      }
+    };
+
+    root.querySelectorAll("input").forEach((el) => el.addEventListener("input", draw));
+    let lastW = 0;
+    new ResizeObserver(() => { if (root.clientWidth !== lastW) { lastW = root.clientWidth; draw(); } }).observe(root);
+    draw();
+  }
+})();
+</script>

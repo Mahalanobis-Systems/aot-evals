@@ -1,0 +1,101 @@
+{
+  "site": "https://mahalsystems.ai/aot/evals/",
+  "widgets": [
+    {
+      "problem": 1,
+      "slug": "mistake-costs",
+      "title": "Don't be accurate. Define your objective instead.",
+      "label": "The problem with accuracy measures",
+      "description": "A rare, expensive mistake barely moves a pass rate. Weight the score by what each mistake costs.",
+      "lead": "A pass rate counts every request the same, so a rare request whose mistakes are expensive gets lost in it. Say what each kind of mistake costs, and weight the score by each kind's share of traffic times that cost."
+    },
+    {
+      "problem": 2,
+      "slug": "production-mix",
+      "title": "Sample your tests from production",
+      "label": "Production test case sampling",
+      "description": "A subagent's hand-written cases can miss what production sends it. Draw them from production, and hold the whole agent to the change too.",
+      "lead": "A subagent's test cases need to be drawn from the requests it actually receives in production. In this example the refund team wrote its cases by hand, and every one has an order number, while one refund request in five reaches the subagent without one. A new prompt that declines those requests looks better on the subagent's eval and worse end to end."
+    },
+    {
+      "problem": 3,
+      "slug": "usage-shift",
+      "title": "Make sure your test cases track actual usage",
+      "label": "Tracking usage changes over time",
+      "description": "Your agent's traffic changes, and the score has to be recomputed under the new mix.",
+      "lead": "Your agent's traffic changes over time, and a test set drawn once describes the traffic you had then. In this example, returns grow from a fifth of all requests to half after the holidays. The agent hasn't changed, and neither has what its test set says, but what customers get has. Recheck the mix on a schedule and reweight the score to it."
+    },
+    {
+      "problem": 4,
+      "slug": "stratified",
+      "title": "Normalize your test cases to your actual traffic",
+      "label": "Normalizing test cases to actual traffic",
+      "description": "Draw rare kinds of request more often than their share, then weight each kind back to its share of traffic.",
+      "lead": "The quality set is drawn at random from real requests, and it doesn't have to match your traffic: draw the rare kinds more often than their share, so each has enough cases to say something. Then weight each kind back to its share of traffic when you compute the score. Hand-picked hard cases belong in the bug-finding set, never in this number."
+    },
+    {
+      "problem": 5,
+      "slug": "clusters",
+      "title": "Sometimes your test cases are far from being independent",
+      "label": "Dependence between test cases",
+      "description": "Test cases generated from one template aren't independent. Count the templates.",
+      "lead": "Many test cases are generated from a template: one template, filled in many ways, covers the different forms an input can take. But the cases from one template share their inputs and tend to pass or fail together, so the evidence you have depends on how many templates you used, not on how many cases you ran."
+    },
+    {
+      "problem": 6,
+      "slug": "judge-calibration",
+      "title": "Calibrate your judges against humans",
+      "label": "Judge calibration against humans",
+      "description": "Measure your judge against people's labels by what it catches and what it wrongly flags, and correct the failure rate it reports.",
+      "lead": "An AI judge fails some good runs and passes some bad ones, so the failure rate it reports isn't your agent's. Have people label a sample of runs and put the judge's verdicts against theirs in a 2×2 table, with a failure as the positive. Read it down its columns: of the bad runs, the share the judge caught (its catch rate), and of the good runs, the share it passed (its clean pass rate). Then correct its numbers."
+    },
+    {
+      "problem": 7,
+      "slug": "noise-floor",
+      "title": "Establish your noise floors",
+      "label": "Noise floors from human graders",
+      "description": "The eval is held to people's labels, and people disagree, mostly on failures. Their disagreement sets the ceiling on what you can measure.",
+      "lead": "The whole eval is held to a person's labels, so it matters how far people agree with each other. They won't agree on every run, and they agree least on the failures, the runs that matter most. That disagreement sets a ceiling on how well any agent or judge can be shown to do against them."
+    },
+    {
+      "problem": 8,
+      "slug": "reruns",
+      "title": "Account for LLM non-determinism",
+      "label": "LLM non-determinism",
+      "description": "The same agent scores differently every time you run it. Measure that noise before you believe a change.",
+      "lead": "The same agent, run twice on the same test cases, gets a different score each time, because some cases pass only some of the time. Run every case more than once, and measure how much the score moves on its own before you compare anything."
+    },
+    {
+      "problem": 9,
+      "slug": "test-case-size",
+      "title": "Determining test case size requires use-case level reasoning",
+      "label": "Test case sizing by use case",
+      "description": "How many test cases you need depends on the bar each use case has to clear. A clean run is an upper limit on failures, not zero.",
+      "lead": "How many test cases you need depends on the bar each use case has to clear. After n clean cases, the true failure rate could still be as high as about 3 ÷ n. A cheap mistake with a low bar needs a few dozen cases. A business requirement, like 99.9% of shipping addresses correct, needs thousands."
+    },
+    {
+      "problem": 10,
+      "slug": "flip-rate",
+      "title": "Refining confidence intervals by analyzing flips",
+      "label": "Flip analysis for tighter intervals",
+      "description": "How many cases flipped decides whether a change is real: an interactive look at flip rate and paired confidence intervals.",
+      "lead": "Statistical significance isn't just a matter of looking at the change in the score. Your two runs aren't independent: they score the same test cases, and most cases come out the same both times. Counting which cases flipped, and which way, can sharply increase your power to detect a real change."
+    },
+    {
+      "problem": 11,
+      "slug": "growth",
+      "title": "Tighter confidence intervals drive faster growth",
+      "label": "Faster growth from tighter intervals",
+      "description": "An eval that can't see a change isn't evidence the change did nothing. More test cases let it see smaller changes, so more real improvements ship.",
+      "lead": "When an eval can't tell a change from noise, that doesn't mean the change did nothing: the eval couldn't see it. Every change you ship is judged by your eval. With few test cases, the smallest change it can see is large, so good changes get held back. More test cases shrink it, so more real improvements get through and quality climbs faster. The simulation below is deliberately simple; the footnote spells out what it does."
+    },
+    {
+      "problem": 12,
+      "slug": "holdout",
+      "title": "Use holdout sets when needed",
+      "label": "Holdout sets",
+      "description": "An optimization loop that tries many changes and keeps the best-scoring ones overstates its gains. Confirm the result on a holdout set it never saw.",
+      "lead": "Every extra look at the same test cases is another lottery ticket. An optimization loop that tries many changes and keeps the best-scoring ones takes thousands: some of what it keeps only looked good because the noise on your test set favored it, so the test set overstates the gain. Confirm the result on a holdout set the loop never saw, and check it once."
+    }
+  ]
+}

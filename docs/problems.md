@@ -9,9 +9,10 @@ each one makes an eval say something that isn't true.
 Every eval is an estimator with four parts ([estimators.md](estimators.md)): **what number it
 estimates**, **which cases it draws**, **how wrong its grader is**, and **when it acts**. Each
 problem below is what happens when one of those parts is left unstated, so they are grouped by
-part. Each comes with one worked example and no formulas. The box under each one names the methods
-that solve it, the rules in [estimators.md](estimators.md#10-the-rules-in-one-table) it explains, and
-where [statistics.md](statistics.md) derives them. aot-evals does the math. Words like *use case*,
+part. Each comes with one worked example, no formulas, and a link to an interactive version of the
+example. The box under each one names the methods that solve it, the rules in
+[estimators.md](estimators.md#10-the-rules-in-one-table) it explains, and where
+[statistics.md](statistics.md) derives them. aot-evals does the math. Words like *use case*,
 *catch rate* and *clean pass rate* mean what the [terms](estimators.md#terms) say. One picture
 comes back in most of them: the [2×2 table](estimators.md#terms) of what a grader said against what a
 person said, with a failure as the positive.
@@ -57,6 +58,8 @@ moves it 2.3 points.
 (equal is a fine answer, if it's true). Weight the score by it. A kind of request that matters but
 is too rare to move the score, even weighted, gets a decision rule of its own.
 
+**Try it:** [Don't be accurate. Define your objective instead.](https://mahalsystems.ai/aot/evals/mistake-costs/), an interactive version of this example.
+
 > **Under the hood.** A weighted estimand, θ = Σ weight × pass rate, with weights from share × cost,
 > so 1 − θ tracks the expected cost of failures. Decision theory for the cost of each kind of
 > failure. Severity tagged on real failures (did it write, can it be undone, would anyone notice) to
@@ -80,6 +83,8 @@ problem 1, it drops 3.7.
 subagent with its own context when a team changes it separately. Draw the subagent's cases from the
 requests it actually receives in production, not from requests someone imagined. And a change to a
 part ships only when the whole agent is no worse too.
+
+**Try it:** [Sample your tests from production](https://mahalsystems.ai/aot/evals/production-mix/), an interactive version of this example.
 
 > **Under the hood.** One estimand per eval: one unit, one population, one decision (validity as an
 > interpretation for a use). Evals sit at context boundaries, where the input is a defined handoff
@@ -106,6 +111,8 @@ score under the new mix. Re-measure a grader whenever it changes, against a smal
 labeled runs. Watch reruns of the same build for drift. Prune bug-finding cases that never tell
 versions apart, but only when the comparison can still see the same size of change afterward, and
 never prune the randomly drawn cases.
+
+**Try it:** [Make sure your test cases track actual usage](https://mahalsystems.ai/aot/evals/usage-shift/), an interactive version of this example.
 
 > **Under the hood.** Post-stratification reweighting. Control charts for drift, with limits from
 > the variance components. Anchor-set equating across judge versions. The table of which change
@@ -136,6 +143,8 @@ and weight them back down when you compute the score. Check what's covered again
 the help center's topics, the agent's tools, and situations like "not found", "ambiguous" and "not
 allowed".
 
+**Try it:** [Normalize your test cases to your actual traffic](https://mahalsystems.ai/aot/evals/stratified/), an interactive version of this example.
+
 > **Under the hood.** Elicitation vs estimation. Stratified random sampling with inclusion probabilities and the Horvitz–Thompson (Hájek)
 > estimator; optimum allocation (Neyman's, with cost: weight × spread ÷ √cost) around each gated
 > use case's minimum; a beta-posterior interval for small use cases. Quota sampling
@@ -156,6 +165,8 @@ with no real improvement. Counted honestly as 4 templates against 6 losses, it's
 **The fix.** Mark cases that share a source (a template, a trace or a fixture) so they count as one
 piece of evidence. Spread cases across sources. Keep near-copies on the same side: a template in the
 quality set can't also feed the bug-finding set.
+
+**Try it:** [Sometimes your test cases are far from being independent](https://mahalsystems.ai/aot/evals/clusters/), an interactive version of this example.
 
 > **Under the hood.** Design effect 1 + (m − 1)ρ and effective n. Sign flips per cluster (with 5 or fewer clusters, a ±1 sign flip can't reach 5%; Webb's six-point
 > weights help, approximately); the cluster jackknife. Cochran's Q
@@ -204,6 +215,8 @@ each kind. Correct the rates it reports for its known errors. Use code checks wh
 decide. Give each check one question. A judge that agrees with itself, or with another model,
 hasn't shown that it's right.
 
+**Try it:** [Calibrate your judges against humans](https://mahalsystems.ai/aot/evals/judge-calibration/), an interactive version of this example.
+
 > **Under the hood.** Diagnostic-test statistics on the confusion matrix (TP, FP, FN, TN, with a
 > failure as the positive): catch rate and clean pass rate (sensitivity and specificity) down its
 > columns, precision across its rows, raw agreement on its diagonal; Wilson intervals per column, and the Rogan–Gladen correction. Attenuation: a grader with J = catch + clean − 1 shrinks every real change by J, and costs about
@@ -241,6 +254,8 @@ and fix the check or the standard. Measure how well reviewers agree *on failures
 how each disagreement was settled so the standard doesn't drift. Combine the person's labels with
 the eval's verdicts to estimate what a person would say about every run.
 
+**Try it:** [Establish your noise floors](https://mahalsystems.ai/aot/evals/noise-floor/), an interactive version of this example.
+
 > **Under the hood.** The eval's own confusion matrix, catch rate and clean pass rate, with a person as the reference
 > standard: the measurement model the estimate and its power calculations use. ∏ clean pass, and
 > correlated judge errors that break it. The agreement table between people, and agreement that holds up when most runs pass (Gwet's AC1,
@@ -261,6 +276,8 @@ randomness: at 75% per try, a customer who asks three times gets a good answer a
 **The fix.** Run every case at least 3 times, and measure how much the score moves on its own
 before you compare anything. Then spend the next budget wisely: more *cases* usually narrow the
 answer faster than more *runs* of the same cases.
+
+**Try it:** [Account for LLM non-determinism](https://mahalsystems.ai/aot/evals/reruns/), an interactive version of this example.
 
 > **Under the hood.** Generalizability theory: between-case vs within-case variance, ICC, design
 > effect and effective n (a G-study, then a D-study). pass^k for reliability, and the detection
@@ -286,6 +303,8 @@ sometimes fails good runs (its false alarms, problem 6) never returns a clean ru
 **The fix.** Decide first what the eval has to show (that refunds fail less than 1 time in 20, say)
 and let that set the number of cases. Read a clean result as an upper limit, not as zero. A rare,
 costly failure needs many cases, cases written to target it, or a check on every production run.
+
+**Try it:** [Determining test case size requires use-case level reasoning](https://mahalsystems.ai/aot/evals/test-case-size/), an interactive version of this example.
 
 > **Under the hood.** Case counts from the decision rule's power, multiplied by the grader's inflation factor. The zero-failure bound, 1 − 0.05^(1/n) (Hanley and Lippman-Hand's rule of three); detection probability
 > 1 − (1 − p)^n per failure mode; improvement sized by flip rate (N ≈ 7.85·d/Δ²); regression guards
@@ -319,6 +338,8 @@ Do the same with cost. "Cost per request went down" can just mean it gives up so
 **The fix.** Run both versions on the same cases, list what each one fixed and broke, and test the
 difference case by case. A gain that blows the cost budget is a trade, not a win.
 
+**Try it:** [Refining confidence intervals by analyzing flips](https://mahalsystems.ai/aot/evals/flip-rate/), an interactive version of this example.
+
 > **Under the hood.** Paired designs and the paired 2×2 table, whose off-diagonal cells are the flips. The sign-flip permutation test on per-case deltas and its
 > inverted interval; McNemar's mid-p on flips; flip rate d with SE √((d − Δ²)/N). Cost per successful
 > task, medians and p90 with bootstrap intervals, and budgets as constraints in the decision rule.
@@ -337,6 +358,8 @@ points at that rate of churn would take about 500 cases.
 **The fix.** Every comparison should say the smallest difference it could have seen. When the claim
 is "no worse", test that claim directly: the drop has to be shown smaller than a margin you choose
 in advance.
+
+**Try it:** [Tighter confidence intervals drive faster growth](https://mahalsystems.ai/aot/evals/growth/), an interactive version of this example.
 
 > **Under the hood.** Power and minimum detectable effect, before the run and from the observed
 > deltas after it. Non-inferiority (or equivalence) testing with a pre-set margin, the standard
@@ -361,6 +384,8 @@ adds to them.
 **The fix.** Decide how many labels you'll collect before you look. Tune on one set and confirm on
 a held-out set you check once. Before making a new claim, get fresh labels. Adjust for the number of
 things you check before acting on one. Never let the agent see the cases.
+
+**Try it:** [Use holdout sets when needed](https://mahalsystems.ai/aot/evals/holdout/), an interactive version of this example.
 
 > **Under the hood.** The decision table: α is the decision's false positive rate, and power its catch rate. Optional stopping and always-valid sequential intervals; adaptive data
 > analysis, the reusable holdout and the Ladder; overoptimization of proxy graders (Goodhart).

@@ -14,6 +14,13 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
   judge rows (`measurement.failure_modes[].confusion_matrix`) and `agreement.json`'s dev, holdout
   and all splits gain the counts, `{positive: fail, tp, fp, fn, tn}`, and the report draws them.
 
+- **Interactive problems.** Each of the twelve problems in [problems.md](docs/problems.md) has an
+  interactive version of its example, in [docs/interactive/](docs/interactive/README.md), and links
+  to it. They work on the store from problems.md with its numbers (a test keeps them in step), use
+  the glossary's words (problem 6 has a failure as the positive, with a catch rate and a clean pass
+  rate), and `evals.json` carries them under `interactive` for the website. `build_site.py` also
+  writes each one as a page of its own to `dist/interactive/`.
+
 ## 2.0.0 — 2026-11-15
 
 Suites from earlier versions of aot-evals aren't read; `/aot-evals:start` offers to rebuild the evals from one.

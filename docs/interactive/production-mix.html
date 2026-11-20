@@ -1,0 +1,125 @@
+<!-- Problem 2, "A better part isn't a better agent" (docs/problems.md). The refund subagent's cases were
+     written by hand and all have an order number; in production one refund request in five reaches the
+     subagent without one. A new prompt does better with an order number and declines requests without
+     one, so the subagent's eval says it improved while production says otherwise.
+
+     Each refund is resolved or not. Before the change both kinds resolve at the same rate (base). After it,
+     requests with an order number gain `gain` points; without one, they move by `loss` points.
+       subagent eval = rate with an order number         (every case has one)
+       production    = (1 − s) · with + s · without      (s = share without an order number)
+     Counts are whole requests: each box resolves round(n · rate). At the defaults refunds resolved fall
+     from 90% to 74%, as problem 2 says. -->
+<div class="mc pm" data-prodmix data-config='{"eval_cases": 40}'>
+  <div class="mc__compare">
+    <p class="fr__q">The subagent's eval says <b data-out="claim"></b>. What happened in production?</p>
+    <svg class="fr__ci" data-ci role="img" aria-label="Resolved refunds before and after the change, on the subagent's eval and in production"></svg>
+    <div class="fr__rows">
+      <p class="fr__row fr__row--without"><span class="fr__tag">Subagent eval</span><span data-out="evalRow"></span></p>
+      <p class="fr__row fr__row--with"><span class="fr__tag">Production</span><span data-out="prodRow"></span></p>
+      <p class="fr__row mc__row--cost"><span class="fr__tag">What changed</span><span data-out="countRow"></span></p>
+    </div>
+  </div>
+
+  <div class="fr__controls">
+    <label class="fr__primary"><span>Refunds without an order number <b data-out="share"></b></span><input type="range" name="share" min="0" max="60" step="5" value="20">
+      <small>Share of production refund requests that reach the subagent without one</small></label>
+    <label><span>Change with an order number <b data-out="gain"></b></span><input type="range" name="gain" min="-10" max="10" step="0.5" value="2.5"></label>
+    <label><span>Change without an order number <b data-out="loss"></b></span><input type="range" name="loss" min="-90" max="10" step="5" value="-90">
+      <small>The new prompt declines them instead of asking for the number</small></label>
+    <details class="fr__suite">
+      <summary>Production sample <span data-out="suite"></span></summary>
+      <label><span>Production refunds sampled <b data-out="n"></b></span><input type="range" name="n" min="50" max="300" step="10" value="100"></label>
+      <label><span>Resolved before the change <b data-out="base"></b></span><input type="range" name="base" min="60" max="99" step="1" value="90"></label>
+    </details>
+  </div>
+
+  <figure class="fr__grid mc__grid" aria-label="Each refund before and after the change, by where it comes from">
+    <figcaption class="fr__legend">
+      <b>Each refund, before and after the change</b>
+      <span><i class="k k--pass"></i>resolved</span><span><i class="k k--fail"></i>not resolved</span>
+      <span><i class="k k--gain"></i>fixed</span><span><i class="k k--loss">×</i>broken</span>
+    </figcaption>
+    <div class="mc__boxes pm__boxes" data-boxes></div>
+  </figure>
+</div>
+<script>
+(() => {
+  const pct = (x) => `${(x * 100).toFixed(1)}%`;
+  const pts = (x) => `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(1)}`;
+  const clamp = (x) => Math.min(1, Math.max(0, x));
+
+  for (const root of document.querySelectorAll("[data-prodmix]")) {
+    const M = JSON.parse(root.dataset.config).eval_cases;
+    const input = (name) => root.querySelector(`input[name="${name}"]`);
+    const out = (name) => root.querySelector(`[data-out="${name}"]`);
+    const boxes = root.querySelector("[data-boxes]");
+    const ci = root.querySelector("[data-ci]");
+
+    // One box: a column per request, the request before the change over the same request after it.
+    const box = (title, meta, n, before, after, focus = false) => {
+      const cases = Array.from({ length: n }, (_, i) => {
+        const was = i < before, now = i < after;
+        const a = was && now ? "pass" : !was && now ? "gain" : was && !now ? "loss" : "fail";
+        return `<span><i class="${was ? "pass" : "fail"}"></i><i class="${a}"></i></span>`;
+      }).join("");
+      return `<section class="mc__box${focus ? " mc__box--focus" : ""}"><h4>${title}</h4><p class="mc__meta">${meta}</p>
+        <div class="pm__pair"><span class="pm__lab">before<br>after</span><div class="pm__cases">${cases}</div></div></section>`;
+    };
+
+    const draw = () => {
+      const n = +input("n").value, s = +input("share").value / 100, base = +input("base").value / 100;
+      const gain = +input("gain").value / 100, loss = +input("loss").value / 100;
+      const nWithout = Math.round(n * s), nWith = n - nWithout;
+      const rWith = clamp(base + gain), rWithout = clamp(base + loss);
+      const k = (cnt, r) => Math.round(cnt * r);
+      const e0 = k(M, base), e1 = k(M, rWith);
+      const w0 = k(nWith, base), w1 = k(nWith, rWith), o0 = k(nWithout, base), o1 = k(nWithout, rWithout);
+      const p0 = (w0 + o0) / n, p1 = (w1 + o1) / n, ev0 = e0 / M, ev1 = e1 / M;
+
+      out("share").textContent = `${Math.round(s * 100)}%`; out("gain").textContent = `${pts(gain)} points`; out("loss").textContent = `${pts(loss)} points`;
+      out("n").textContent = String(n); out("base").textContent = `${Math.round(base * 100)}%`;
+      out("suite").textContent = `${n} refunds · ${Math.round(base * 100)}% resolved before`;
+      out("claim").textContent = `${pts(ev1 - ev0)} points`;
+      out("evalRow").innerHTML = `${M} test cases, all with an order number: <b>${pct(ev0)} → ${pct(ev1)}</b>, ${pts(ev1 - ev0)} points.`;
+      out("prodRow").innerHTML = `${n} real refund requests, ${Math.round(s * 100)}% without one: <b>${pct(p0)} → ${pct(p1)}</b>, ${pts(p1 - p0)} points.`;
+      const more = w1 - w0, fewer = o0 - o1, net = (w1 + o1) - (w0 + o0);
+      out("countRow").innerHTML = `${more >= 0 ? `${more} more` : `${-more} fewer`} resolved with an order number, ${fewer >= 0 ? `${fewer} fewer` : `${-fewer} more`} without one: <b>${net >= 0 ? `${net} more` : `${-net} fewer`} refunds resolved</b> of ${n}. A change to a part ships only when the whole agent is no worse too.`;
+
+      // Before → after on one axis, for each: a hollow dot at before, the arrowhead at after.
+      const W = ci.clientWidth || 600, L = 16, narrow = W < 520, Y = narrow ? [36, 88] : [30, 72], AX = narrow ? 110 : 98, H = narrow ? 134 : 124, lo = Math.max(0, Math.floor((Math.min(p0, p1, ev0, ev1) - 0.15) * 10) / 10), hi = 1;
+      const X = (v) => L + ((v - lo) / (hi - lo)) * (W - 2 * L);
+      const arrow = (y, a, b, cls, label) => {
+        const xa = X(a), xb = X(b), dir = xb >= xa ? 1 : -1, tip = xb - dir * 2;
+        const head = Math.abs(xb - xa) > 14
+          ? `<path class="${cls} head" d="M${tip} ${y}L${tip - dir * 12} ${y - 7}L${tip - dir * 12} ${y + 7}Z"/>`
+          : `<circle class="${cls}" cx="${xb}" cy="${y}" r="5"/>`;
+        const line = `<line class="${cls}" x1="${xa}" x2="${tip - dir * 10}" y1="${y}" y2="${y}"/>${head}<circle class="${cls} hollow" cx="${xa}" cy="${y}" r="5"/>`;
+        // On a phone the ends are too close for their own labels: the row's name and both values go above it
+        if (narrow) return line + `<text class="lab" x="${L}" y="${y - 14}">${label}: <tspan class="val">${pct(a).replace(".0%", "%")} → </tspan><tspan class="val ${cls}-v">${pct(b).replace(".0%", "%")}</tspan></text>`;
+        return line
+          + `<text class="val" x="${xa - dir * 10}" y="${y + 4}" text-anchor="${dir > 0 ? "end" : "start"}">before ${pct(a).replace(".0%", "%")}</text>`
+          + `<text class="val ${cls}-v" x="${xb + dir * 8}" y="${y + 4}" text-anchor="${dir > 0 ? "start" : "end"}">after ${pct(b).replace(".0%", "%")}</text>`
+          + `<text class="lab" x="${L}" y="${y + 4}">${label}</text>`;
+      };
+      let ticks = "";
+      for (let t = Math.ceil(lo * 10) / 10; t <= hi + 1e-9; t += 0.1) ticks += `<text class="lab" x="${X(t)}" y="${AX + 18}" text-anchor="middle">${Math.round(t * 100)}%</text>`;
+      ci.setAttribute("viewBox", `0 0 ${W} ${H}`); ci.setAttribute("height", String(H));
+      ci.innerHTML = `<line class="axis" x1="${L}" x2="${W - L}" y1="${AX}" y2="${AX}"/>${ticks}`
+        + arrow(Y[0], ev0, ev1, "without", "subagent eval") + arrow(Y[1], p0, p1, "with", "production");
+
+      // A 2 × 2: production on top, the subagent's eval below; with an order number on the left, without on the right.
+      boxes.innerHTML =
+        `<p class="pm__col">With an order number</p><p class="pm__col">Without an order number</p>`
+        + box("Production", `${nWith} of ${n} real refunds (${Math.round((1 - s) * 100)}%)`, nWith, w0, w1)
+        + box("Production", `${nWithout} of ${n} real refunds (${Math.round(s * 100)}%)`, nWithout, o0, o1, true)
+        + box("Subagent eval", `${M} test cases`, M, e0, e1)
+        + `<section class="mc__box pm__none"><h4>Subagent eval</h4><p class="pm__noeval">No cases</p><p class="mc__meta">No test case is missing its order number, so this change is never tested.</p></section>`;
+    };
+
+    root.querySelectorAll("input").forEach((el) => el.addEventListener("input", draw));
+    let lastW = 0;
+    new ResizeObserver(() => { if (root.clientWidth !== lastW) { lastW = root.clientWidth; draw(); } }).observe(root);
+    draw();
+  }
+})();
+</script>

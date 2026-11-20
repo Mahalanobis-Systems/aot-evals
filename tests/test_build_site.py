@@ -86,6 +86,18 @@ def test_the_catalogs_and_the_release_are_whole(built):
     assert doc["download"]["url"].endswith(f"/releases/download/{tag}/aot-evals-method-{doc['version']}.zip")
 
 
+def test_the_interactive_problems_are_whole(built):
+    out, doc = built
+    widgets = doc["interactive"]["widgets"]
+    assert [w["problem"] for w in sorted(widgets, key=lambda w: w["problem"])] == list(range(1, 13))
+    assert all(w["html"].strip() and w["url"].startswith(doc["interactive"]["site"]) for w in widgets)
+    assert ".fr__controls" in doc["interactive"]["css"]
+    for w in widgets:
+        page = (out / "interactive" / f"{w['slug']}.html").read_text()
+        assert page.startswith("<!doctype html>") and w["title"] in page
+    assert (out / "interactive" / "index.html").is_file()
+
+
 def test_markdown_links_are_absolute_or_anchors(built):
     _, doc = built
     text = json.dumps(doc, ensure_ascii=False)

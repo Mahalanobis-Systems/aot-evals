@@ -1,0 +1,146 @@
+<!-- Problem 8, "Run it more than once" (docs/problems.md). A change that shouldn't touch quality (tool-call
+     latency) was checked with one run of each of 200 test cases, and the pass rate came out 2 points lower.
+     That 2-point drop is pinned throughout: it sits inside the noise of the eval the team ran, and the
+     sliders show how many runs or test cases it takes before a change that does nothing would no longer
+     show a 2-point drop.
+
+     Each flaky case passes with probability p on every try; the rest always pass or always fail. Comparing
+     two evals on the same n cases (paired by case), with r tries per case in each, only the tries'
+     randomness is left:
+       Var(change) = 2·φ·p(1−p) / (r·n),  φ = share of flaky cases;  95% noise band = ±1.96·√Var
+       a 2-point drop is outside the noise once  n·r > 2·φ·p(1−p)·(1.96 / 0.02)²
+     The grid shows the same agent run r times on the same cases (one fixed random draw, so it holds still
+     as the sliders move); its per-run scores are the randomness the band accounts for. -->
+<div class="mc rn" data-reruns>
+  <div class="mc__compare">
+    <p class="fr__q">Your team made a series of changes to cut tool-call latency, and the pass rate went down 2 points. Is there a subtle side effect on quality, or was the drop just noise?</p>
+    <p class="rn__setup">The changes shouldn't affect quality. The team ran each of 200 test cases once and saw the 2-point drop.</p>
+    <svg class="fr__ci" data-ci role="img" aria-label="The 2-point drop against the noise of the eval the team ran, and of a bigger eval"></svg>
+    <div class="fr__rows">
+      <p class="fr__row fr__row--without"><span class="fr__tag">What they ran</span><span data-out="one"></span></p>
+      <p class="fr__row fr__row--with"><span class="fr__tag" data-out="rTag"></span><span data-out="many"></span></p>
+      <p class="fr__row mc__row--cost"><span class="fr__tag">Big enough</span><span data-out="need"></span></p>
+    </div>
+  </div>
+
+  <div class="fr__controls">
+    <label class="fr__primary"><span>Runs of each test case <b data-out="r"></b></span><input type="range" name="r" min="1" max="10" step="1" value="3"></label>
+    <label><span>Test cases <b data-out="n"></b></span><input type="range" name="n" min="20" max="1000" step="10" value="200"></label>
+    <label><span>Flaky test cases <b data-out="flaky"></b></span><input type="range" name="flaky" min="0" max="100" step="5" value="20">
+      <small>Cases that pass on some runs and fail on others. The rest always pass or always fail.</small></label>
+    <label><span>Chance a flaky case passes <b data-out="p"></b></span><input type="range" name="p" min="50" max="99" step="1" value="75"></label>
+  </div>
+
+  <figure class="fr__grid mc__grid" aria-label="The same agent run several times on the same test cases">
+    <figcaption class="fr__legend">
+      <b data-out="gridHead"></b>
+      <span><i class="k k--pass"></i>pass</span><span><i class="k k--fail"></i>fail</span><span><i class="rn__k"></i>passed in one run, failed in another</span>
+    </figcaption>
+    <div class="rn__runs" data-runs></div>
+    <p class="rn__note" data-out="note"></p>
+  </figure>
+</div>
+<script>
+(() => {
+  const SHOW = 1000, RMAX = 10;   // up to 1,000 cases, 10 runs
+  const pts = (x) => `${x > 0 ? "+" : x < 0 ? "−" : ""}${Math.abs(x).toFixed(1)}`;
+  const fmt = (x) => Math.round(x).toLocaleString("en-US");
+  let s = 2654435761;
+  const U = Array.from({ length: SHOW * (2 + RMAX) }, () => ((s = (s * 1103515245 + 12345) >>> 0) / 4294967296));
+
+  for (const root of document.querySelectorAll("[data-reruns]")) {
+    const input = (name) => root.querySelector(`input[name="${name}"]`);
+    const out = (name) => root.querySelector(`[data-out="${name}"]`);
+    const ci = root.querySelector("[data-ci]");
+    const runs = root.querySelector("[data-runs]");
+
+    const draw = () => {
+      const r = +input("r").value, n = +input("n").value, p = +input("p").value / 100, phi = +input("flaky").value / 100;
+      const DROP = -0.02, N0 = 200;                                   // what the team saw: 1 run, 200 cases
+      const band = (cases, runsPer) => 1.96 * Math.sqrt((2 * phi * p * (1 - p)) / (cases * runsPer));
+      const h0 = band(N0, 1), hr = band(n, r);
+      const tag = (inside) => (inside ? `<span class="mc__sig">within the noise</span>` : `<span class="mc__sig is-sig">outside the noise</span>`);
+
+      out("r").textContent = String(r); out("n").textContent = String(n);
+      out("p").textContent = `${Math.round(p * 100)}%`; out("flaky").textContent = `${Math.round(phi * 100)}%`;
+      out("rTag").textContent = `${r} run${r === 1 ? "" : "s"} · ${n} cases`;
+      out("one").innerHTML = `With 1 run on ${N0} cases, a change that does nothing lands within <b>±${(h0 * 100).toFixed(1)} points</b> of 0. `
+        + (h0 >= 0.02 ? `The 2-point drop is inside that. ${tag(true)}` : `The 2-point drop is outside that. ${tag(false)}`);
+      out("many").innerHTML = `A change that does nothing lands within <b>±${(hr * 100).toFixed(1)} points</b> of 0. `
+        + (hr >= 0.02 ? `A 2-point drop is still inside that. ${tag(true)}` : `A 2-point drop would be outside it, so it most likely wouldn't happen. ${tag(false)}`);
+      const K = Math.floor(2 * phi * p * (1 - p) * (1.96 / 0.02) ** 2) + 1;   // case-runs where the band drops under 2
+      out("need").innerHTML = phi === 0 ? "With no flaky cases there's no noise: any drop is real."
+        : `A 2-point drop falls outside the noise from about <b>${fmt(K)} case-runs</b>: ${N0} cases × ${Math.ceil(K / N0)} runs, or ${fmt(Math.ceil(K / 3 / 10) * 10)} cases × 3 runs. More cases usually narrow the answer faster than more runs of the same cases.`;
+
+      // Where a change that does nothing lands, around 0: with the eval they ran (grey) and with this one (green).
+      // The 2-point drop they saw is the star, pinned.
+      const CW = ci.clientWidth || 600, M = 16, RM = 96, range = Math.max(4, Math.ceil((Math.max(h0 * 100, 2) + 1) / 2) * 2) / 100;
+      const X = (v) => M + ((v + range) / (2 * range)) * (CW - M - RM);
+      const star = (cx, cy, R) => `<path class="star" d="${Array.from({ length: 10 }, (_, k) => {
+        const rr = k % 2 ? R * 0.45 : R, ang = -Math.PI / 2 + (k * Math.PI) / 5;
+        return `${k ? "L" : "M"}${(cx + rr * Math.cos(ang)).toFixed(1)} ${(cy + rr * Math.sin(ang)).toFixed(1)}`; }).join("")}Z"/>`;
+      const bar = (c, h, y, cls, label, mark) => {
+        const a = X(Math.max(-range, c - h)), b = X(Math.min(range, c + h));
+        return `<rect class="${cls} band" x="${a}" y="${y - 9}" width="${Math.max(2, b - a)}" height="18" rx="9"/>`
+          + `<line class="${cls}" x1="${a}" x2="${b}" y1="${y}" y2="${y}"/>${mark}`
+          + `<text class="lab" x="${CW - RM + 10}" y="${y + 4}">${label}</text>`;
+      };
+      const step = (range > 0.2 ? 0.1 : range > 0.1 ? 0.05 : 0.02) * (CW < 520 ? 2 : 1);
+      let ticks = "";
+      for (let t = -Math.floor(range / step) * step; t <= range + 1e-9; t += step) ticks += `<text class="lab" x="${X(t)}" y="96" text-anchor="middle">${Math.abs(t) < 1e-9 ? "0" : pts(t * 100)}</text>`;
+      ci.setAttribute("viewBox", `0 0 ${CW} 104`); ci.setAttribute("height", "104");
+      ci.innerHTML = `<line class="axis" x1="${M}" x2="${CW - RM}" y1="78" y2="78"/><line class="zero" x1="${X(0)}" x2="${X(0)}" y1="6" y2="80"/>`
+        + `<line class="pin" x1="${X(DROP)}" x2="${X(DROP)}" y1="10" y2="78"/>`
+        + bar(0, h0, 24, "without", `1 run · ${N0}`, `<circle class="without" cx="${X(0)}" cy="24" r="5"/>` + star(X(DROP), 24, 11))
+        + bar(0, hr, 54, "with", `${r} run${r === 1 ? "" : "s"} · ${n}`, `<circle class="with" cx="${X(0)}" cy="54" r="5"/>`) + ticks;
+
+      // The same agent, r runs on the same cases, each run's score at the end.
+      const m = n;
+      const cases = Array.from({ length: m }, (_, i) => ({ flaky: U[i] < phi, stablePass: U[SHOW + i] < p }));
+      const tries = cases.map((c, i) => Array.from({ length: r }, (_, t) => (c.flaky ? U[(2 + t) * SHOW + i] < p : c.stablePass)));
+      const mixed = tries.map((t) => t.some(Boolean) && !t.every(Boolean));
+      const scores = Array.from({ length: r }, (_, t) => Math.round((tries.filter((x) => x[t]).length / m) * 100));
+      out("gridHead").textContent = `The same agent, run ${r === 1 ? "once" : `${r} times`} on the same ${m} cases`;
+      // Wider rows as cases grow, so a run stays a compact block: 50 a row up to 50 cases, then up to 100.
+      // On a phone, 20 a row: at 50 the 2px gaps leave cells about a pixel wide.
+      const cols = root.clientWidth < 520 ? Math.min(m, 20) : Math.min(m, Math.max(50, Math.min(root.clientWidth < 700 ? 50 : 100, Math.ceil(Math.sqrt(m * 12)))));
+      runs.style.setProperty("--cols", String(cols));
+      runs.innerHTML = `<div class="rn__eval">${scores.map((sc, t) => `<div class="rn__row"><span class="rn__lab">Run ${t + 1}</span><div class="rn__cases">${
+        tries.map((x, i) => `<i class="${x[t] ? "p" : "f"}${mixed[i] ? " x" : ""}"></i>`).join("")
+      }</div><span class="rn__sc">${sc}%</span></div>`).join("")}</div>`;
+      const mc = mixed.filter(Boolean).length;
+      out("note").textContent = r === 1
+        ? "With one run you can't see which cases are random. Add runs."
+        : `Nothing changed between these runs, yet ${mc} of ${m} cases passed in one and failed in another, and the score moved between ${Math.min(...scores)}% and ${Math.max(...scores)}%.`;
+      fit(m, r);
+    };
+
+    // Size the cells so the runs fill the card beside the controls: the fewest columns (biggest cells) whose
+    // rows fit in the height the controls take. Stacked on a phone, keep the width-based columns.
+    const fig = root.querySelector("figure"), ctr = root.querySelector(".fr__controls");
+    const fit = (m, r) => {
+      const fr = fig.getBoundingClientRect(), cr = ctr.getBoundingClientRect();
+      if (Math.abs(fr.top - cr.top) > 40) return;                       // stacked layout
+      const last = ctr.lastElementChild, pad = (el) => parseFloat(getComputedStyle(el).paddingBottom) || 0;
+      const ctrH = last.getBoundingClientRect().bottom - cr.top + pad(ctr);
+      const note = out("note"), first = runs.querySelector(".rn__cases");
+      if (!first) return;
+      const over = runs.getBoundingClientRect().top - fr.top + note.getBoundingClientRect().height + 12 + pad(fig);
+      const target = ctrH - over, w = first.clientWidth, GAP = 2, EV = 8;
+      let best = 120;
+      for (let c = 10; c <= 120; c++) {
+        const cell = (w - (c - 1) * GAP) / c, rows = Math.ceil(m / c);
+        const h = r * (rows * cell + (rows - 1) * GAP) + (r - 1) * EV;
+        if (cell <= 22 && h <= target) { best = c; break; }
+      }
+      for (let c = best; c <= Math.ceil(best * 1.25); c++) if (m % c === 0) { best = c; break; }   // whole rows when close
+      runs.style.setProperty("--cols", String(Math.min(m, best)));
+    };
+
+    root.querySelectorAll("input").forEach((el) => el.addEventListener("input", draw));
+    let lastW = 0;
+    new ResizeObserver(() => { if (root.clientWidth !== lastW) { lastW = root.clientWidth; draw(); } }).observe(root);
+    draw();
+  }
+})();
+</script>

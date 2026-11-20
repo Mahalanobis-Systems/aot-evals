@@ -1,0 +1,149 @@
+<!-- Problem 9, "A clean run isn't a clean bill of health" (docs/problems.md). Two parts of the refund flow
+     both pass every test case so far. Each has a bar to clear, and the bar sets how many cases it needs.
+     Closing a refund the customer withdrew is a cheap mistake with a low bar (90%): a few dozen clean cases
+     show it. Picking the shipping address has a business requirement (99.9%), and only thousands of cases
+     can show it's met.
+
+     After k failures in n cases, the pass rate is at least 1 − U with 95% confidence, where U is the
+     one-sided upper bound on the failure rate: P(failures ≤ k | U) = 0.05. With k = 0, U = 1 − 0.05^(1/n),
+     the zero-failure bound, about 3 ÷ n. The withdrawn refund always passes; the address subagent's real
+     pass rate is 99.98%, so with n cases the eval sees round(n · 0.02%) failures. -->
+<div class="mc ts" data-casesize data-config='{"cases": [
+  {"name": "Closing a withdrawn refund", "target": 0.9, "pass": 1, "sizes": [5, 10, 15, 20, 25, 30, 40, 50, 59, 75, 100]},
+  {"name": "Picking the shipping address", "pass": 0.9998, "sizes": [10, 20, 50, 100, 200, 500, 1000, 2000, 3000, 5000, 10000, 20000]}]}'>
+  <div class="mc__compare">
+    <p class="fr__q">Two parts of your refund flow pass every test case so far. Do they need the same number of cases?</p>
+    <div class="ts__cols">
+      <section class="ts__case" data-case="0">
+        <h3>Closing a withdrawn refund</h3>
+        <p class="ts__story">The customer writes "No thank you, I changed my mind," and the agent closes the case. A mistake costs a follow-up message, so the bar is <span data-o="req"></span>.</p>
+        <svg class="fr__ci ts__ci" data-ci role="img" aria-label="Lowest plausible pass rate for closing withdrawn refunds"></svg>
+        <div class="fr__rows">
+          <p class="fr__row"><span class="fr__tag">Tested</span><span data-o="tested"></span></p>
+          <p class="fr__row fr__row--with"><span class="fr__tag">At least</span><span data-o="least"></span></p>
+          <p class="fr__row mc__row--cost"><span class="fr__tag">Verdict</span><span data-o="verdict"></span></p>
+        </div>
+      </section>
+      <section class="ts__case" data-case="1">
+        <h3>Picking the shipping address</h3>
+        <p class="ts__story">A subagent finds the customer's address in a messy database. The business requires <span data-o="req"></span> of addresses to be correct.</p>
+        <svg class="fr__ci ts__ci" data-ci role="img" aria-label="Lowest plausible pass rate for picking the shipping address"></svg>
+        <div class="fr__rows">
+          <p class="fr__row"><span class="fr__tag">Tested</span><span data-o="tested"></span></p>
+          <p class="fr__row fr__row--with"><span class="fr__tag">At least</span><span data-o="least"></span></p>
+          <p class="fr__row mc__row--cost"><span class="fr__tag">Verdict</span><span data-o="verdict"></span></p>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="fr__controls">
+    <label class="fr__primary"><span>Required accuracy: shipping address <b data-out="target"></b></span><input type="range" name="target" min="99" max="99.95" step="0.05" value="99.9"></label>
+    <label><span>Test cases: shipping address <b data-out="n1"></b></span><input type="range" name="n1" min="0" max="11" step="1" value="1"></label>
+    <label><span>Test cases: withdrawn refund <b data-out="n0"></b></span><input type="range" name="n0" min="0" max="10" step="1" value="5"></label>
+  </div>
+
+  <figure class="fr__grid mc__grid" aria-label="Each use case's test cases">
+    <figcaption class="fr__legend">
+      <b>The test cases</b>
+      <span><i class="k k--pass"></i>pass</span><span><i class="ts__k"></i>fail</span>
+    </figcaption>
+    <div class="ts__strip"><p class="ts__strip-h">Picking the shipping address <span data-out="h1"></span></p><canvas data-grid="1"></canvas></div>
+    <div class="ts__strip"><p class="ts__strip-h">Closing a withdrawn refund <span data-out="h0"></span></p><canvas data-grid="0"></canvas></div>
+    <p class="ts__note">A clean run sets an upper limit on failures, not zero: after n clean cases the true failure rate could still be about 3 ÷ n. That holds when code or a person does the grading. A judge that sometimes fails good runs never returns a clean run, and needs far more cases (problem 6).</p>
+  </figure>
+</div>
+<script>
+(() => {
+  const pc = (x, d = 1) => `${(x * 100).toFixed(d)}%`;
+  const fmt = (x) => x.toLocaleString("en-US");
+  const dec = (T) => (Math.round(T * 10000) % 10 ? 2 : Math.round(T * 1000) % 10 ? 1 : 0);
+
+  // P(failures ≤ k) for n cases at failure rate q, in log space.
+  const cdf = (n, k, q) => {
+    if (q <= 0) return 1;
+    let lp = n * Math.log(1 - q), sum = Math.exp(lp);
+    for (let i = 1; i <= k; i++) { lp += Math.log(((n - i + 1) / i) * (q / (1 - q))); sum += Math.exp(lp); }
+    return sum;
+  };
+  // One-sided 95% upper bound on the failure rate after k failures in n cases.
+  const upper = (n, k) => {
+    if (k === 0) return 1 - Math.pow(0.05, 1 / n);
+    let lo = k / n, hi = 1;
+    for (let it = 0; it < 60; it++) { const mid = (lo + hi) / 2; if (cdf(n, k, mid) > 0.05) lo = mid; else hi = mid; }
+    return hi;
+  };
+
+  for (const root of document.querySelectorAll("[data-casesize]")) {
+    const cases = JSON.parse(root.dataset.config).cases;
+    const input = (name) => root.querySelector(`input[name="${name}"]`);
+    const out = (name) => root.querySelector(`[data-out="${name}"]`);
+    const cols = [...root.querySelectorAll("[data-case]")];
+    const css = getComputedStyle(root), FOREST = css.getPropertyValue("--forest").trim() || "#225734", GREEN = css.getPropertyValue("--green").trim() || "#95C13E";
+    const fails = (c, n) => Math.round(n * (1 - c.pass));
+    const needed = (c, T) => c.sizes.find((n) => 1 - upper(n, fails(c, n)) >= T) ?? 0;
+
+    // Every test case as a cell, sized so the whole set fits: big cells for a few cases, small for many.
+    const grid = (cv, n, failAt, maxH) => {
+      const W = cv.parentElement.clientWidth || 600;
+      let cell = 18;
+      while (cell > 2 && Math.ceil(n / Math.floor(W / cell)) * cell > maxH) cell -= 1;
+      const per = Math.floor(W / cell), rows = Math.ceil(n / per), H = rows * cell, dpr = window.devicePixelRatio || 1;
+      cv.width = W * dpr; cv.height = H * dpr; cv.style.width = `${W}px`; cv.style.height = `${H}px`;
+      const g = cv.getContext("2d"); g.scale(dpr, dpr); g.clearRect(0, 0, W, H);
+      const gap = cell >= 8 ? 2 : cell >= 4 ? 1 : 0.5, s = cell - gap;
+      g.fillStyle = FOREST;
+      for (let i = 0; i < n; i++) if (!failAt.has(i)) g.fillRect((i % per) * cell, Math.floor(i / per) * cell, s, s);
+      for (const i of failAt) {                                            // failures: open, ringed so they show at any size
+        const x = (i % per) * cell, y = Math.floor(i / per) * cell;
+        g.fillStyle = "#fff"; g.fillRect(x, y, s, s);
+        g.strokeStyle = GREEN; g.lineWidth = 2; g.beginPath(); g.arc(x + s / 2, y + s / 2, Math.max(6, s), 0, 2 * Math.PI); g.stroke();
+      }
+    };
+
+    const draw = () => {
+      const targets = [cases[0].target, +input("target").value / 100];
+      const ns = [cases[0].sizes[+input("n0").value], cases[1].sizes[+input("n1").value]];
+      out("target").textContent = pc(targets[1], dec(targets[1]));
+      out("n0").textContent = fmt(ns[0]); out("n1").textContent = fmt(ns[1]);
+
+      cols.forEach((col, j) => {
+        const c = cases[j], T = targets[j], n = ns[j], k = fails(c, n), least = 1 - upper(n, k), obs = 1 - k / n, ok = least >= T;
+        const o = (name) => col.querySelector(`[data-o="${name}"]`);
+        o("req").textContent = pc(T, dec(T));
+        o("tested").innerHTML = `${fmt(n - k)} of ${fmt(n)} passed${k ? ` (${fmt(k)} failed)` : ""}: <b>${pc(obs, k ? 2 : 0)}</b>`;
+        o("least").innerHTML = `<b>${pc(least, 2)}</b> with 95% confidence ${ok ? `<span class="mc__sig is-sig">meets ${pc(T, dec(T))}</span>` : `<span class="mc__sig">can't confirm ${pc(T, dec(T))}</span>`}`;
+        const need = needed(c, T);
+        o("verdict").innerHTML = ok ? `${fmt(n)} test cases confirm the bar.`
+          : need ? `About <b>${fmt(need)} test cases</b> to confirm ${pc(T, dec(T))}${j === 0 ? `: 3 ÷ ${fmt(need)} is about ${pc(3 / need, 0)}` : ""}.`
+          : `At this part's real pass rate, no number of test cases confirms ${pc(T, dec(T))}.`;
+
+        // The axis: from just under the lowest plausible rate (or the bar) to 100%.
+        const svg = col.querySelector("[data-ci]");
+        const gap = 1 - Math.min(T, least);
+        const step = gap > 0.2 ? 0.1 : gap > 0.08 ? 0.05 : gap > 0.04 ? 0.02 : gap > 0.015 ? 0.01 : gap > 0.006 ? 0.005 : gap > 0.003 ? 0.002 : 0.0005;
+        const L0 = Math.max(0, 1 - Math.ceil((gap * 1.15) / step) * step);
+        const W = svg.clientWidth || 300, M = 30, MR = 30, X = (v) => M + ((v - L0) / (1 - L0)) * (W - M - MR);
+        let ticks = "";
+        const tStep = (1 - L0) / step > 6 ? step * 2 : step, tDec = tStep < 0.001 ? 2 : tStep < 0.01 ? 1 : 0;
+        for (let t = 1; t >= L0 - 1e-9; t -= tStep) ticks += `<text class="lab" x="${X(t)}" y="74" text-anchor="middle">${pc(t, tDec)}</text>`;
+        svg.setAttribute("viewBox", `0 0 ${W} 82`); svg.setAttribute("height", "82");
+        const cls = ok ? "with" : "without";
+        svg.innerHTML = `<line class="axis" x1="${M}" x2="${W - MR}" y1="56" y2="56"/>`
+          + `<line class="target" x1="${X(T)}" x2="${X(T)}" y1="4" y2="58"/><text class="lab tlab" x="${X(T) > 150 ? X(T) - 5 : X(T) + 5}" y="12" text-anchor="${X(T) > 150 ? "end" : "start"}">the bar</text>`
+          + `<rect class="${cls} band" x="${X(least)}" y="21" width="${Math.max(2, X(1) - X(least))}" height="18" rx="9"/>`
+          + `<line class="${cls}" x1="${X(least)}" x2="${X(1)}" y1="30" y2="30"/><circle class="${cls}" cx="${X(obs)}" cy="30" r="5"/>` + ticks;
+
+        out(`h${j}`).textContent = `${fmt(n)} test cases${k ? `, ${fmt(k)} failed` : ""}`;
+        const failAt = new Set(Array.from({ length: k }, (_, i) => Math.floor(((i + 0.5) * n) / k)));
+        grid(root.querySelector(`[data-grid="${j}"]`), n, failAt, j === 1 ? 300 : 120);
+      });
+    };
+
+    root.querySelectorAll("input").forEach((el) => el.addEventListener("input", draw));
+    let lastW = 0;
+    new ResizeObserver(() => { if (root.clientWidth !== lastW) { lastW = root.clientWidth; draw(); } }).observe(root);
+    draw();
+  }
+})();
+</script>

@@ -1,0 +1,405 @@
+/* aot-evals interactive problems: the styles every widget in docs/interactive/ shares.
+
+   Each widget is an HTML fragment (markup, then one script) whose root carries .fr or .mc. The page
+   that hosts it supplies the fonts and, if it likes, these tokens: --forest, --green, --green-ink,
+   --graphite, --charcoal, --line-major, --paper, --grid, --head, --body. Each has a fallback here, so
+   a widget also renders on a plain page (scripts/build_site.py writes one per widget to
+   dist/interactive/). Colors: a pass is forest, a fail is open, a fix is green, a break is crossed out. */
+
+.fr { display: grid; grid-template-columns: calc(var(--grid, 24px) * 12) minmax(0, 1fr); gap: calc(var(--grid, 24px) * 1.25) calc(var(--grid, 24px) * 1.5); margin-top: calc(var(--grid, 24px) * 1.5); align-items: stretch; }   /* the sliders' card and the cases' card end level */
+.fr__controls { display: grid; gap: 20px; padding: var(--grid, 24px); border: 1.5px solid var(--line-major, #D2DED5); border-radius: 12px; background: #fff; }
+.fr__controls label { display: grid; gap: 6px; font: 600 14px/1.2 var(--head, "Montserrat", system-ui, sans-serif); color: var(--graphite, #3F4541); }
+.fr__controls label span { display: flex; justify-content: space-between; gap: 8px; }
+.fr__controls label b { color: var(--forest, #225734); font-variant-numeric: tabular-nums; }
+.fr__controls label small { font: 400 12.5px/1.35 var(--body, "Roboto", system-ui, sans-serif); color: #7d877f; }
+.fr__controls input[type=range] { width: 100%; accent-color: var(--forest, #225734); }
+.fr__primary { padding-bottom: 18px; border-bottom: 1.5px solid var(--line-major, #D2DED5); }
+.fr__controls .fr__primary span { display: grid; gap: 4px; font-size: 16px; color: var(--forest, #225734); }
+.fr__controls .fr__primary b { font-size: 30px; line-height: 1.1; }
+.fr__primary input[type=range] { height: 28px; }
+.fr__suite { border-top: 1.5px solid var(--line-major, #D2DED5); padding-top: 14px; }
+.fr__suite summary { cursor: pointer; font: 600 13.5px/1.3 var(--head, "Montserrat", system-ui, sans-serif); color: var(--graphite, #3F4541); list-style: none; display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; }
+.fr__suite summary::-webkit-details-marker { display: none; }
+.fr__suite summary::after { content: "Change"; grid-row: 1; grid-column: 2; color: var(--forest, #225734); text-decoration: underline; text-underline-offset: 3px; }
+.fr__suite[open] summary::after { content: "Done"; }
+.fr__suite summary span { grid-row: 2; grid-column: 1 / -1; color: #7d877f; font-weight: 500; }
+.fr__suite label { margin-top: 14px; }
+.fr__presets { margin: 0; display: flex; flex-wrap: wrap; gap: 6px; font-size: 13px; color: var(--graphite, #3F4541); align-items: center; }
+.fr__presets button { padding: 4px 9px; border: 1.5px solid var(--line-major, #D2DED5); border-radius: 999px; background: var(--paper, #F9FAF9); font: 600 12.5px/1.2 var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); cursor: pointer; }
+.fr__presets button:hover { border-color: var(--forest, #225734); }
+.fr__compare { grid-column: 1 / -1; min-width: 0; padding: var(--grid, 24px); border: 1.5px solid var(--line-major, #D2DED5); border-radius: 12px; background: #fff; }
+.fr__q { margin: 0 0 12px; font: 700 21px/1.3 var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); }
+.fr__ci { display: block; width: 100%; }
+.fr__ci .lab { font: 600 12.5px var(--head, "Montserrat", system-ui, sans-serif); fill: var(--graphite, #3F4541); }
+.fr__ci .axis { stroke: var(--line-major, #D2DED5); stroke-width: 1.5; }
+.fr__ci .zero { stroke: var(--graphite, #3F4541); stroke-dasharray: 3 3; }
+.fr__ci .without { stroke: #8f9a92; stroke-width: 3; fill: #8f9a92; }
+.fr__ci .with { stroke: var(--forest, #225734); stroke-width: 3; fill: var(--forest, #225734); }
+.fr__ci .band { stroke: none; }
+.fr__ci .without.band { fill: rgba(143, 154, 146, 0.18); }
+.fr__ci .with.band { fill: rgba(149, 193, 62, 0.28); }
+.fr__rows { display: grid; gap: 10px; margin-top: 14px; }
+.fr__row { margin: 0; display: grid; grid-template-columns: 9.5em minmax(0, 1fr); gap: 12px; align-items: baseline; font-size: 16px; color: var(--graphite, #3F4541); }
+.fr__row b { color: var(--charcoal, #1A201C); font-variant-numeric: tabular-nums; }
+.fr__tag { font: 700 12px/1.3 var(--head, "Montserrat", system-ui, sans-serif); letter-spacing: 0.06em; text-transform: uppercase; }
+.fr__row--without .fr__tag { color: #7d877f; }
+.fr__row--with .fr__tag { color: var(--green-ink, #6f9a2a); }
+.fr__row--with.is-gain b { color: var(--forest, #225734); }
+.fr__row--with.is-loss b { color: #8a2b1d; }
+.fr__note { margin: 12px 0 0; font-size: 14px; }
+.fr__note:empty { display: none; }
+.fr__grid { display: flex; flex-direction: column; margin: 0; min-width: 0; padding: var(--grid, 24px); border: 1.5px solid var(--line-major, #D2DED5); border-radius: 12px; background: #fff; }
+.fr__grid svg { display: block; width: 100%; margin-top: 14px; }
+.fr__grid .pass { fill: var(--forest, #225734); }
+.fr__grid .fail, .fr__grid .loss { fill: #fff; stroke: var(--forest, #225734); stroke-width: 1.25; }
+.fr__grid .gain { fill: var(--green, #95C13E); }
+.fr__grid .x { stroke: var(--forest, #225734); stroke-width: 1.5; }
+.fr__grid .lab { font: 600 13px var(--head, "Montserrat", system-ui, sans-serif); fill: var(--graphite, #3F4541); }
+.fr__legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 14px; color: var(--graphite, #3F4541); align-items: center; }
+.fr__legend b { font: 700 15px/1.3 var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); margin-right: 8px; }
+.fr__legend span { display: inline-flex; align-items: center; gap: 6px; }
+.fr__legend .k { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 2px; font: 700 10px/1 var(--head, "Montserrat", system-ui, sans-serif); font-style: normal; color: var(--forest, #225734); }
+.k--pass { background: var(--forest, #225734); } .k--fail, .k--loss { background: #fff; border: 1.5px solid var(--forest, #225734); } .k--gain { background: var(--green, #95C13E); }
+.fr__stats { margin: auto 0 0; padding-top: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 20px; }
+.fr__stats div { display: grid; gap: 2px; }
+.fr__stats dt { font-size: 13px; color: #7d877f; }
+.fr__stats dd { margin: 0; font: 600 14.5px/1.3 var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); font-variant-numeric: tabular-nums; }
+@media (max-width: 900px) { .fr, .fr__stats { grid-template-columns: minmax(0, 1fr); } .fr__row { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+
+/* The mistake-cost widget (mistake-costs.html), on the flip-rate widget's frame (.fr__*): how far
+   the pass rate and the weighted score fall on top, the sliders and costs at left, a day's requests in a
+   box per kind of request at right. */
+.mc { display: grid; grid-template-columns: calc(var(--grid, 24px) * 12) minmax(0, 1fr); gap: calc(var(--grid, 24px) * 1.25) calc(var(--grid, 24px) * 1.5); margin-top: calc(var(--grid, 24px) * 1.5); align-items: stretch; }
+.mc__compare { grid-column: 1 / -1; min-width: 0; padding: var(--grid, 24px); border: 1.5px solid var(--line-major, #D2DED5); border-radius: 12px; background: #fff; }
+.mc__drop { display: block; width: 100%; }
+.mc__drop .lab { font: 600 12.5px var(--head, "Montserrat", system-ui, sans-serif); fill: var(--graphite, #3F4541); }
+.mc__drop .axis { stroke: var(--line-major, #D2DED5); stroke-width: 1.5; }
+.mc__drop .without { fill: #8f9a92; }
+.mc__drop .with { fill: var(--forest, #225734); }
+.mc__drop .lab--in { fill: #fff; }
+.mc__row--cost { font-size: 14px; color: #7d877f; }
+.mc__row--cost .fr__tag { color: #7d877f; font-size: 11px; }
+.mc__sig { display: inline-block; margin-left: 4px; padding: 1px 8px; border-radius: 999px; background: #eef1ef; color: #6b746d; font: 600 12px/1.6 var(--head, "Montserrat", system-ui, sans-serif); white-space: nowrap; }
+.mc__sig.is-sig { background: var(--forest, #225734); color: #fff; }
+.mc__cost--focus { margin: 0 -8px 6px; padding: 8px; border-radius: 8px; background: rgba(149, 193, 62, 0.14); }
+.mc__controls .mc__costs .mc__cost--focus > span:first-child { font-weight: 700; color: var(--forest, #225734); }
+.mc__cost--focus .mc__usd input { border-color: var(--green, #95C13E); background: #fff; font-weight: 700; }
+.mc__scores { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding-bottom: 16px; border-bottom: 1.5px solid var(--line-major, #D2DED5); }
+.mc__scores div { display: grid; gap: 2px; }
+.mc__scores span { font: 600 12.5px/1.25 var(--head, "Montserrat", system-ui, sans-serif); color: var(--graphite, #3F4541); }
+.mc__scores b { font: 700 26px/1.1 var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); font-variant-numeric: tabular-nums; }
+.mc__scores small { font-size: 12.5px; color: #7d877f; }
+.mc__costs { margin: 0; padding: 0; border: 0; display: grid; gap: 6px; }
+.mc__costs legend { padding: 0; margin-bottom: 8px; font: 600 14px/1.2 var(--head, "Montserrat", system-ui, sans-serif); color: var(--graphite, #3F4541); }
+.mc__controls .mc__costs label { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; font: 400 13.5px/1.25 var(--body, "Roboto", system-ui, sans-serif); color: var(--graphite, #3F4541); }
+.mc__usd { display: inline-flex; align-items: center; gap: 2px; font: 600 14px var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); }
+.mc__usd input { width: 4.2em; padding: 4px 6px; border: 1.5px solid var(--line-major, #D2DED5); border-radius: 6px; font: 600 14px var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); text-align: right; background: var(--paper, #F9FAF9); }
+.mc__grid { display: flex; flex-direction: column; }
+.mc__boxes { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 14px; align-items: flex-start; }
+.mc__box { flex: 1 1 auto; padding: 12px; border: 1.5px dashed var(--line-major, #D2DED5); border-radius: 10px; }
+.mc__box h4 { margin: 0; font: 700 14.5px/1.25 var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); }
+.mc__meta { margin: 2px 0 10px; font-size: 12.5px; color: #7d877f; }
+.mc__meta b { color: var(--graphite, #3F4541); }
+.mc__meta .mc__w { color: var(--green-ink, #6f9a2a); }
+.mc__box--focus { border: 2px solid var(--green, #95C13E); background: rgba(149, 193, 62, 0.08); }
+.mc__cells { display: grid; grid-template-columns: repeat(var(--cols), 14px); gap: 3px; }
+.mc__cells i { width: 14px; height: 14px; border-radius: 2px; }
+.mc__cells i.pass { background: var(--forest, #225734); }
+.mc__cells i.fail { background: #fff; border: 1.5px solid var(--forest, #225734); }
+.mc__cells i.loss { background: #fff; border: 1.5px solid var(--forest, #225734); position: relative; }
+.mc__cells i.loss::after { content: "×"; position: absolute; inset: 0; display: grid; place-items: center; font: 700 11px/1 var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); }
+.mc__cells--small { grid-template-columns: repeat(auto-fill, 9px); gap: 2px; }   /* a kind with hundreds of requests a day */
+.mc__cells--small i { width: 9px; height: 9px; border-radius: 1.5px; }
+.mc__cells--small i.fail, .mc__cells--small i.loss { border-width: 1.25px; }
+@media (max-width: 900px) { .mc { grid-template-columns: minmax(0, 1fr); } }
+
+/* The production-mix widget (production-mix.html), on the mistake-cost frame (.mc__*): each
+   box shows its cases before the change over the same cases after it. */
+.pm .fr__ci .hollow { fill: #fff; stroke-width: 2.5; }
+.pm .fr__ci .head { stroke: none; }
+.pm .fr__ci .val { font: 600 11.5px var(--head, "Montserrat", system-ui, sans-serif); fill: #7d877f; }
+.pm .fr__ci .with-v { fill: var(--forest, #225734); font-weight: 700; }
+.pm .fr__ci .without { stroke: #8f9a92; stroke-width: 3; fill: #8f9a92; }
+.pm .fr__ci .with { stroke: var(--forest, #225734); stroke-width: 3; fill: var(--forest, #225734); }
+.pm .fr__ci .axis { stroke: var(--line-major, #D2DED5); stroke-width: 1.5; }
+.pm .fr__ci .lab { font: 600 12.5px var(--head, "Montserrat", system-ui, sans-serif); fill: var(--graphite, #3F4541); }
+.pm__boxes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
+.pm__boxes .mc__box { min-width: 0; }
+.pm__col { margin: 0; font: 700 12px/1.3 var(--head, "Montserrat", system-ui, sans-serif); letter-spacing: 0.06em; text-transform: uppercase; color: var(--green-ink, #6f9a2a); }
+.pm__none { display: grid; align-content: start; border-style: dashed; border-color: #c9a39b; background: repeating-linear-gradient(-45deg, transparent 0 8px, rgba(138, 43, 29, 0.05) 8px 10px); }
+.pm__noeval { margin: 14px 0 6px; font: 800 26px/1 var(--head, "Montserrat", system-ui, sans-serif); letter-spacing: 0.04em; text-transform: uppercase; color: #8a2b1d; }
+@media (max-width: 640px) { .pm__boxes { grid-template-columns: minmax(0, 1fr); } .pm__col { display: none; } }
+.pm__pair { display: grid; grid-template-columns: 3.4em minmax(0, 1fr); gap: 8px; align-items: start; }
+.pm__lab { font: 600 11.5px/16px var(--head, "Montserrat", system-ui, sans-serif); color: #7d877f; }
+.pm__cases { display: flex; flex-wrap: wrap; gap: 8px 3px; }
+.pm__cases span { display: grid; gap: 3px; }
+.pm__cases i { width: 13px; height: 13px; border-radius: 2px; }
+.pm__cases i.pass { background: var(--forest, #225734); }
+.pm__cases i.gain { background: var(--green, #95C13E); }
+.pm__cases i.fail { background: #fff; border: 1.5px solid var(--forest, #225734); }
+.pm__cases i.loss { background: #fff; border: 1.5px solid var(--forest, #225734); position: relative; }
+.pm__cases i.loss::after { content: "×"; position: absolute; inset: 0; display: grid; place-items: center; font: 700 10px/1 var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); }
+.mc__controls .fr__primary { padding: 16px 0 0; border-bottom: 0; border-top: 1.5px solid var(--line-major, #D2DED5); }   /* below the costs here */
+.mc__story-h { margin: 18px 0 4px; font: 700 17px/1.3 var(--head, "Montserrat", system-ui, sans-serif); color: var(--green-ink, #6f9a2a); }
+.mc__story { margin: 0 0 16px; max-width: 52em; font-size: 16px; line-height: 1.55; color: var(--graphite, #3F4541); }
+.mc__story b { color: var(--forest, #225734); }
+
+/* The usage-shift widget (usage-shift.html): cost of mistakes week by week on top, the
+   agent's pass rates at left, the refund requests in every 500 week by week at right. */
+.us__chart { display: block; width: 100%; margin-top: 4px; }
+.us__chart .axis { stroke: var(--line-major, #D2DED5); stroke-width: 1.5; }
+.us__chart .bar { fill: var(--forest, #225734); }
+.us__chart .now { fill: #8f9a92; }
+.us__chart .test { stroke: var(--graphite, #3F4541); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.us__chart .lab { font: 600 12.5px var(--head, "Montserrat", system-ui, sans-serif); fill: var(--graphite, #3F4541); }
+.us__chart .test-lab { font-size: 12px; fill: #6b746d; }
+.us__chart .val { font: 700 13px var(--head, "Montserrat", system-ui, sans-serif); fill: var(--forest, #225734); }
+.us__note { margin: 0; font-size: 13.5px; line-height: 1.45; color: #7d877f; }
+.us__weeks { display: grid; gap: 10px; margin-top: 14px; }
+.us__week { display: grid; grid-template-columns: 9.5em 9em minmax(0, 1fr) 9.5em; gap: 14px; align-items: center; padding: 10px 12px; border: 1.5px dashed var(--line-major, #D2DED5); border-radius: 10px; }
+.us__week--test { border-style: solid; background: #f4f6f4; }
+.us__name { display: grid; font: 700 14px/1.25 var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); }
+.us__name small { font: 400 12px/1.3 var(--body, "Roboto", system-ui, sans-serif); color: #7d877f; }
+.us__count { font: 700 15px var(--head, "Montserrat", system-ui, sans-serif); color: var(--graphite, #3F4541); }
+.us__slider { display: grid; grid-template-columns: 2em minmax(0, 1fr); gap: 8px; align-items: center; }
+.us__slider b { font: 700 15px var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); font-variant-numeric: tabular-nums; }
+.us__slider input { width: 100%; accent-color: var(--forest, #225734); }
+.us__cells span { display: block; }
+.us__cells i { display: block; }
+.us__cost { font: 600 13.5px/1.3 var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); text-align: right; }
+@media (max-width: 900px) { .us__week { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .us__cells { grid-column: 1 / -1; } .us__cost { text-align: left; } }
+
+/* The stratified-test widget (stratified.html): dense dots, after the homepage's bench of
+   graders. A row per kind: its equal block of test cases (pass filled, fail open), beside its share of
+   production as grey dots per 500 requests. */
+.st .fr__ci .without { stroke: #8f9a92; stroke-width: 3; fill: #8f9a92; }
+.st .fr__ci .with { stroke: var(--forest, #225734); stroke-width: 3; fill: var(--forest, #225734); }
+.st .fr__ci .axis { stroke: var(--line-major, #D2DED5); stroke-width: 1.5; }
+.st .fr__ci .lab { font: 600 12.5px var(--head, "Montserrat", system-ui, sans-serif); fill: var(--graphite, #3F4541); }
+.st__foot { margin: 14px 0 0; font-size: 12.5px; line-height: 1.45; color: #7d877f; }
+.st__foot::before { content: "* "; }
+.fr__controls .st__mix label.st__mixrow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; font: 600 13.5px/1.25 var(--head, "Montserrat", system-ui, sans-serif); color: var(--graphite, #3F4541); }
+.st__mixrow span { display: flex; justify-content: space-between; gap: 8px; }
+.st__mixrow b { color: var(--forest, #225734); font-variant-numeric: tabular-nums; }
+.st__mixrow input { width: 100%; accent-color: var(--forest, #225734); }
+.fr__controls .st__mix label.st__mixrow--focus { margin: 0 -8px; padding: 6px 8px; border-radius: 8px; background: rgba(149, 193, 62, 0.14); color: var(--forest, #225734); }
+.st__mix small { font-size: 12px; color: #7d877f; }
+.st__rows { display: grid; gap: 12px; margin-top: 14px; }
+.st__row { display: grid; grid-template-columns: 11em auto minmax(0, 1fr); gap: 16px; align-items: start; padding: 10px 12px; border: 1.5px dashed var(--line-major, #D2DED5); border-radius: 10px; }
+.st__row--focus { border: 2px solid var(--green, #95C13E); background: rgba(149, 193, 62, 0.08); }
+.st__name { display: grid; gap: 2px; }
+.st__name b { font: 700 13.5px/1.25 var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); }
+.st__name small { font-size: 12px; color: #7d877f; }
+.st__test, .st__prod { display: grid; grid-template-columns: repeat(10, 8px); gap: 4px; }
+.st__prod { grid-template-columns: repeat(auto-fill, 8px); }
+.st__test { padding-right: 16px; border-right: 1.5px solid var(--line-major, #D2DED5); }
+.st__test i, .st__prod i, .st__k { display: block; width: 8px; height: 8px; border-radius: 50%; }
+.st__test i.p, .st__k--pass { background: var(--forest, #225734); }
+.st__test i.f, .st__k--fail { background: #fff; box-shadow: inset 0 0 0 1.5px var(--forest, #225734); }
+.st__prod i.q, .st__k--prod { background: #b9c2bb; }
+.st__k { display: inline-block; }
+@media (max-width: 900px) { .st__row { grid-template-columns: minmax(0, 1fr); } .st__test { border-right: 0; padding-right: 0; } }
+
+/* The clusters widget (clusters.html): two intervals on the change on top (counting cases,
+   counting templates), the fan-out from n templates to k × n cases in small dots below. */
+.cl .fr__ci .lab { font: 600 12.5px var(--head, "Montserrat", system-ui, sans-serif); fill: var(--graphite, #3F4541); }
+.cl .fr__ci .axis { stroke: var(--line-major, #D2DED5); stroke-width: 1.5; }
+.cl .fr__ci .zero { stroke: var(--graphite, #3F4541); stroke-dasharray: 3 3; }
+.cl .fr__ci .without { stroke: #8f9a92; stroke-width: 3; fill: #8f9a92; }
+.cl .fr__ci .with { stroke: var(--forest, #225734); stroke-width: 3; fill: var(--forest, #225734); }
+.cl .fr__ci .band { stroke: none; }
+.cl .fr__ci .without.band { fill: rgba(143, 154, 146, 0.18); }
+.cl .fr__ci .with.band { fill: rgba(149, 193, 62, 0.28); }
+.cl__fan { display: block; width: 100%; margin-top: 14px; }
+.cl__edge { stroke: #c9d2cb; stroke-width: 0.8; }
+.cl__t, .cl__c { stroke-width: 1.5; }
+.cl__t.p, .cl__c.p { fill: var(--forest, #225734); stroke: var(--forest, #225734); }
+.cl__t.f, .cl__c.f { fill: #fff; stroke: var(--forest, #225734); }
+.cl__t.g, .cl__c.g, .cl__k--gain { fill: var(--green, #95C13E); stroke: var(--green, #95C13E); background: var(--green, #95C13E); }
+.cl__note { margin: 10px 0 0; font-size: 13.5px; color: #7d877f; }
+.cl__assume { margin: 6px 0 0; font-size: 12.5px; line-height: 1.45; color: #7d877f; }
+.cl__assume::before { content: "* "; }
+
+/* The judge-calibration widget (judge-calibration.html): a failure is the positive. Good runs the judge
+   passes forest (TN), good runs it fails open with × (FP, a false alarm), bad runs it passes green (FN,
+   the one to watch), bad runs it fails grey (TP). Its confusion matrix below the grid, read down the
+   columns. */
+.jc .fr__ci .lab { font: 600 12.5px var(--head, "Montserrat", system-ui, sans-serif); fill: var(--graphite, #3F4541); }
+.jc .fr__ci .axis { stroke: var(--line-major, #D2DED5); stroke-width: 1.5; }
+.jc .fr__ci .without { stroke: #8f9a92; stroke-width: 3; fill: #8f9a92; }
+.jc .fr__ci .with { stroke: var(--forest, #225734); stroke-width: 3; fill: var(--forest, #225734); }
+.jc .fr__ci .truth { stroke: var(--green-ink, #6f9a2a); stroke-width: 2; stroke-dasharray: 4 3; }
+.jc .fr__ci .truth-lab { fill: var(--green-ink, #6f9a2a); font-size: 11.5px; }
+.jc .fr__row { grid-template-columns: 10.5em minmax(0, 1fr); }
+.jc__body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 14px; }   /* the grid, then its matrix below */
+.jc__grid { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: 2px; max-width: 760px; }
+.jc__c { display: block; aspect-ratio: 1; border-radius: 2px; position: relative; }
+.jc__c.gp { background: var(--forest, #225734); }
+.jc__c.gf { background: #fff; box-shadow: inset 0 0 0 1.5px var(--forest, #225734); }
+.jc__c.gf::after { content: "×"; position: absolute; inset: 0; display: grid; place-items: center; font: 700 10px/1 var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); }
+.jc__c.bp { background: var(--green, #95C13E); }
+.jc__c.bf { background: #c4ccc6; }
+.jc__cm { border-collapse: separate; border-spacing: 6px; margin: -6px; font-size: 14px; color: var(--graphite, #3F4541); }
+.jc__cm th { padding: 0 6px; font: 700 12px/1.3 var(--head, "Montserrat", system-ui, sans-serif); letter-spacing: 0.04em; text-transform: uppercase; color: #7d877f; text-align: left; }
+.jc__cm td { padding: 8px 12px; border: 1.5px solid var(--line-major, #D2DED5); border-radius: 8px; white-space: nowrap; }
+.jc__cm tbody td { display: table-cell; }
+.jc__cm td i { display: inline-block; width: 14px; vertical-align: -2px; margin-right: 8px; }
+.jc__cm td b { margin-left: 10px; font: 700 15px var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); font-variant-numeric: tabular-nums; }
+.jc__cm tfoot td { border: 0; padding-top: 0; font-size: 13px; color: #7d877f; }
+.jc__cm tfoot td b { margin-left: 4px; font-size: 13px; }
+.jc__cm--focus { border-color: var(--green, #95C13E) !important; background: rgba(149, 193, 62, 0.1); font-weight: 600; color: var(--forest, #225734); }
+.jc__caption { margin: 12px 0 0; font-size: 13.5px; color: #7d877f; }
+@media (max-width: 640px) { .jc__cm td { white-space: normal; padding: 6px 8px; } .jc__cm td span { display: block; } .jc__cm td b { margin-left: 0; } }
+
+/* The noise-floor widget (noise-floor.html): four stat tiles on top, the graders' verdicts
+   on 100 examples below (two bands of 50, a row per grader), columns shaded where graders split. */
+.nf__tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 6px; }
+.nf__tiles div { display: grid; gap: 4px; padding: 14px; border: 1.5px solid var(--line-major, #D2DED5); border-radius: 10px; }
+.nf__tiles b { font: 700 28px/1.1 var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); font-variant-numeric: tabular-nums; }
+.nf__tiles span { font-size: 14px; line-height: 1.35; color: var(--graphite, #3F4541); }
+.nf__tiles small { color: #7d877f; }
+.nf__foot { margin: 14px 0 0; font-size: 14.5px; line-height: 1.5; color: var(--graphite, #3F4541); }
+.nf__bands { display: grid; gap: 14px; margin-top: 14px; }
+.nf__band { display: grid; gap: 3px; }
+.nf__row { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 10px; align-items: center; }
+.nf__lab { font: 600 12.5px var(--head, "Montserrat", system-ui, sans-serif); color: var(--graphite, #3F4541); }
+.nf__cells { display: grid; grid-template-columns: repeat(25, minmax(0, 1fr)); gap: 3px; max-width: 640px; }
+.nf__cells i { display: block; aspect-ratio: 1; border-radius: 2px; }
+.nf__cells i.p { background: var(--forest, #225734); }
+.nf__cells i.f { background: #fff; box-shadow: inset 0 0 0 1.5px var(--forest, #225734); }
+.nf__cells i.p.x { background: var(--green, #95C13E); }
+.nf__cells i.f.x { background: #fff; box-shadow: inset 0 0 0 2.5px var(--green, #95C13E); }
+.nf__k { display: inline-block; width: 14px; height: 14px; border-radius: 2px; background: var(--green, #95C13E); }
+.nf__note { margin: 12px 0 0; font-size: 13.5px; color: #7d877f; }
+@media (max-width: 900px) { .nf__tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .nf__cells { gap: 1px; } }
+.fr__controls { align-content: start; }   /* a taller neighbor card leaves space below the controls, not between them */
+
+/* The rerun-noise widget (reruns.html): a histogram of run-to-run differences on top,
+   the two runs below (a column per case, a dot per try; cases that came out differently in bright green). */
+.rn__hist { display: block; width: 100%; margin-top: 8px; }
+.rn__hist .axis { stroke: var(--line-major, #D2DED5); stroke-width: 1.5; }
+.rn__hist rect.near { fill: #c9d3cc; }
+.rn__hist rect.far { fill: var(--forest, #225734); }
+.rn__hist .lab { font: 600 12.5px var(--head, "Montserrat", system-ui, sans-serif); fill: var(--graphite, #3F4541); }
+.rn__hist .mark { stroke: var(--green, #95C13E); stroke-width: 2.5; }
+.rn__hist .mark-lab { fill: var(--green-ink, #6f9a2a); }
+.rn__runs { display: grid; gap: 18px; margin-top: 14px; }
+.rn__eval { display: grid; gap: 4px; }
+.rn__eval-h { margin: 0 0 4px; font: 600 14px var(--head, "Montserrat", system-ui, sans-serif); color: var(--graphite, #3F4541); }
+.rn__eval-h b { color: var(--forest, #225734); }
+.rn__eval-h small { font: 400 13px var(--body, inherit); color: #7d877f; margin-left: 4px; }
+.rn__sc { font: 600 12.5px var(--head, "Montserrat", system-ui, sans-serif); color: #7d877f; text-align: right; font-variant-numeric: tabular-nums; }
+.rn__row { display: grid; grid-template-columns: 3.6em minmax(0, 1fr) 2.6em; gap: 10px; align-items: center; }
+.rn__lab { font: 600 12.5px var(--head, "Montserrat", system-ui, sans-serif); color: var(--graphite, #3F4541); }
+.rn__cases { display: grid; grid-template-columns: repeat(50, minmax(0, 1fr)); gap: 2px; }   /* up to 50 per row; more cases wrap */
+.rn__cases i { display: block; aspect-ratio: 1; border-radius: 2px; }
+.rn__cases i.p { background: var(--forest, #225734); }
+.rn__cases i.f { background: #fff; box-shadow: inset 0 0 0 1.5px var(--forest, #225734); }
+.rn__cases i.p.x { background: var(--green, #95C13E); }
+.rn__cases i.f.x { box-shadow: inset 0 0 0 2.5px var(--green, #95C13E); }
+.rn__k { display: inline-block; width: 14px; height: 14px; border-radius: 2px; background: var(--green, #95C13E); }
+.rn__note { margin: 12px 0 0; font-size: 13.5px; color: #7d877f; }
+@media (max-width: 700px) { .rn__cases { grid-template-columns: repeat(25, minmax(0, 1fr)); } .rn__eval { gap: 9px; } }
+.rn__hist .band { fill: rgba(149, 193, 62, 0.16); }
+.rn__hist .band-lab { fill: var(--green-ink, #6f9a2a); text-anchor: start; }
+.rn__hist circle.rerun { fill: #c9d3cc; }
+.rn__hist circle.yest { fill: var(--forest, #225734); }
+.rn__hist circle.today { fill: var(--green, #95C13E); stroke: var(--forest, #225734); stroke-width: 1.5; }
+.rn__cap { margin: 2px 0 0; font-size: 13px; color: #7d877f; }
+.rn__hist .m-yest { stroke: var(--forest, #225734); stroke-width: 2; }
+.rn__hist .m-today { stroke: var(--green, #95C13E); stroke-width: 2.5; }
+.rn__hist .rerun-lab { fill: #8a948c; }
+.rn__legend { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 8px 0 0; font-size: 13.5px; color: var(--graphite, #3F4541); }
+.rn__legend span { display: inline-flex; align-items: center; gap: 7px; }
+.rn__dot { width: 12px; height: 12px; border-radius: 50%; background: #c9d3cc; }
+.rn__band { width: 16px; height: 12px; border-radius: 2px; background: rgba(149, 193, 62, 0.25); }
+.rn .rn__cases i.p.x { background: var(--green, #95C13E); }
+.rn .rn__cases i.f.x { background: #fff; box-shadow: inset 0 0 0 2.5px var(--green, #95C13E); }
+.rn .rn__cases { grid-template-columns: repeat(var(--cols, 50), minmax(0, 1fr)); max-width: 100%; }
+.rn .rn__row { align-items: start; }
+.rn .rn__eval { gap: 8px; }
+.rn__setup { margin: 6px 0 4px; font-size: 15px; line-height: 1.5; color: var(--graphite, #3F4541); }
+.rn .fr__ci .star { fill: #5f6b62; stroke: #fff; stroke-width: 1.5; }
+.rn .fr__ci .pin { stroke: #8f9a92; stroke-width: 1.5; stroke-dasharray: 4 3; }
+
+/* The test-case-size widget (test-case-size.html): two use cases side by side, each with its
+   lowest plausible pass rate against the target; the test cases as dot strips below. */
+.ts__cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; margin-top: 10px; }
+.ts__case { min-width: 0; }
+.ts__case h3 { margin: 0; font: 700 17px/1.3 var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); }
+.ts__story { margin: 4px 0 6px; font-size: 14px; line-height: 1.5; color: #6b746d; }
+.ts .fr__row { grid-template-columns: 7.2em minmax(0, 1fr); font-size: 15px; }
+.ts .fr__ci .target { stroke: var(--graphite, #3F4541); stroke-dasharray: 3 3; }
+.ts .fr__ci .tlab { font-size: 11.5px; fill: #7d877f; }
+.ts__strips { display: grid; gap: 16px; margin-top: 12px; }
+.ts__strip-h { margin: 0 0 6px; font: 600 13.5px var(--head, "Montserrat", system-ui, sans-serif); color: var(--graphite, #3F4541); }
+.ts__strip-h span { font: 400 13px var(--body, inherit); color: #7d877f; margin-left: 6px; }
+.ts__dots { display: flex; flex-wrap: wrap; gap: 3px; }
+.ts__dots i { width: var(--d, 7px); height: var(--d, 7px); border-radius: 2px; background: var(--forest, #225734); }
+.ts__dots i.f { background: #fff; box-shadow: inset 0 0 0 1.5px var(--forest, #225734); }
+@media (max-width: 900px) { .ts__cols { grid-template-columns: minmax(0, 1fr); } }
+.ts__strip { margin-top: 14px; }
+.ts__strip canvas { display: block; }
+.ts__note { margin: 8px 0 0; font-size: 13.5px; color: #7d877f; }
+.ts__k { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--green, #95C13E); background: #fff; }
+
+/* The growth simulator (growth.html): quality gained over 20 changes for 10 teams, with
+   the average and middle band of 2,000; the four test-case sizes compared as bars; the pseudocode below. */
+.gs__legend { display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 10px 0 0; font-size: 13.5px; color: var(--graphite, #3F4541); }
+.gs__legend span { display: inline-flex; align-items: center; gap: 7px; }
+.gs__l { display: inline-block; width: 20px; height: 0; border-top: 2px solid; }
+.gs__l--run { border-color: #a9b8ad; } .gs__l--mean { border-top-width: 3.5px; border-color: var(--forest, #225734); }
+.gs__l--band { height: 10px; border: 0; background: rgba(149, 193, 62, 0.28); } .gs__l--ceil { border-top-style: dashed; border-color: var(--graphite, #3F4541); }
+.gs__chart { display: block; width: 100%; margin-top: 8px; }
+.gs__chart .grid { stroke: #eef1ef; } .gs__chart .zero { stroke: var(--line-major, #D2DED5); stroke-width: 1.5; }
+.gs__chart .lab { font: 600 12px var(--head, "Montserrat", system-ui, sans-serif); fill: var(--graphite, #3F4541); }
+.gs__chart .band { fill: rgba(149, 193, 62, 0.22); }
+.gs__chart .run { fill: none; stroke: #a9b8ad; stroke-width: 1.5; stroke-linejoin: round; }
+.gs__chart .mean { fill: none; stroke: var(--forest, #225734); stroke-width: 3.5; stroke-linejoin: round; }
+.gs__chart .ceil { stroke: var(--graphite, #3F4541); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.gs .fr__row { grid-template-columns: 10.5em minmax(0, 1fr); }
+.gs__fixed { margin: 0; font-size: 13px; line-height: 1.5; color: #7d877f; }
+.gs__bars { display: grid; gap: 16px; margin-top: 16px; }
+.gs__bar { display: grid; grid-template-columns: 6.5em minmax(0, 1fr) 3.5em; gap: 12px; align-items: center; opacity: 0.55; }
+.gs__bar.is-on { opacity: 1; }
+.gs__bl { font: 600 13.5px var(--head, "Montserrat", system-ui, sans-serif); color: var(--graphite, #3F4541); }
+.gs__bv { font: 700 15px var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); text-align: right; font-variant-numeric: tabular-nums; }
+.gs__track { position: relative; height: 26px; background: #f1f4f2; border-radius: 6px; }
+.gs__fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--forest, #225734); border-radius: 6px; }
+.gs__bar:not(.is-on) .gs__fill { background: #8f9a92; }
+.gs__wh { position: absolute; top: 50%; height: 2px; background: var(--green, #95C13E); }
+.gs__ceil { position: absolute; top: -4px; bottom: -4px; border-left: 2px dashed var(--graphite, #3F4541); }
+.gs__note { margin: 16px 0 0; font-size: 13.5px; line-height: 1.5; color: #7d877f; }
+.gs__foot { margin-top: calc(var(--grid, 24px) * 1.5); padding: var(--grid, 24px); border: 1.5px solid var(--line-major, #D2DED5); border-radius: 12px; background: #fff; }
+.gs__foot-h { margin: 0 0 10px; font: 700 15px var(--head, "Montserrat", system-ui, sans-serif); color: var(--forest, #225734); }
+.gs__foot pre { margin: 0; overflow-x: auto; font-size: 13px; line-height: 1.55; color: var(--charcoal, #1A201C); }
+@media (max-width: 640px) { .gs__foot { padding: 14px 12px; } .gs__foot pre { font-size: 11px; } }
+
+/* The holdout simulator (holdout.html), on the growth simulator's styles: the test set's
+   claim (grey, dashed) over the holdout's (forest), the gap shaded; per-size bar pairs. */
+.ho__l--test { border-top: 3px dashed #8f9a92; } .ho__l--gap { height: 10px; border: 0; background: rgba(149, 193, 62, 0.28); }
+.gs__chart .gap { fill: rgba(149, 193, 62, 0.25); }
+.gs__chart .testline { fill: none; stroke: #8f9a92; stroke-width: 3; stroke-dasharray: 7 5; }
+.gs__chart .now { stroke: var(--line-major, #D2DED5); stroke-width: 1.5; }
+.gs__chart .testdot { fill: #8f9a92; } .gs__chart .holddot { fill: var(--forest, #225734); }
+.ho__pair { display: grid; gap: 3px; }
+.ho__pair .gs__track { height: 13px; border-radius: 4px; }
+.ho__t { position: absolute; left: 0; top: 0; bottom: 0; background: #c2cac4; border-radius: 4px; }
+.ho__pair .gs__fill { border-radius: 4px; }
+
+.ho__bv { display: grid; gap: 1px; font-size: 13px; line-height: 15px; }
+.ho__bv span:first-child { color: #8f9a92; }
+.gs__chart .run-t { fill: none; stroke: #b9c2bb; stroke-width: 1.3; stroke-dasharray: 4 3; }
+.gs__chart .run-h { fill: none; stroke: #9db58a; stroke-width: 1.3; }
+
+/* Holdout bars: the same two colors in every row (test set light grey, holdout forest), labeled values, the gap. */
+.ho .gs__bar { grid-template-columns: 6.5em minmax(0, 1fr) 7.6em 6.6em; }
+.ho__bv { text-align: left; }
+.ho__bv small { font: 500 11.5px var(--head, "Montserrat", system-ui, sans-serif); color: #8f9a92; margin-left: 2px; }
+.ho__bv span:last-child { color: var(--forest, #225734); }
+.ho__gap { font: 600 12.5px var(--head, "Montserrat", system-ui, sans-serif); color: var(--green-ink, #6f9a2a); }
+.ho__sw { display: inline-block; width: 16px; height: 10px; border-radius: 3px; }
+.ho__sw--t { background: #c2cac4; } .ho__sw--h { background: var(--forest, #225734); }
+@media (max-width: 700px) { .ho .gs__bar { grid-template-columns: 5.5em minmax(0, 1fr) 7.2em; } .ho__gap { display: none; } }
+.ho .gs__bar:not(.is-on) .gs__fill { background: var(--forest, #225734); }
+
