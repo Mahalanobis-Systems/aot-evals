@@ -6,6 +6,8 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+## 2.1.0 — 2026-11-20
+
 - **Confusion matrices.** The docs read every grader through its 2×2 table against people's
   labels, with a failure as the positive (TP, FP, FN, TN): the catch rate and clean pass rate down
   its columns, precision across its rows, raw agreement on its diagonal. The same table carries
