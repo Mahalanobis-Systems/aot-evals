@@ -6,6 +6,11 @@ and versions follow [Semantic Versioning](https://semver.org/) as described in
 
 ## Unreleased
 
+- **Test case sizing page.** The interactive test-case-size page takes Jason's wording for its lead,
+  question and the two use cases, opens with 100 shipping-address test cases, and marks a use case
+  that has enough test cases to confirm its bar: its card turns green with an "Enough test cases"
+  badge, and the slider says how many more it needs.
+
 ## 2.1.0 — 2026-11-20
 
 - **Confusion matrices.** The docs read every grader through its 2×2 table against people's

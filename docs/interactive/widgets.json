@@ -71,7 +71,7 @@
       "title": "Determining test case size requires use-case level reasoning",
       "label": "Test case sizing by use case",
       "description": "How many test cases you need depends on the bar each use case has to clear. A clean run is an upper limit on failures, not zero.",
-      "lead": "How many test cases you need depends on the bar each use case has to clear. After n clean cases, the true failure rate could still be as high as about 3 ÷ n. A cheap mistake with a low bar needs a few dozen cases. A business requirement, like 99.9% of shipping addresses correct, needs thousands."
+      "lead": "Some use cases require a high bar of excellence. Others are less critical. Work backwards from this to understand test case sizing requirements."
     },
     {
       "problem": 10,

@@ -12,11 +12,11 @@
   {"name": "Closing a withdrawn refund", "target": 0.9, "pass": 1, "sizes": [5, 10, 15, 20, 25, 30, 40, 50, 59, 75, 100]},
   {"name": "Picking the shipping address", "pass": 0.9998, "sizes": [10, 20, 50, 100, 200, 500, 1000, 2000, 3000, 5000, 10000, 20000]}]}'>
   <div class="mc__compare">
-    <p class="fr__q">Two parts of your refund flow pass every test case so far. Do they need the same number of cases?</p>
+    <p class="fr__q">The following two use cases each have very different business requirements.</p>
     <div class="ts__cols">
       <section class="ts__case" data-case="0">
-        <h3>Closing a withdrawn refund</h3>
-        <p class="ts__story">The customer writes "No thank you, I changed my mind," and the agent closes the case. A mistake costs a follow-up message, so the bar is <span data-o="req"></span>.</p>
+        <h3>Closing a withdrawn refund</h3><p class="ts__badge" data-o="badge"></p>
+        <p class="ts__story">The customer writes "No thank you, I changed my mind," and the agent closes the case. Mistakes aren't costly, so <span data-o="req"></span> accuracy is acceptable.</p>
         <svg class="fr__ci ts__ci" data-ci role="img" aria-label="Lowest plausible pass rate for closing withdrawn refunds"></svg>
         <div class="fr__rows">
           <p class="fr__row"><span class="fr__tag">Tested</span><span data-o="tested"></span></p>
@@ -25,8 +25,8 @@
         </div>
       </section>
       <section class="ts__case" data-case="1">
-        <h3>Picking the shipping address</h3>
-        <p class="ts__story">A subagent finds the customer's address in a messy database. The business requires <span data-o="req"></span> of addresses to be correct.</p>
+        <h3>Picking the shipping address</h3><p class="ts__badge" data-o="badge"></p>
+        <p class="ts__story">Sending to the wrong address is costly, and in this example the customer's database is particularly messy. The accuracy goal in this case is <span data-o="req"></span>.</p>
         <svg class="fr__ci ts__ci" data-ci role="img" aria-label="Lowest plausible pass rate for picking the shipping address"></svg>
         <div class="fr__rows">
           <p class="fr__row"><span class="fr__tag">Tested</span><span data-o="tested"></span></p>
@@ -39,7 +39,7 @@
 
   <div class="fr__controls">
     <label class="fr__primary"><span>Required accuracy: shipping address <b data-out="target"></b></span><input type="range" name="target" min="99" max="99.95" step="0.05" value="99.9"></label>
-    <label><span>Test cases: shipping address <b data-out="n1"></b></span><input type="range" name="n1" min="0" max="11" step="1" value="1"></label>
+    <label><span>Test cases: shipping address <b data-out="n1"></b></span><input type="range" name="n1" min="0" max="11" step="1" value="3"><small data-out="n1note"></small></label>
     <label><span>Test cases: withdrawn refund <b data-out="n0"></b></span><input type="range" name="n0" min="0" max="10" step="1" value="5"></label>
   </div>
 
@@ -48,8 +48,8 @@
       <b>The test cases</b>
       <span><i class="k k--pass"></i>pass</span><span><i class="ts__k"></i>fail</span>
     </figcaption>
-    <div class="ts__strip"><p class="ts__strip-h">Picking the shipping address <span data-out="h1"></span></p><canvas data-grid="1"></canvas></div>
-    <div class="ts__strip"><p class="ts__strip-h">Closing a withdrawn refund <span data-out="h0"></span></p><canvas data-grid="0"></canvas></div>
+    <div class="ts__strip" data-strip="1"><p class="ts__strip-h">Picking the shipping address <span data-out="h1"></span></p><canvas data-grid="1"></canvas></div>
+    <div class="ts__strip" data-strip="0"><p class="ts__strip-h">Closing a withdrawn refund <span data-out="h0"></span></p><canvas data-grid="0"></canvas></div>
     <p class="ts__note">A clean run sets an upper limit on failures, not zero: after n clean cases the true failure rate could still be about 3 ÷ n. That holds when code or a person does the grading. A judge that sometimes fails good runs never returns a clean run, and needs far more cases (problem 6).</p>
   </figure>
 </div>
@@ -114,7 +114,9 @@
         o("tested").innerHTML = `${fmt(n - k)} of ${fmt(n)} passed${k ? ` (${fmt(k)} failed)` : ""}: <b>${pc(obs, k ? 2 : 0)}</b>`;
         o("least").innerHTML = `<b>${pc(least, 2)}</b> with 95% confidence ${ok ? `<span class="mc__sig is-sig">meets ${pc(T, dec(T))}</span>` : `<span class="mc__sig">can't confirm ${pc(T, dec(T))}</span>`}`;
         const need = needed(c, T);
-        o("verdict").innerHTML = ok ? `${fmt(n)} test cases confirm the bar.`
+        col.classList.toggle("is-met", ok);
+        o("badge").textContent = ok ? "✓ Enough test cases" : "Not enough test cases yet";
+        o("verdict").innerHTML = ok ? `<b>Enough.</b> ${fmt(n)} test cases confirm ${pc(T, dec(T))}.`
           : need ? `About <b>${fmt(need)} test cases</b> to confirm ${pc(T, dec(T))}${j === 0 ? `: 3 ÷ ${fmt(need)} is about ${pc(3 / need, 0)}` : ""}.`
           : `At this part's real pass rate, no number of test cases confirms ${pc(T, dec(T))}.`;
 
@@ -134,7 +136,10 @@
           + `<rect class="${cls} band" x="${X(least)}" y="21" width="${Math.max(2, X(1) - X(least))}" height="18" rx="9"/>`
           + `<line class="${cls}" x1="${X(least)}" x2="${X(1)}" y1="30" y2="30"/><circle class="${cls}" cx="${X(obs)}" cy="30" r="5"/>` + ticks;
 
-        out(`h${j}`).textContent = `${fmt(n)} test cases${k ? `, ${fmt(k)} failed` : ""}`;
+        out(`h${j}`).textContent = `${fmt(n)} test cases${k ? `, ${fmt(k)} failed` : ""}${ok ? ` · enough to confirm ${pc(T, dec(T))}` : ""}`;
+        root.querySelector(`[data-strip="${j}"]`).classList.toggle("is-met", ok);
+        if (j === 1) root.classList.toggle("is-met-1", ok);
+        if (j === 1) out("n1note").textContent = ok ? `✓ Enough to confirm ${pc(T, dec(T))}` : need ? `Not enough: about ${fmt(need)} needed` : "Not enough at any size";
         const failAt = new Set(Array.from({ length: k }, (_, i) => Math.floor(((i + 0.5) * n) / k)));
         grid(root.querySelector(`[data-grid="${j}"]`), n, failAt, j === 1 ? 300 : 120);
       });

@@ -403,3 +403,12 @@
 @media (max-width: 700px) { .ho .gs__bar { grid-template-columns: 5.5em minmax(0, 1fr) 7.2em; } .ho__gap { display: none; } }
 .ho .gs__bar:not(.is-on) .gs__fill { background: var(--forest, #225734); }
 
+/* Test case sizing: a use case with enough test cases to confirm its bar turns green, with a badge */
+.ts__case { padding: 14px 16px; border: 1.5px solid var(--line-major, #D2DED5); border-radius: 12px; transition: background 0.2s, border-color 0.2s; }
+.ts__case.is-met { border: 2px solid var(--green, #95C13E); background: #F3F8EA; }
+.ts__badge { display: inline-block; margin: 6px 0 2px; padding: 2px 10px; border-radius: 999px; background: #eef1ef; color: #6b746d; font: 700 12.5px/1.6 var(--head, "Montserrat", system-ui, sans-serif); }
+.ts__case.is-met .ts__badge { background: var(--forest, #225734); color: #fff; }
+.ts__case.is-met [data-o="verdict"] b { color: var(--forest, #225734); }
+.ts__strip.is-met .ts__strip-h span { color: var(--forest, #225734); font-weight: 600; }
+.ts .fr__controls small[data-out="n1note"] { font: 600 12.5px/1.35 var(--head, "Montserrat", system-ui, sans-serif); color: #7d877f; }
+.ts.is-met-1 .fr__controls small[data-out="n1note"] { color: var(--forest, #225734); }
